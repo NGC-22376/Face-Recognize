@@ -15,9 +15,9 @@ from datetime import datetime, timedelta
 import random
 
 # 数据库连接配置
-DB_HOST = os.getenv('DB_HOST', '192.168.153.130')
+DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_USER = os.getenv('DB_USER', 'root')
-DB_PASSWORD = os.getenv('DB_PASS', '123')
+DB_PASSWORD = os.getenv('DB_PASS', '456729')
 DB_NAME = 'face_rec'
 
 bcrypt = Bcrypt()

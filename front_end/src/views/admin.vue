@@ -182,12 +182,8 @@
             </div>
             
             <div class="clock-buttons">
-              <button @click="clockIn" class="clock-btn clock-in" :disabled="clockLoading">
-                {{ clockLoading ? '打卡中...' : '上班打卡' }}
-              </button>
-              <button @click="clockOut" class="clock-btn clock-out" :disabled="clockLoading">
-                {{ clockLoading ? '打卡中...' : '下班打卡' }}
-              </button>
+               <button @click="goFace('clock_in')"  class="clock-btn clock-in">上班打卡</button>
+               <button @click="goFace('clock_out')" class="clock-btn clock-out">下班打卡</button>
             </div>
 
             <div v-if="clockMessage" class="clock-message" :class="clockMessageType">
@@ -248,8 +244,18 @@ export default {
       this.activeTab = 'personal'
       await this.loadPersonalData()
     }
+    // 如果人脸识别完跳回来，自动打卡
+    if (this.$route.query.recognized === '1') {
+      const type = this.$route.query.type // clock_in / clock_out
+      await this.performClock(type)       // 复用老接口
+      // 清参数，防止刷新重复
+      await this.$router.replace({ query: {} })
+    }
   },
   methods: {
+    goFace(type) {
+      this.$router.push({ name: 'FaceClock', params: { type } })
+    },
     setActiveTab(tab) {
       // 检查权限
       if ((tab === 'dashboard' || tab === 'employees') && this.userProfile.role !== '管理员') {

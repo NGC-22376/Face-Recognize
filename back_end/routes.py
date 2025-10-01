@@ -5,6 +5,12 @@ from flask_bcrypt import Bcrypt
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from datetime import datetime, date
 from sqlalchemy import func, and_, extract
+from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
+import face_recognition as fr
+import numpy as np
+import os
+import uuid
 
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
@@ -345,3 +351,97 @@ def get_employees_attendance():
         'sort_by': sort_by,
         'sort_order': sort_order
     }), 200
+
+os.makedirs('FaceImage', exist_ok=True)
+os.makedirs('FaceFeature', exist_ok=True)
+def save_image(file):
+    ext = file.filename.rsplit('.', 1)[-1] if '.' in file.filename else 'jpg'
+    name = f"{uuid.uuid4().hex}.{ext}"
+    path = os.path.join('FaceImage', name)
+    file.save(path)
+    return path
+def extract_feature(image_path):
+    img = fr.load_image_file(image_path)
+    encodings = fr.face_encodings(img)
+    if not encodings:
+        raise IndexError('No face')
+    return encodings[0]
+# 人脸录入
+@app.post('/face/enroll')
+def face_enroll():
+    if 'file' not in request.files or 'user_id' not in request.form:
+        return jsonify(ok=False, msg='缺少文件或user_id'), 400
+    user_id = int(request.form['user_id'])
+    exist = Face.query.filter_by(user_id=user_id).first()
+    if exist:
+        return jsonify(ok=True, alreadyExists=True, msg='该人脸已录入过！')
+    img_path = save_image(request.files['file'])
+    try:
+        feature = extract_feature(img_path)
+    except IndexError:
+        os.remove(img_path)
+        return jsonify(ok=False, msg='未检测到人脸'), 400
+
+    feature_path = os.path.join('FaceFeature', f'{user_id}.npy')
+    np.save(feature_path, feature)
+    new_face = Face(
+        user_id=user_id,
+        image_path=feature_path,
+        rec_time=datetime.utcnow(),
+        result='已录入'
+    )
+    db.session.add(new_face)
+    db.session.commit()
+    return jsonify(ok=True, alreadyExists=False, msg='人脸录入成功！')
+
+# 人脸识别
+@app.post('/face/<action>') # action = checkin | checkout
+def face_action(action):
+    if action not in ('checkin', 'checkout'):
+        return jsonify(ok=False, msg='非法动作'), 404
+    if 'file' not in request.files:
+        return jsonify(ok=False, msg='缺少文件'), 400
+    user_id = int(request.form.get('user_id'))
+    face = Face.query.filter_by(user_id=user_id).first()
+    if not face:
+        return jsonify(ok=False, msg='人脸未录入，请先录入'), 404
+    img_path = save_image(request.files['file'])
+    try:
+        unknown = extract_feature(img_path)
+    except IndexError:
+        os.remove(img_path)
+        return jsonify(ok=False, msg='未检测到人脸'), 400
+    # 1:1 比对
+    known = np.load(face.image_path)
+    dist = np.linalg.norm(known - unknown)
+    os.remove(img_path)
+    if dist > 0.4:
+        return jsonify(ok=False, msg='人脸不匹配'), 403
+    # 比对成功 → 写考勤
+    # 写考勤估计还得改改
+    today = datetime.utcnow().date()
+    current_time = datetime.utcnow()
+    if action == 'checkin':
+        exist = Attendance.query.filter(
+            Attendance.user_id == user_id,
+            db.func.date(Attendance.clock_in_time) == today
+        ).first()
+        #if exist:
+            # return jsonify(ok=False, msg='今日已签到'), 400
+        status = '迟到' if current_time.hour > 9 or (current_time.hour == 9 and current_time.minute > 0) else '正常'
+        att = Attendance(user_id=user_id, clock_in_time=current_time, status=status)
+        db.session.add(att)
+    else:  # checkout
+        att = Attendance.query.filter(
+            Attendance.user_id == user_id,
+            db.func.date(Attendance.clock_in_time) == today,
+            Attendance.clock_out_time.is_(None)
+        ).first()
+        #if not att:
+            # return jsonify(ok=False, msg='未找到今日签到记录'), 404
+        att.clock_out_time = current_time
+        if current_time.hour < 18:
+            att.status = '早退'
+    db.session.commit()
+    user = User.query.get(user_id)
+    return jsonify(ok=True, username=user.name, time=current_time.strftime('%H:%M:%S'))
