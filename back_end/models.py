@@ -5,7 +5,7 @@ from datetime import datetime
 
 class User(db.Model):
     __tablename__ = 'user'
-    user_id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     account = db.Column(db.String(255))
     name = db.Column(db.String(255))
     password = db.Column(db.String(255))
@@ -17,7 +17,7 @@ class User(db.Model):
 
 class Face(db.Model):
     __tablename__ = 'face'
-    rec_id = db.Column(db.Integer, primary_key=True)
+    rec_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.user_id', ondelete='CASCADE', onupdate='CASCADE'))
     image_path = db.Column(db.String(255))
     rec_time = db.Column(db.DateTime)
@@ -25,7 +25,7 @@ class Face(db.Model):
 
 class Attendance(db.Model):
     __tablename__ = 'attendance'
-    attendance_id = db.Column(db.Integer, primary_key=True)
+    attendance_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.user_id', ondelete='CASCADE', onupdate='CASCADE'))
     clock_in_time = db.Column(db.DateTime)   # 上班时间
     clock_out_time = db.Column(db.DateTime)  # 下班时间

@@ -54,7 +54,7 @@ export default {
     },
     async handleLogin() {
       try {
-        const res = await fetch('/login', {
+        const res = await fetch('http://localhost:5000/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(this.form)
@@ -62,7 +62,18 @@ export default {
         const data = await res.json();
         if (res.ok) {
           this.message = '登录成功';
-          // 登录成功后可跳转页面，如：this.$router.push('/home')
+          
+          // 保存token和用户信息
+          localStorage.setItem('access_token', data.access_token);
+          localStorage.setItem('user_info', JSON.stringify(data.user));
+          
+          // 根据用户角色跳转页面
+          if (data.user.role === '管理员') {
+            this.$router.push('/admin');
+          } else {
+            // 普通用户页面（暂时跳转到管理员页面，您可以后续创建普通用户页面）
+            this.$router.push('/admin');
+          }
         } else {
           this.message = data.message || '登录失败';
         }
@@ -72,7 +83,7 @@ export default {
     },
     async handleRegister() {
       try {
-        const res = await fetch('/register', {
+        const res = await fetch('http://localhost:5000/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(this.registerForm)

@@ -22,7 +22,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- ----------------------------
 DROP TABLE IF EXISTS `face`;
 CREATE TABLE `face`  (
-  `rec_id` int NOT NULL,
+  `rec_id` int NOT NULL AUTO_INCREMENT,
   `user_id` int NULL DEFAULT NULL,
   `image_path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL,
   `rec_time` datetime NULL DEFAULT NULL COMMENT '识别时间',
