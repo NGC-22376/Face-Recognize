@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Login from '../views/login.vue'
 import Admin from '../views/admin.vue'
+import FaceClock from '../views/face-clock.vue'
 
 const routes = [
   {
@@ -18,6 +19,12 @@ const routes = [
     name: 'AdminPage',
     component: Admin,
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/face-clock/:type',  // type=clock_in或clock_out
+    name: 'FaceClock',
+    component: FaceClock,
+    meta: { requiresAuth: true } //必须登录
   }
 ]
 
