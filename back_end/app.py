@@ -2,8 +2,10 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import os
+import pytz
 # 导入create_engine用于数据库连接测
 from sqlalchemy import create_engine
+import datetime
 
 app = Flask(__name__)
 CORS(app)  # 允许跨域请求
@@ -20,6 +22,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'test'  # 可以自定义，建议复杂一点
 app.config['JWT_SECRET_KEY'] = 'testtest'  # 可以自定义，建议复杂一点
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  # 设置token不过期（开发环境）
+
+# 创建中国时区对象（UTC+8）
+SHANGHAI_TZ = pytz.timezone('Asia/Shanghai')
 
 
 # 初始化数据库

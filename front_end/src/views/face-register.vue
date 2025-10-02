@@ -7,7 +7,7 @@
 
     <!-- 摄像头 -->
     <div class="camera-box">
-      <video ref="video" width="640" height="480" autoplay muted></video>
+      <video ref="video" width="600" height="450" autoplay muted></video>
     </div>
 
     <!-- 操作区 -->
@@ -176,7 +176,7 @@ export default {
 
 <style scoped>
 .face-clock-container {
-  padding: 24px;
+  padding: 12px;
   background: #f5f6fa;
   min-height: 100vh;
 }

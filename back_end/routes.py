@@ -1,5 +1,5 @@
 from flask import request, jsonify
-from app import app, db
+from app import app, db, SHANGHAI_TZ
 from models import User, Attendance, Face
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
@@ -87,7 +87,7 @@ def attendance():
     
     # 判断打卡类型（上班/下班）
     attendance_type = data.get('type', 'clock_in')  # clock_in 或 clock_out
-    current_time = datetime.now()
+    current_time = datetime.now(SHANGHAI_TZ)
     
     if attendance_type == 'clock_in':
         # 上班打卡
@@ -150,8 +150,9 @@ def get_personal_attendance():
     current_user_id = int(get_jwt_identity())
     
     # 获取本月考勤统计 - 使用分别查询的方式
-    current_month = datetime.now().month
-    current_year = datetime.now().year
+    now = datetime.now(SHANGHAI_TZ)
+    current_month = now.month
+    current_year = now.year
     
     # 总出勤天数
     total_days = db.session.query(func.count(Attendance.attendance_id)).filter(
@@ -283,8 +284,9 @@ def get_employees_attendance():
     sort_by = request.args.get('sort_by', 'name')  # name, late_count, early_leave_count, normal_count
     sort_order = request.args.get('sort_order', 'asc')  # asc, desc
     
-    current_month = datetime.now().month
-    current_year = datetime.now().year
+    now = datetime.now(SHANGHAI_TZ)
+    current_month = now.month
+    current_year = now.year
     today = date.today()
     
     # 获取所有员工
@@ -404,7 +406,7 @@ def face_enroll():
     new_face = Face(
         user_id=user_id,
         image_path=feature_path,
-        rec_time=datetime.utcnow(),
+        rec_time=datetime.now(SHANGHAI_TZ),  # 使用中国时区的当前时间
         result='已录入'
     )
     db.session.add(new_face)
@@ -436,8 +438,9 @@ def face_action(action):
         return jsonify(ok=False, msg='人脸不匹配'), 403
     # 比对成功 → 写考勤
     # 写考勤估计还得改改
-    today = datetime.utcnow().date()
-    current_time = datetime.utcnow()
+    # 使用中国时区的当前时间
+    current_time = datetime.now(SHANGHAI_TZ)
+    today = current_time.date()
     if action == 'checkin':
         exist = Attendance.query.filter(
             Attendance.user_id == user_id,

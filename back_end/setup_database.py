@@ -13,6 +13,10 @@ from models import User, Attendance
 from flask_bcrypt import Bcrypt
 from datetime import datetime, timedelta
 import random
+import pytz
+
+# 创建中国时区对象（UTC+8）
+SHANGHAI_TZ = pytz.timezone('Asia/Shanghai')
 
 # 数据库连接配置
 DB_HOST = os.getenv('DB_HOST', 'localhost')
@@ -138,7 +142,7 @@ def insert_test_data():
             # 为每个员工创建过去30天的考勤记录
             for user in users:
                 for i in range(30):
-                    date = datetime.now() - timedelta(days=i)
+                    date = datetime.now(SHANGHAI_TZ) - timedelta(days=i)
                     
                     # 80% 的概率出勤
                     if random.random() < 0.8:
