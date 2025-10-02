@@ -157,13 +157,10 @@ export default {
           this.result = '人脸录入成功！即将跳转登录页面...'
           this.alertType = 'success'
           // 暂停1s
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 1000));
           // 跳转登录页面
           this.$router.push({
             path: '/',
-            query: {
-              message: '人脸录入成功！请登录。'
-            }
           });
         }else{
           this.result = res.msg || '录入失败，请重试！'
