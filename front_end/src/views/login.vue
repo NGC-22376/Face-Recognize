@@ -90,7 +90,7 @@ export default {
         const data = await res.json();
         if (res.ok) {
           this.message = '注册成功，下一步将跳转录入人脸信息...';
-          //暂停1s
+          
           await new Promise(resolve => setTimeout(resolve, 500));
           // 通过路由参数传递用户信息到人脸录入页面
           console.log("注册返回的用户信息:", JSON.stringify(data.user));
@@ -103,6 +103,7 @@ export default {
           });
           this.isLogin = true;
         } else {
+          // 显示后端返回的错误信息，包括账号已存在的提示
           this.message = data.message || '注册失败';
         }
       } catch (err) {

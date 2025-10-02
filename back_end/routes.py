@@ -32,6 +32,12 @@ def unauthorized_callback(error):
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
+    
+    # 检查账号是否已存在
+    existing_user = User.query.filter_by(account=data['account']).first()
+    if existing_user:
+        return jsonify({'message': '账号已存在，请使用其他账号'}), 400
+    
     hashed_password = bcrypt.generate_password_hash(data['password']).decode('utf-8')
     new_user = User(name=data['name'], account=data['account'], password=hashed_password, role=data['role'])
     
