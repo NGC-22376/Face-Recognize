@@ -11,7 +11,7 @@
           <input v-model="form.password" type="password" placeholder="密码" required />
         </div>
         <div v-else>
-          <input v-model="registerForm.account" placeholder="账号" required />
+          <input v-model="registerForm.account" placeholder="工号（五位小写英文+三位数字）" required />
           <input v-model="registerForm.password" type="password" placeholder="密码" required />
         </div>
         <button type="submit" class="submit-button">{{ isLogin ? '登录' : '注册' }}</button>

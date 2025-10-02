@@ -31,7 +31,13 @@ def unauthorized_callback(error):
 # 用户注册
 @app.route('/register', methods=['POST'])
 def register():
+    import re
     data = request.get_json()
+    
+    # 检查工号格式是否为五位小写英文+三位数字
+    account_pattern = r'^[a-z]{5}\d{3}$'
+    if not re.match(account_pattern, data['account']):
+        return jsonify({'message': '工号格式错误，请使用五位小写英文+三位数字的格式'}), 400
     
     # 检查账号是否已存在
     existing_user = User.query.filter_by(account=data['account']).first()
