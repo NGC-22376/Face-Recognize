@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Login from '../views/login.vue'
 import Admin from '../views/admin.vue'
 import FaceClock from '../views/face-clock.vue'
+import FaceRegister from '../views/face-register.vue'
 
 const routes = [
   {
@@ -21,6 +22,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/face-register',
+    name: 'FaceRegisterPage',
+    component: FaceRegister,
+    meta: { requiresAuth: false }
+  },
+  {
     path: '/face-clock/:type',  // type=clock_in或clock_out
     name: 'FaceClock',
     component: FaceClock,
@@ -36,7 +43,10 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('access_token')
-  const userInfo = JSON.parse(localStorage.getItem('user_info') || '{}')
+  const userInfoStr = localStorage.getItem('user_info')
+  // 确保不会尝试解析'undefined'字符串
+  const userInfo = userInfoStr && userInfoStr !== 'undefined' ? JSON.parse(userInfoStr) : {}
+
   
   if (to.meta.requiresAuth) {
     if (!token) {

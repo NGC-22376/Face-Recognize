@@ -9,6 +9,7 @@ back_end/__pycache__/
 
 # 人脸特征点文件
 FaceFeature/
+FaceImage/
 
 # local env files
 .env.local

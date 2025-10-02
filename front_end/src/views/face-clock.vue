@@ -21,14 +21,6 @@
         {{ type === 'clock_in' ? '上班打卡' : '下班打卡' }}
       </el-button>
 
-      <el-button
-        type="warning"
-        size="large"
-        :loading="loadingEnroll"
-        @click="doEnroll"
-      >
-        人脸录入
-      </el-button>
     </div>
 
     <!-- 结果提示 -->
@@ -100,49 +92,11 @@ export default {
       return ui ? JSON.parse(ui).user_id : null
     },
 
-    /* 人脸录入 */
-    async doEnroll() {
-      const uid = this.currentUserId()
-      if (!uid) {
-        this.$message.error('未登录或用户信息缺失')
-        return
-      }
-      this.loadingEnroll = true
-      this.result = ''
-      const blob = await this.capture()
-      if (!blob) {
-        this.loadingEnroll = false
-        return
-      }
-      const fd = new FormData()
-      fd.append('file', blob, 'face.jpg')
-      fd.append('user_id', uid)
-
-      try {
-        const res = await fetch(`${this.apiBaseUrl}/face/enroll`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` },
-          body: fd
-        }).then(r => r.json())
-
-        if (res.alreadyExists && res.ok) {
-          this.result = '该人脸已录入过！'
-          this.alertType = 'warning'
-        } else if(!res.alreadyExists && res.ok){
-          this.result = '人脸录入成功！'
-          this.alertType = 'success'
-        }else{
-          this.result = res.msg || '录入失败，请重试！'
-          this.alertType = 'error'
-        }
-      } finally {
-        this.loadingEnroll = false
-      }
-    },
 
     /* 人脸识别打卡 */
     async captureAndRecognize() {
       const uid = this.currentUserId()
+      console.log(uid)
       if (!uid) {
         this.$message.error('未登录或用户信息缺失')
         return

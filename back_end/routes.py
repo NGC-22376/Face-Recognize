@@ -38,7 +38,18 @@ def register():
     db.session.add(new_user)
     db.session.commit()
     
-    return jsonify({'message': 'User created successfully'}), 201
+    # 创建token并返回用户信息
+    access_token = create_access_token(identity=str(new_user.user_id))
+    return jsonify({
+        'access_token': access_token,
+        'message': 'User created successfully',
+        'user': {
+            'user_id': new_user.user_id,
+            'name': new_user.name,
+            'account': new_user.account,
+            'role': new_user.role
+        }
+    }), 201
 
 # 用户登录
 @app.route('/login', methods=['POST'])
