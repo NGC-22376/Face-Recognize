@@ -88,8 +88,20 @@ def attendance():
     # 判断打卡类型（上班/下班）
     attendance_type = data.get('type', 'clock_in')  # clock_in 或 clock_out
     current_time = datetime.now(SHANGHAI_TZ)
+    today = current_time.date()
     
     if attendance_type == 'clock_in':
+        # 检查是否已签到
+        existing_checkin = Attendance.query.filter(
+            and_(
+                Attendance.user_id == current_user_id,
+                func.date(Attendance.clock_in_time) == today
+            )
+        ).first()
+        
+        if existing_checkin:
+            return jsonify({'message': '今日已签到，请勿重复签到'}), 400
+        
         # 上班打卡
         status = '正常'
         # 判断是否迟到（假设9:00为上班时间）
@@ -101,17 +113,34 @@ def attendance():
             clock_in_time=current_time, 
             status=status
         )
+        db.session.add(new_attendance)
+        db.session.commit()
+        
+        return jsonify({'message': 'Clock-in recorded successfully'}), 201
     else:
         # 下班打卡 - 更新现有记录
         today_attendance = Attendance.query.filter(
             and_(
                 Attendance.user_id == current_user_id,
-                func.date(Attendance.clock_in_time) == date.today()
+                func.date(Attendance.clock_in_time) == today,
+                Attendance.clock_out_time.is_(None)
             )
         ).first()
         
         if not today_attendance:
-            return jsonify({'message': 'No clock-in record found for today'}), 404
+            # 检查是否已签退
+            already_checked_out = Attendance.query.filter(
+                and_(
+                    Attendance.user_id == current_user_id,
+                    func.date(Attendance.clock_in_time) == today,
+                    Attendance.clock_out_time.isnot(None)
+                )
+            ).first()
+            
+            if already_checked_out:
+                return jsonify({'message': '今日已签退，请勿重复签退'}), 400
+            else:
+                return jsonify({'message': '今日未签到，无法签退'}), 404
             
         today_attendance.clock_out_time = current_time
         # 判断是否早退（假设18:00为下班时间）
@@ -120,11 +149,6 @@ def attendance():
         
         db.session.commit()
         return jsonify({'message': 'Clock-out recorded successfully'}), 200
-    
-    db.session.add(new_attendance)
-    db.session.commit()
-    
-    return jsonify({'message': 'Clock-in recorded successfully'}), 201
 
 # 获取用户信息
 @app.route('/user/profile', methods=['GET'])
@@ -437,7 +461,6 @@ def face_action(action):
     if dist > 0.4:
         return jsonify(ok=False, msg='人脸不匹配'), 403
     # 比对成功 → 写考勤
-    # 写考勤估计还得改改
     # 使用中国时区的当前时间
     current_time = datetime.now(SHANGHAI_TZ)
     today = current_time.date()
@@ -446,19 +469,31 @@ def face_action(action):
             Attendance.user_id == user_id,
             db.func.date(Attendance.clock_in_time) == today
         ).first()
-        #if exist:
-            # return jsonify(ok=False, msg='今日已签到'), 400
+        if exist:
+            return jsonify(ok=False, msg='今日已签到，请勿重复签到'), 400
         status = '迟到' if current_time.hour > 9 or (current_time.hour == 9 and current_time.minute > 0) else '正常'
         att = Attendance(user_id=user_id, clock_in_time=current_time, status=status)
         db.session.add(att)
     else:  # checkout
+        # 先检查是否已签退
+        already_checked_out = Attendance.query.filter(
+            Attendance.user_id == user_id,
+            db.func.date(Attendance.clock_in_time) == today,
+            Attendance.clock_out_time.isnot(None)
+        ).first()
+        
+        if already_checked_out:
+            return jsonify(ok=False, msg='今日已签退，请勿重复签退'), 400
+            
         att = Attendance.query.filter(
             Attendance.user_id == user_id,
             db.func.date(Attendance.clock_in_time) == today,
             Attendance.clock_out_time.is_(None)
         ).first()
-        #if not att:
-            # return jsonify(ok=False, msg='未找到今日签到记录'), 404
+        
+        if not att:
+            return jsonify(ok=False, msg='今日未签到，无法签退'), 404
+        
         att.clock_out_time = current_time
         if current_time.hour < 18:
             att.status = '早退'
