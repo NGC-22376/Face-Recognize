@@ -70,18 +70,21 @@
         <div v-if="activeTab === 'employees' && userProfile.role === '管理员'" class="tab-content">
           <div class="section-header">
             <h2>员工考勤管理</h2>
-            <div class="sort-controls">
-              <label>排序方式：</label>
-              <select v-model="sortBy" @change="loadEmployeesData">
-                <option value="name">姓名</option>
-                <option value="late_count">迟到次数</option>
-                <option value="early_leave_count">早退次数</option>
-                <option value="normal_count">正常次数</option>
-              </select>
-              <select v-model="sortOrder" @change="loadEmployeesData">
-                <option value="asc">升序</option>
-                <option value="desc">降序</option>
-              </select>
+            <div class="section-actions">
+              <div class="sort-controls">
+                <label>排序方式：</label>
+                <select v-model="sortBy" @change="loadEmployeesData">
+                  <option value="name">姓名</option>
+                  <option value="late_count">迟到次数</option>
+                  <option value="early_leave_count">早退次数</option>
+                  <option value="normal_count">正常次数</option>
+                </select>
+                <select v-model="sortOrder" @change="loadEmployeesData">
+                  <option value="asc">升序</option>
+                  <option value="desc">降序</option>
+                </select>
+              </div>
+              <button @click="exportAttendanceData" class="export-btn">导出考勤数据</button>
             </div>
           </div>
 
@@ -211,7 +214,7 @@ export default {
         late_count: 0,
         early_leave_count: 0,
         normal_count: 0
-      },
+       },
       employees: [],
       sortBy: 'name',
       sortOrder: 'asc',
@@ -399,6 +402,49 @@ export default {
     formatDate(dateString) {
       if (!dateString) return ''
       return new Date(dateString).toLocaleDateString('zh-CN')
+    },
+    
+    // 导出考勤数据为CSV
+    exportAttendanceData() {
+      // 准备CSV数据，添加BOM以支持Excel正确识别UTF-8编码的中文
+      let csvContent = '\uFEFF姓名,工号,迟到次数,早退次数,正常次数\n';
+      
+      // 添加每个员工的数据
+      this.employees.forEach(employee => {
+        const row = [
+          employee.name,
+          employee.account,
+          employee.monthly_stats.late_count,
+          employee.monthly_stats.early_leave_count,
+          employee.monthly_stats.normal_count
+        ];
+        csvContent += row.join(',') + '\n';
+      });
+      
+      // 创建Blob对象
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      
+      // 创建下载链接
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      
+      // 设置文件名（使用当前年月）
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const fileName = `${year}年${month}月考勤统计.csv`;
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', fileName);
+      link.style.visibility = 'hidden';
+      
+      // 添加到DOM并触发下载
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // 释放URL对象
+      URL.revokeObjectURL(url);
     },
     
     formatTime(dateString) {
@@ -691,6 +737,32 @@ export default {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
+}
+
+/* 导出功能样式 */
+.section-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.export-btn {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s;
+}
+
+.export-btn:hover {
+  background-color: #45a049;
+}
+
+.export-btn:active {
+  background-color: #3e8e41;
 }
 
 .clock-btn:disabled {
