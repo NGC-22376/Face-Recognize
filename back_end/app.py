@@ -10,8 +10,8 @@ import datetime
 app = Flask(__name__)
 CORS(app)  # 允许跨域请求
 
-db_user = os.getenv('DB_USER', 'root')
-db_pass = os.getenv('DB_PASS', '456729')
+db_user = os.getenv('DB_USER')
+db_pass = os.getenv('DB_PASS')
 db_host = os.getenv('DB_HOST', 'localhost')
 
 
