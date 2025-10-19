@@ -1,2 +1,0 @@
-test
-配置环境变量DB_USER DB_PASS

@@ -11,11 +11,10 @@
           <input v-model="form.password" type="password" placeholder="密码" required />
         </div>
         <div v-else>
-          <input v-model="registerForm.account" placeholder="账号" required />
+          <input v-model="registerForm.account" placeholder="工号（五位小写英文+三位数字）" required />
           <input v-model="registerForm.password" type="password" placeholder="密码" required />
-          <input v-model="registerForm.role" placeholder="角色（如员工/管理员）" required />
         </div>
-        <button type="submit">{{ isLogin ? '登录' : '注册' }}</button>
+        <button type="submit" class="submit-button">{{ isLogin ? '登录' : '注册' }}</button>
       </form>
       <p @click="toggleForm" class="toggle-link">
         {{ isLogin ? '没有账号？去注册' : '已有账号？去登录' }}
@@ -39,22 +38,22 @@ export default {
         name: '',
         account: '',
         password: '',
-        role: ''
+        role: '员工'
       },
       message: ''
     }
   },
   methods: {
     toggleForm() {
-        if (this.isLogin) {
-            this.$router.push('/register');
+          if (this.isLogin) {
+              this.$router.push('/register');
         } else {
             this.$router.push('/');
         }
     },
     async handleLogin() {
       try {
-        const res = await fetch('/login', {
+        const res = await fetch('http://localhost:5000/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(this.form)
@@ -62,7 +61,18 @@ export default {
         const data = await res.json();
         if (res.ok) {
           this.message = '登录成功';
-          // 登录成功后可跳转页面，如：this.$router.push('/home')
+          
+          // 保存token和用户信息
+          localStorage.setItem('access_token', data.access_token);
+          localStorage.setItem('user_info', JSON.stringify(data.user));
+          
+          // 根据用户角色跳转页面
+          if (data.user.role === '管理员') {
+            this.$router.push('/admin');
+          } else {
+            // 普通用户页面（暂时跳转到管理员页面，您可以后续创建普通用户页面）
+            this.$router.push('/admin');
+          }
         } else {
           this.message = data.message || '登录失败';
         }
@@ -72,17 +82,28 @@ export default {
     },
     async handleRegister() {
       try {
-        const res = await fetch('/register', {
+        const res = await fetch('http://localhost:5000/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(this.registerForm)
         });
-        console.log(this.registerForm);
         const data = await res.json();
         if (res.ok) {
-          this.message = '注册成功，请登录';
+          this.message = '注册成功，下一步将跳转录入人脸信息...';
+          
+          await new Promise(resolve => setTimeout(resolve, 500));
+          // 通过路由参数传递用户信息到人脸录入页面
+          console.log("注册返回的用户信息:", JSON.stringify(data.user));
+          this.$router.push({
+            path: '/face-register',
+            query: {
+              userInfo: JSON.stringify(data.user),
+              register: 'true'
+            }
+          });
           this.isLogin = true;
         } else {
+          // 显示后端返回的错误信息，包括账号已存在的提示
           this.message = data.message || '注册失败';
         }
       } catch (err) {
@@ -128,16 +149,28 @@ export default {
   border: 1px solid #ddd;
   border-radius: 4px;
 }
+/* 通用按钮样式 */
 .form-box button {
-  width: 100%;
   padding: 10px;
-  background: #3498db;
-  color: #fff;
   border: none;
   border-radius: 4px;
   font-size: 16px;
   cursor: pointer;
+  transition: background-color 0.3s ease;
 }
+
+/* 提交按钮样式 */
+.form-box .submit-button {
+  width: 100%;
+  background: #3498db;
+  color: #fff;
+}
+
+.form-box .submit-button:hover {
+  background: #2980b9;
+}
+
+
 .toggle-link {
   color: #3498db;
   text-align: center;

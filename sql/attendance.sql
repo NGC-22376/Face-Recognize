@@ -22,7 +22,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- ----------------------------
 DROP TABLE IF EXISTS `attendance`;
 CREATE TABLE `attendance`  (
-  `attendance_id` int NOT NULL,
+  `attendance_id` int NOT NULL AUTO_INCREMENT,
   `user_id` int NULL DEFAULT NULL,
   `clock_in_time` datetime NULL DEFAULT NULL COMMENT '上班时间',
   `clock_out_time` datetime NULL DEFAULT NULL COMMENT '下班时间',
