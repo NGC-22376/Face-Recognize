@@ -636,43 +636,55 @@ def get_employees_attendance():
         )
 
         # 本月请假次数（不计未来日期，统计通过的请假申请次数）
-        monthly_leave = db.session.query(func.count(Absence.id)).filter(
-            and_(
-                Absence.user_id == user.user_id,
-                Absence.status == 2,
-                extract('month', Absence.start_time) == current_month,
-                extract('year', Absence.start_time) == current_year,
-                func.date(Absence.start_time) <= today
+        monthly_leave = (
+            db.session.query(func.count(Absence.id))
+            .filter(
+                and_(
+                    Absence.user_id == user.user_id,
+                    Absence.status == 2,
+                    extract("month", Absence.start_time) == current_month,
+                    extract("year", Absence.start_time) == current_year,
+                    func.date(Absence.start_time) <= today,
+                )
             )
-        ).scalar() or 0
-        
+            .scalar()
+            or 0
+        )
+
         # 本月未签退次数（不计未来日期）
-        monthly_not_checked_out = db.session.query(func.count(Attendance.attendance_id)).filter(
-            and_(
-                Attendance.user_id == user.user_id,
-                extract('month', Attendance.clock_in_time) == current_month,
-                extract('year', Attendance.clock_in_time) == current_year,
-                Attendance.status == '未签退',
-                func.date(Attendance.clock_in_time) <= today
+        monthly_not_checked_out = (
+            db.session.query(func.count(Attendance.attendance_id))
+            .filter(
+                and_(
+                    Attendance.user_id == user.user_id,
+                    extract("month", Attendance.clock_in_time) == current_month,
+                    extract("year", Attendance.clock_in_time) == current_year,
+                    Attendance.status == "未签退",
+                    func.date(Attendance.clock_in_time) <= today,
+                )
             )
-        ).scalar() or 0
-        
-        employees_list.append({
-            'user_id': user.user_id,
-            'name': user.name,
-            'account': user.account,
-            'today_attendance': today_attendance,
-            'is_absent_today': is_absent_today,
-            'monthly_stats': {
-                'total_days': monthly_total,
-                'late_count': monthly_late,
-                'early_leave_count': monthly_early_leave,
-                'normal_count': monthly_normal,
-                'leave_count': monthly_leave,
-                'not_checked_out_count': monthly_not_checked_out,
-                'should_attend': 22
+            .scalar()
+            or 0
+        )
+
+        employees_list.append(
+            {
+                "user_id": user.user_id,
+                "name": user.name,
+                "account": user.account,
+                "today_attendance": today_attendance,
+                "is_absent_today": is_absent_today,
+                "monthly_stats": {
+                    "total_days": monthly_total,
+                    "late_count": monthly_late,
+                    "early_leave_count": monthly_early_leave,
+                    "normal_count": monthly_normal,
+                    "leave_count": monthly_leave,
+                    "not_checked_out_count": monthly_not_checked_out,
+                    "should_attend": 22,
+                },
             }
-        })
+        )
 
     if sort_by == "late_count":
         employees_list.sort(
@@ -694,10 +706,10 @@ def get_employees_attendance():
             key=lambda x: x["monthly_stats"]["leave_count"],
             reverse=(sort_order == "desc"),
         )
-    elif sort_by == 'not_checked_out_count':
+    elif sort_by == "not_checked_out_count":
         employees_list.sort(
-            key=lambda x: x['monthly_stats']['not_checked_out_count'],
-            reverse=(sort_order == 'desc')
+            key=lambda x: x["monthly_stats"]["not_checked_out_count"],
+            reverse=(sort_order == "desc"),
         )
     else:  # 默认按姓名排序
         employees_list.sort(key=lambda x: x["name"], reverse=(sort_order == "desc"))
@@ -797,8 +809,8 @@ def face_action(action):
         ).first()
         if exist:
             return jsonify(ok=False, msg="今日已签到，请勿重复签到"), 400
-        # 早于 07:00 的签到不允许
-        if current_time.hour < 7:
+        # 早于 08:00 的签到不允许
+        if current_time.hour < 8:
             return jsonify(ok=False, msg="当前不在打卡时间范围内"), 400
         status = (
             "迟到"
@@ -809,8 +821,8 @@ def face_action(action):
         att = Attendance(user_id=user_id, clock_in_time=current_time, status=status)
         db.session.add(att)
     else:  # checkout
-        # 晚于 18:00 的签退不允许（仅允许 18:00:00）
-        if (current_time.hour > 18) or (
+        # 晚于 19:00 的签退不允许（仅允许 19:00:00）
+        if (current_time.hour > 19) or (
             current_time.hour == 18
             and (
                 current_time.minute > 0
@@ -836,7 +848,7 @@ def face_action(action):
         att.clock_out_time = current_time
         if current_time.hour < 18:
             att.status = "早退"
-        else:
+        elif current_time.hour < 19:
             # 18:00 之后签退，清除“未签退”，其余状态（如迟到）保持
             if att.status == "未签退":
                 att.status = "正常"
