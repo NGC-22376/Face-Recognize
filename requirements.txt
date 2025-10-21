@@ -4,3 +4,14 @@ flask_cors==6.0.1
 Flask_JWT_Extended==4.7.1
 flask_sqlalchemy==3.1.1
 pytz==2025.2
+
+pip install flask flask-cors flask-sqlalchemy sqlalchemy pymysql pillow numpy  passlib jwt
+
+pip install face_recognition(建议用下面两条命令安装):
+conda install -c conda-forge dlib
+pip install face_recognition -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+vue:
+npm create vite@latest face-checkin --template vue
+cd face-checkin
+npm i element-plus axios @element-plus/icons-vue
