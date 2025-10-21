@@ -31,6 +31,10 @@
           <div class="nav-item" :class="{ active: activeTab === 'clock' }" @click="setActiveTab('clock')">
             <span>⏰</span> 打卡
           </div>
+          <!-- 新增：请假 -->
+          <div class="nav-item" :class="{ active: activeTab === 'leave' }" @click="setActiveTab('leave')">
+            <span>📝</span> 请假
+          </div>
         </nav>
       </div>
 
@@ -78,6 +82,8 @@
                   <option value="late_count">迟到次数</option>
                   <option value="early_leave_count">早退次数</option>
                   <option value="normal_count">正常次数</option>
+                 <option value="leave_count">请假次数</option>
+                 <option value="not_checked_out_count">未签退次数</option>
                 </select>
                 <select v-model="sortOrder" @change="loadEmployeesData">
                   <option value="asc">升序</option>
@@ -99,6 +105,8 @@
                   <th>迟到次数</th>
                   <th>早退次数</th>
                   <th>正常次数</th>
+                 <th>请假次数</th>
+                 <th>未签退次数</th>
                   <th>应出勤天数</th>
                 </tr>
               </thead>
@@ -107,14 +115,16 @@
                   <td>{{ employee.name }}</td>
                   <td>{{ employee.account }}</td>
                   <td>
-                    <span :class="employee.today_attendance > 0 ? 'status-present' : 'status-absent'">
-                      {{ employee.today_attendance > 0 ? '已出勤' : '未出勤' }}
+                    <span :class="(employee.is_absent_today ? 'status-absent' : (employee.today_attendance > 0 ? 'status-present' : 'status-absent'))">
+                      {{ employee.is_absent_today ? '未出勤' : (employee.today_attendance > 0 ? '已出勤' : '未打卡两次') }}
                     </span>
                   </td>
                   <td>{{ employee.monthly_stats.total_days }}</td>
                   <td class="late-count">{{ employee.monthly_stats.late_count }}</td>
                   <td class="early-count">{{ employee.monthly_stats.early_leave_count }}</td>
                   <td class="normal-count">{{ employee.monthly_stats.normal_count }}</td>
+                 <td class="leave-count">{{ employee.monthly_stats.leave_count }}</td>
+                 <td class="not-checked-count">{{ employee.monthly_stats.not_checked_out_count }}</td>
                   <td>{{ employee.monthly_stats.should_attend }}</td>
                 </tr>
               </tbody>
@@ -163,8 +173,8 @@
                 <tbody>
                   <tr v-for="record in recentRecords" :key="record.attendance_id">
                     <td>{{ formatDate(record.clock_in_time) }}</td>
-                    <td>{{ formatTime(record.clock_in_time) }}</td>
-                    <td>{{ record.clock_out_time ? formatTime(record.clock_out_time) : '未打卡' }}</td>
+                    <td>{{ record.status === '请假' ? '-' : (record.status === '未出勤' ? '未打卡' : formatTime(record.clock_in_time)) }}</td>
+                    <td>{{ record.status === '请假' ? '-' : (record.clock_out_time ? formatTime(record.clock_out_time) : '未打卡') }}</td>
                     <td>
                       <span :class="getStatusClass(record.status)">{{ record.status }}</span>
                     </td>
@@ -193,6 +203,116 @@
               {{ clockMessage }}
             </div>
           </div>
+        </div>
+
+        <!-- 新增：请假（员工提交 / 管理员审核） -->
+        <div v-if="activeTab === 'leave'" class="tab-content">
+          <template v-if="userProfile.role === '员工'">
+            <h2>请假申请</h2>
+            <div class="leave-form">
+              <label>开始时间</label>
+              <input type="datetime-local" v-model="leaveForm.start_time" />
+              <label>结束时间</label>
+              <input type="datetime-local" v-model="leaveForm.end_time" />
+              <label>请假原因</label>
+              <textarea v-model="leaveForm.reason" rows="3"></textarea>
+              <button @click="submitLeave" class="clock-btn leave-submit">提交申请</button>
+              <div v-if="leaveMessage" class="clock-message" :class="leaveMessageType">{{ leaveMessage }}</div>
+            </div>
+
+            <div class="records-table">
+              <h3>我的请假申请</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>起始时间</th>
+                    <th>结束时间</th>
+                    <th>事由</th>
+                    <th>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in myLeaves" :key="item.id">
+                    <td>{{ formatDateTime(item.start_time) }}</td>
+                    <td>{{ formatDateTime(item.end_time) }}</td>
+                    <td>{{ item.reason }}</td>
+                    <td>{{ statusMap[item.status] || item.status }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+          <template v-else>
+            <h2>请假审核</h2>
+            <div class="tab-switch">
+              <button :class="{ active: leaveAdminTab==='unprocessed' }" @click="leaveAdminTab='unprocessed'; loadAdminLeaves(false)">未处理</button>
+              <button :class="{ active: leaveAdminTab==='processed' }" @click="leaveAdminTab='processed'; loadAdminLeaves(true)">已处理</button>
+            </div>
+
+            <div class="records-table" v-if="leaveAdminTab==='unprocessed'">
+              <table>
+                <thead>
+                  <tr>
+                    <th>姓名</th>
+                    <th>工号</th>
+                    <th>起始时间</th>
+                    <th>结束时间</th>
+                    <th>事由</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in adminLeavesUnprocessed" :key="item.id" @click="selectedLeave=item">
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.account }}</td>
+                    <td>{{ formatDateTime(item.start_time) }}</td>
+                    <td>{{ formatDateTime(item.end_time) }}</td>
+                    <td>{{ item.reason }}</td>
+                    <td>
+                      <button class="clock-btn clock-in" @click.stop="reviewLeave(item.id, 'approve')">通过</button>
+                      <button class="clock-btn clock-out" @click.stop="reviewLeave(item.id, 'reject')">拒绝</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="records-table" v-else>
+              <table>
+                <thead>
+                  <tr>
+                    <th>姓名</th>
+                    <th>工号</th>
+                    <th>起始时间</th>
+                    <th>结束时间</th>
+                    <th>事由</th>
+                    <th>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in adminLeavesProcessed" :key="item.id">
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.account }}</td>
+                    <td>{{ formatDateTime(item.start_time) }}</td>
+                    <td>{{ formatDateTime(item.end_time) }}</td>
+                    <td>{{ item.reason }}</td>
+                    <td>{{ statusMap[item.status] || item.status }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div v-if="selectedLeave" class="leave-detail">
+              <h3>申请详情</h3>
+              <p>姓名：{{ selectedLeave.name }}（工号：{{ selectedLeave.account }}）</p>
+              <p>起止：{{ formatDateTime(selectedLeave.start_time) }} - {{ formatDateTime(selectedLeave.end_time) }}</p>
+              <p>事由：{{ selectedLeave.reason }}</p>
+              <div class="detail-actions">
+                <button class="clock-btn clock-in" @click="reviewLeave(selectedLeave.id, 'approve')">通过</button>
+                <button class="clock-btn clock-out" @click="reviewLeave(selectedLeave.id, 'reject')">拒绝</button>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
     </div>
@@ -230,7 +350,17 @@ export default {
       currentDate: '',
       clockLoading: false,
       clockMessage: '',
-      clockMessageType: ''
+      clockMessageType: '',
+      // 新增：请假数据
+      leaveForm: { start_time: '', end_time: '', reason: '' },
+      myLeaves: [],
+      leaveMessage: '',
+      leaveMessageType: '',
+      statusMap: { 0: '未读', 1: '拒绝', 2: '通过' },
+      leaveAdminTab: 'unprocessed',
+      adminLeavesUnprocessed: [],
+      adminLeavesProcessed: [],
+      selectedLeave: null
     }
   },
   async mounted() {
@@ -272,6 +402,12 @@ export default {
         this.loadEmployeesData()
       } else if (tab === 'personal') {
         this.loadPersonalData()
+      } else if (tab === 'leave') {
+        if (this.userProfile.role === '员工') {
+          this.loadMyLeaves()
+        } else {
+          this.loadAdminLeaves(false)
+        }
       }
     },
     
@@ -388,6 +524,83 @@ export default {
       }
     },
     
+    // 请假相关
+    async submitLeave() {
+      this.leaveMessage = ''
+      try {
+        const token = localStorage.getItem('access_token')
+        const res = await fetch(`${this.apiBaseUrl}/absence`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(this.leaveForm)
+        })
+        const data = await res.json()
+        if (res.ok) {
+          this.leaveMessage = data.message
+          this.leaveMessageType = 'success'
+          this.leaveForm = { start_time: '', end_time: '', reason: '' }
+          this.loadMyLeaves()
+        } else {
+          this.leaveMessage = data.message || '提交失败'
+          this.leaveMessageType = 'error'
+        }
+      } catch (e) {
+        this.leaveMessage = '网络错误'
+        this.leaveMessageType = 'error'
+      }
+    },
+    async loadMyLeaves() {
+      try {
+        const token = localStorage.getItem('access_token')
+        const res = await fetch(`${this.apiBaseUrl}/absence/personal`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        const data = await res.json()
+        if (res.ok) {
+          this.myLeaves = data.absences || []
+        }
+      } catch (e) { console.error(e) }
+    },
+    async loadAdminLeaves(processed) {
+      try {
+        const token = localStorage.getItem('access_token')
+        const res = await fetch(`${this.apiBaseUrl}/admin/absence?processed=${processed ? 'true' : 'false'}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        const data = await res.json()
+        if (res.ok) {
+          if (processed) this.adminLeavesProcessed = data.absences || []
+          else this.adminLeavesUnprocessed = data.absences || []
+        }
+      } catch (e) { console.error(e) }
+    },
+    async reviewLeave(id, decision) {
+      try {
+        const token = localStorage.getItem('access_token')
+        const res = await fetch(`${this.apiBaseUrl}/admin/absence/${id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ decision })
+        })
+        const data = await res.json()
+        if (res.ok) {
+          // 审核后刷新列表
+          this.loadAdminLeaves(this.leaveAdminTab === 'processed')
+          this.selectedLeave = null
+          // 同步刷新个人考勤（如果涉及到本人）
+          this.loadPersonalData()
+        } else {
+          alert(data.message || '操作失败')
+        }
+      } catch (e) { console.error(e) }
+    },
+    
     updateTime() {
       const now = new Date()
       this.currentTime = now.toLocaleTimeString('zh-CN')
@@ -402,6 +615,11 @@ export default {
     formatDate(dateString) {
       if (!dateString) return ''
       return new Date(dateString).toLocaleDateString('zh-CN')
+    },
+    formatDateTime(dateString) {
+      if (!dateString) return ''
+      const d = new Date(dateString)
+      return d.toLocaleString('zh-CN', { hour12: false })
     },
     
     // 导出考勤数据为CSV
@@ -453,11 +671,10 @@ export default {
     },
     
     getStatusClass(status) {
-      return {
-        'status-normal': status === '正常',
-        'status-late': status === '迟到',
-        'status-early': status === '早退'
-      }
+      // 最近出勤记录的状态颜色：正常绿色、请假紫色、其它统一红色
+      if (status === '正常') return 'status-normal'
+      if (status === '请假') return 'status-leave'
+      return 'status-bad'
     },
     
     logout() {
@@ -700,6 +917,16 @@ export default {
   font-weight: 500;
 }
 
+.status-leave {
+  color: #8e44ad;
+  font-weight: 500;
+}
+
+.status-bad {
+  color: #e74c3c;
+  font-weight: 500;
+}
+
 .clock-section {
   text-align: center;
   max-width: 400px;
@@ -739,7 +966,15 @@ export default {
   transition: all 0.2s;
 }
 
-/* 导出功能样式 */
+
+.leave-submit {
+  padding: 10px 20px;
+  font-size: 14px;
+  background: #3498DB;
+  color: #fff;
+}
+
+
 .section-actions {
   display: flex;
   align-items: center;
@@ -788,11 +1023,18 @@ export default {
   background: #2980b9;
 }
 
-.clock-message {
-  padding: 12px;
-  border-radius: 4px;
-  font-weight: 500;
+
+.records-table .clock-btn,
+.detail-actions .clock-btn {
+  padding: 10px 18px;
+  font-size: 14px;
 }
+
+.clock-message {
+   padding: 12px;
+   border-radius: 4px;
+   font-weight: 500;
+ }
 
 .clock-message.success {
   background: #d4edda;
@@ -806,9 +1048,62 @@ export default {
   border: 1px solid #f5c6cb;
 }
 
+.leave-form {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  max-width: 480px;
+}
+
+.tab-switch {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.tab-switch button {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.tab-switch button.active {
+  background: #3498db;
+  color: #fff;
+}
+
+.detail-actions {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+}
+
 .date-info {
   margin-top: 16px;
   color: #7f8c8d;
   font-style: italic;
+}
+
+/* 管理员拒绝按钮设为红色，并扩大间距 */
+.records-table td .clock-out {
+  background: #e74c3c;
+  color: #fff;
+}
+.records-table td .clock-out:hover:not(:disabled) {
+  background: #c0392b;
+}
+.detail-actions .clock-out {
+  background: #e74c3c;
+  color: #fff;
+}
+.detail-actions .clock-out:hover:not(:disabled) {
+  background: #c0392b;
+}
+
+
+.records-table td .clock-btn + .clock-btn {
+  margin-left: 16px;
 }
 </style>

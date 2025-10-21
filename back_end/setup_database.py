@@ -210,7 +210,8 @@ def main():
         sql_files = [
             '../sql/user.sql',
             '../sql/face.sql', 
-            '../sql/attendance.sql'
+            '../sql/attendance.sql',
+            '../sql/absence.sql'  # 新增：缺省执行请假表
         ]
         
         for sql_file in sql_files:
