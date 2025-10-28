@@ -82,8 +82,7 @@
                   <option value="late_count">迟到次数</option>
                   <option value="early_leave_count">早退次数</option>
                   <option value="normal_count">正常次数</option>
-                 <option value="leave_count">请假次数</option>
-                 <option value="not_checked_out_count">未签退次数</option>
+                  <option value="leave_count">请假次数</option>
                 </select>
                 <select v-model="sortOrder" @change="loadEmployeesData">
                   <option value="asc">升序</option>
@@ -106,7 +105,6 @@
                   <th>早退次数</th>
                   <th>正常次数</th>
                  <th>请假次数</th>
-                 <th>未签退次数</th>
                   <th>应出勤天数</th>
                 </tr>
               </thead>
@@ -115,8 +113,8 @@
                   <td>{{ employee.name }}</td>
                   <td>{{ employee.account }}</td>
                   <td>
-                    <span :class="(employee.is_absent_today ? 'status-absent' : (employee.today_attendance > 0 ? 'status-present' : 'status-absent'))">
-                      {{ employee.is_absent_today ? '未出勤' : (employee.today_attendance > 0 ? '已出勤' : '未打卡两次') }}
+                    <span :class="(employee.on_leave_today ? 'status-leave' : (employee.is_absent_today ? 'status-absent' : (employee.today_attendance > 0 ? 'status-present' : 'status-absent')))">
+                      {{ employee.on_leave_today ? '请假' : (employee.is_absent_today ? '未出勤' : (employee.today_attendance > 0 ? '已出勤' : '未出勤')) }}
                     </span>
                   </td>
                   <td>{{ employee.monthly_stats.total_days }}</td>
@@ -124,7 +122,6 @@
                   <td class="early-count">{{ employee.monthly_stats.early_leave_count }}</td>
                   <td class="normal-count">{{ employee.monthly_stats.normal_count }}</td>
                  <td class="leave-count">{{ employee.monthly_stats.leave_count }}</td>
-                 <td class="not-checked-count">{{ employee.monthly_stats.not_checked_out_count }}</td>
                   <td>{{ employee.monthly_stats.should_attend }}</td>
                 </tr>
               </tbody>
@@ -446,6 +443,7 @@ export default {
     async loadEmployeesData() {
       try {
         const token = localStorage.getItem('access_token')
+        if (this.sortBy === 'not_checked_out_count') this.sortBy = 'name'
         const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}`, {
           headers: {
             'Authorization': `Bearer ${token}`
