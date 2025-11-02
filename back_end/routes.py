@@ -341,24 +341,45 @@ def get_personal_attendance():
         .all()
     )
 
+    # 叠加：将处于通过的请假区间内的记录标记为“请假”，并隐藏打卡时间
+    approved_leaves = Absence.query.filter(
+        and_(Absence.user_id == current_user_id, Absence.status == 2)
+    ).all()
+    def in_leave(dt):
+      if not dt:
+        return False
+      for lv in approved_leaves:
+        if lv.start_time <= dt <= lv.end_time:
+          return True
+      return False
+    def covers_workday(day):
+      if not day:
+        return False
+      work_start = datetime(day.year, day.month, day.day, 8, 0, 0)
+      work_end = datetime(day.year, day.month, day.day, 18, 0, 0)
+      for lv in approved_leaves:
+        if lv.start_time <= work_start and lv.end_time >= work_end:
+          return True
+      return False
+
     records_list = []
     for record in recent_records:
-        records_list.append(
-            {
-                "attendance_id": record.attendance_id,
-                "clock_in_time": (
-                    record.clock_in_time.strftime("%Y-%m-%d %H:%M:%S")
-                    if record.clock_in_time
-                    else None
-                ),
-                "clock_out_time": (
-                    record.clock_out_time.strftime("%Y-%m-%d %H:%M:%S")
-                    if record.clock_out_time
-                    else None
-                ),
-                "status": record.status,
-            }
-        )
+      is_leave = in_leave(record.clock_in_time) or in_leave(record.clock_out_time)
+      day = record.clock_in_time.date() if record.clock_in_time else (record.clock_out_time.date() if record.clock_out_time else None)
+      if covers_workday(day):
+        is_leave = True
+      records_list.append(
+        {
+          "attendance_id": record.attendance_id,
+          "clock_in_time": (
+            record.clock_in_time.strftime("%Y-%m-%d %H:%M:%S") if record.clock_in_time else None
+          ),
+          "clock_out_time": (
+            record.clock_out_time.strftime("%Y-%m-%d %H:%M:%S") if record.clock_out_time else None
+          ),
+          "status": ("请假" if is_leave else record.status),
+        }
+      )
 
     # 动态补充今日未出勤的虚拟记录（18:00后、当天无打卡、且非请假；不写入数据库）
     on_leave_today = (
@@ -674,6 +695,7 @@ def get_employees_attendance():
                 "account": user.account,
                 "today_attendance": today_attendance,
                 "is_absent_today": is_absent_today,
+                "on_leave_today": on_leave_today,
                 "monthly_stats": {
                     "total_days": monthly_total,
                     "late_count": monthly_late,
@@ -856,3 +878,110 @@ def face_action(action):
     db.session.commit()
     user = User.query.get(user_id)
     return jsonify(ok=True, username=user.name, time=current_time.strftime("%H:%M:%S"))
+
+
+# 请假申请：用户提交
+@app.route("/absence", methods=["POST"])
+@jwt_required()
+def create_absence():
+    try:
+        current_user_id = int(get_jwt_identity())
+        data = request.get_json() or {}
+        start_time_str = data.get("start_time")
+        end_time_str = data.get("end_time")
+        reason = (data.get("reason") or "").strip()
+        if not start_time_str or not end_time_str or not reason:
+            return jsonify(message="参数不完整"), 400
+        # 解析 HTML datetime-local 字段，例如 2025-10-28T09:00
+        try:
+            start_time = datetime.fromisoformat(start_time_str)
+            end_time = datetime.fromisoformat(end_time_str)
+        except Exception:
+            return jsonify(message="时间格式不正确"), 400
+        if end_time <= start_time:
+            return jsonify(message="结束时间必须大于开始时间"), 400
+        absence = Absence(
+            user_id=current_user_id,
+            start_time=start_time,
+            end_time=end_time,
+            reason=reason,
+            status=0  # 未读
+        )
+        db.session.add(absence)
+        db.session.commit()
+        return jsonify(message="请假申请已提交", id=absence.id), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(message=f"服务器错误: {str(e)}"), 500
+
+# 个人请假申请列表
+@app.route("/absence/personal", methods=["GET"])
+@jwt_required()
+def get_personal_absences():
+    current_user_id = int(get_jwt_identity())
+    absences = (
+        Absence.query.filter_by(user_id=current_user_id)
+        .order_by(Absence.start_time.desc())
+        .all()
+    )
+    res = [
+        {
+            "id": a.id,
+            "user_id": a.user_id,
+            "start_time": a.start_time.strftime("%Y-%m-%d %H:%M:%S") if a.start_time else None,
+            "end_time": a.end_time.strftime("%Y-%m-%d %H:%M:%S") if a.end_time else None,
+            "reason": a.reason,
+            "status": a.status,
+        }
+        for a in absences
+    ]
+    return jsonify(absences=res), 200
+
+# 管理员查看请假申请列表（processed=true 查看已处理，否则查看未读）
+@app.route("/admin/absence", methods=["GET"])
+@jwt_required()
+def admin_list_absences():
+    current_user_id = int(get_jwt_identity())
+    user = User.query.get(current_user_id)
+    if not user or user.role != "管理员":
+        return jsonify(message="Access denied. Admin role required."), 403
+    processed = request.args.get("processed", "false").lower() == "true"
+    query = Absence.query
+    if processed:
+        query = query.filter(Absence.status.in_([1, 2]))
+    else:
+        query = query.filter(Absence.status == 0)
+    absences = query.order_by(Absence.start_time.desc()).all()
+    res = [
+        {
+            "id": a.id,
+            "name": User.query.get(a.user_id).name if User.query.get(a.user_id) else None,
+            "account": User.query.get(a.user_id).account if User.query.get(a.user_id) else None,
+            "user_id": a.user_id,
+            "start_time": a.start_time.strftime("%Y-%m-%d %H:%M:%S") if a.start_time else None,
+            "end_time": a.end_time.strftime("%Y-%m-%d %H:%M:%S") if a.end_time else None,
+            "reason": a.reason,
+            "status": a.status,
+        }
+        for a in absences
+    ]
+    return jsonify(absences=res), 200
+
+# 管理员审核请假申请
+@app.route("/admin/absence/<int:absence_id>", methods=["PATCH"])
+@jwt_required()
+def admin_review_absence(absence_id):
+    current_user_id = int(get_jwt_identity())
+    user = User.query.get(current_user_id)
+    if not user or user.role != "管理员":
+        return jsonify(message="Access denied. Admin role required."), 403
+    data = request.get_json() or {}
+    decision = data.get("decision")
+    if decision not in ("approve", "reject"):
+        return jsonify(message="非法操作"), 400
+    absence = Absence.query.get(absence_id)
+    if not absence:
+        return jsonify(message="记录不存在"), 404
+    absence.status = 2 if decision == "approve" else 1
+    db.session.commit()
+    return jsonify(message="操作成功", id=absence.id, status=absence.status), 200
