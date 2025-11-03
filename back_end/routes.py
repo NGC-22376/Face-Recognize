@@ -18,6 +18,7 @@ import os
 from models import Absence
 from datetime import timedelta
 import uuid
+import re
 
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
@@ -42,7 +43,6 @@ def unauthorized_callback(error):
 # 用户注册
 @app.route("/register", methods=["POST"])
 def register():
-    import re
 
     data = request.get_json()
 
@@ -129,9 +129,6 @@ def attendance():
     today = current_time.date()
 
     if attendance_type == "clock_in":
-        # 早于 07:00 的签到不允许
-        if current_time.hour < 7:
-            return jsonify({"message": "当前不在打卡时间范围内"}), 400
         # 检查是否已签到
         existing_checkin = Attendance.query.filter(
             and_(
@@ -160,16 +157,6 @@ def attendance():
         return jsonify({"message": "Clock-in recorded successfully"}), 201
     else:
         # 下班打卡 - 更新现有记录
-        # 晚于 18:00 的签退不允许（仅允许 18:00:00）
-        if (current_time.hour > 18) or (
-            current_time.hour == 18
-            and (
-                current_time.minute > 0
-                or current_time.second > 0
-                or current_time.microsecond > 0
-            )
-        ):
-            return jsonify({"message": "当前不在打卡时间范围内"}), 400
         today_attendance = Attendance.query.filter(
             and_(
                 Attendance.user_id == current_user_id,
@@ -345,41 +332,51 @@ def get_personal_attendance():
     approved_leaves = Absence.query.filter(
         and_(Absence.user_id == current_user_id, Absence.status == 2)
     ).all()
+
     def in_leave(dt):
-      if not dt:
+        if not dt:
+            return False
+        for lv in approved_leaves:
+            if lv.start_time <= dt <= lv.end_time:
+                return True
         return False
-      for lv in approved_leaves:
-        if lv.start_time <= dt <= lv.end_time:
-          return True
-      return False
+
     def covers_workday(day):
-      if not day:
+        if not day:
+            return False
+        work_start = datetime(day.year, day.month, day.day, 8, 0, 0)
+        work_end = datetime(day.year, day.month, day.day, 18, 0, 0)
+        for lv in approved_leaves:
+            if lv.start_time <= work_start and lv.end_time >= work_end:
+                return True
         return False
-      work_start = datetime(day.year, day.month, day.day, 8, 0, 0)
-      work_end = datetime(day.year, day.month, day.day, 18, 0, 0)
-      for lv in approved_leaves:
-        if lv.start_time <= work_start and lv.end_time >= work_end:
-          return True
-      return False
 
     records_list = []
     for record in recent_records:
-      is_leave = in_leave(record.clock_in_time) or in_leave(record.clock_out_time)
-      day = record.clock_in_time.date() if record.clock_in_time else (record.clock_out_time.date() if record.clock_out_time else None)
-      if covers_workday(day):
-        is_leave = True
-      records_list.append(
-        {
-          "attendance_id": record.attendance_id,
-          "clock_in_time": (
-            record.clock_in_time.strftime("%Y-%m-%d %H:%M:%S") if record.clock_in_time else None
-          ),
-          "clock_out_time": (
-            record.clock_out_time.strftime("%Y-%m-%d %H:%M:%S") if record.clock_out_time else None
-          ),
-          "status": ("请假" if is_leave else record.status),
-        }
-      )
+        is_leave = in_leave(record.clock_in_time) or in_leave(record.clock_out_time)
+        day = (
+            record.clock_in_time.date()
+            if record.clock_in_time
+            else (record.clock_out_time.date() if record.clock_out_time else None)
+        )
+        if covers_workday(day):
+            is_leave = True
+        records_list.append(
+            {
+                "attendance_id": record.attendance_id,
+                "clock_in_time": (
+                    record.clock_in_time.strftime("%Y-%m-%d %H:%M:%S")
+                    if record.clock_in_time
+                    else None
+                ),
+                "clock_out_time": (
+                    record.clock_out_time.strftime("%Y-%m-%d %H:%M:%S")
+                    if record.clock_out_time
+                    else None
+                ),
+                "status": ("请假" if is_leave else record.status),
+            }
+        )
 
     # 动态补充今日未出勤的虚拟记录（18:00后、当天无打卡、且非请假；不写入数据库）
     on_leave_today = (
@@ -441,7 +438,6 @@ def get_personal_attendance():
 @app.route("/admin/attendance/daily", methods=["GET"])
 @jwt_required()
 def get_daily_attendance_overview():
-    # 应用18:00后的规则更新
     apply_end_of_day_rules()
     current_user_id = int(get_jwt_identity())
     user = User.query.get(current_user_id)
@@ -905,7 +901,7 @@ def create_absence():
             start_time=start_time,
             end_time=end_time,
             reason=reason,
-            status=0  # 未读
+            status=0,  # 未读
         )
         db.session.add(absence)
         db.session.commit()
@@ -913,6 +909,7 @@ def create_absence():
     except Exception as e:
         db.session.rollback()
         return jsonify(message=f"服务器错误: {str(e)}"), 500
+
 
 # 个人请假申请列表
 @app.route("/absence/personal", methods=["GET"])
@@ -928,14 +925,19 @@ def get_personal_absences():
         {
             "id": a.id,
             "user_id": a.user_id,
-            "start_time": a.start_time.strftime("%Y-%m-%d %H:%M:%S") if a.start_time else None,
-            "end_time": a.end_time.strftime("%Y-%m-%d %H:%M:%S") if a.end_time else None,
+            "start_time": (
+                a.start_time.strftime("%Y-%m-%d %H:%M:%S") if a.start_time else None
+            ),
+            "end_time": (
+                a.end_time.strftime("%Y-%m-%d %H:%M:%S") if a.end_time else None
+            ),
             "reason": a.reason,
             "status": a.status,
         }
         for a in absences
     ]
     return jsonify(absences=res), 200
+
 
 # 管理员查看请假申请列表（processed=true 查看已处理，否则查看未读）
 @app.route("/admin/absence", methods=["GET"])
@@ -955,17 +957,26 @@ def admin_list_absences():
     res = [
         {
             "id": a.id,
-            "name": User.query.get(a.user_id).name if User.query.get(a.user_id) else None,
-            "account": User.query.get(a.user_id).account if User.query.get(a.user_id) else None,
+            "name": (
+                User.query.get(a.user_id).name if User.query.get(a.user_id) else None
+            ),
+            "account": (
+                User.query.get(a.user_id).account if User.query.get(a.user_id) else None
+            ),
             "user_id": a.user_id,
-            "start_time": a.start_time.strftime("%Y-%m-%d %H:%M:%S") if a.start_time else None,
-            "end_time": a.end_time.strftime("%Y-%m-%d %H:%M:%S") if a.end_time else None,
+            "start_time": (
+                a.start_time.strftime("%Y-%m-%d %H:%M:%S") if a.start_time else None
+            ),
+            "end_time": (
+                a.end_time.strftime("%Y-%m-%d %H:%M:%S") if a.end_time else None
+            ),
             "reason": a.reason,
             "status": a.status,
         }
         for a in absences
     ]
     return jsonify(absences=res), 200
+
 
 # 管理员审核请假申请
 @app.route("/admin/absence/<int:absence_id>", methods=["PATCH"])
