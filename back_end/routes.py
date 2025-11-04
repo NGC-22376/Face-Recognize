@@ -43,7 +43,6 @@ def unauthorized_callback(error):
 # 用户注册
 @app.route("/register", methods=["POST"])
 def register():
-
     data = request.get_json()
 
     # 检查工号格式是否为五位小写英文+三位数字
@@ -184,9 +183,12 @@ def attendance():
         # 判断是否早退（假设18:00为下班时间）
         if current_time.hour < 18:
             today_attendance.status = "早退"
-        else:
-            # 18:00 之后（等于18:00）签退，统一显示为正常
+        elif current_time.hour < 19:
+            # 18:00-18:59之间的签退显示为正常
             today_attendance.status = "正常"
+        else:
+            # 19:00及之后的签退显示为加班
+            today_attendance.status = "加班"
 
         db.session.commit()
         return jsonify({"message": "Clock-out recorded successfully"}), 200
@@ -215,13 +217,12 @@ def get_user_profile():
     )
 
 
-# 若已签到但未签退且非请假，记为“未签退”
-# 不自动创建缺勤记录（无打卡用户不生成记录）
-def apply_end_of_day_rules():
-    now = datetime.now(SHANGHAI_TZ)
-    today = now.date()
-    if now.hour < 18:
-        return
+# 若已签到但未签退且非请假，记为"未签退"
+def mark_unclocked_out_employees():
+    """标记未签退员工"""
+    today = datetime.now(SHANGHAI_TZ).date()
+
+    # 查询所有员工，实时标记未签退
     employees = User.query.filter_by(role="员工").all()
     for u in employees:
         approved_leave = Absence.query.filter(
@@ -245,14 +246,14 @@ def apply_end_of_day_rules():
 @jwt_required()
 def get_personal_attendance():
     current_user_id = int(get_jwt_identity())
-    apply_end_of_day_rules()
+    mark_unclocked_out_employees()
 
     now = datetime.now(SHANGHAI_TZ)
     today = date.today()
     current_month = now.month
     current_year = now.year
 
-    # 总出勤天数（不计未来日期）
+    # 总出勤天数
     total_days = (
         db.session.query(func.count(Attendance.attendance_id))
         .filter(
@@ -267,7 +268,7 @@ def get_personal_attendance():
         or 0
     )
 
-    # 迟到次数（不计未来日期）
+    # 迟到次数
     late_count = (
         db.session.query(func.count(Attendance.attendance_id))
         .filter(
@@ -283,7 +284,7 @@ def get_personal_attendance():
         or 0
     )
 
-    # 早退次数（不计未来日期）
+    # 早退次数
     early_leave_count = (
         db.session.query(func.count(Attendance.attendance_id))
         .filter(
@@ -299,7 +300,7 @@ def get_personal_attendance():
         or 0
     )
 
-    # 正常次数（不计未来日期）
+    # 正常次数
     normal_count = (
         db.session.query(func.count(Attendance.attendance_id))
         .filter(
@@ -315,7 +316,7 @@ def get_personal_attendance():
         or 0
     )
 
-    # 最近记录（不含未来日期）
+    # 最近记录
     recent_records = (
         Attendance.query.filter(
             and_(
@@ -328,7 +329,7 @@ def get_personal_attendance():
         .all()
     )
 
-    # 叠加：将处于通过的请假区间内的记录标记为“请假”，并隐藏打卡时间
+    # 将处于通过的请假区间内的记录标记为“请假”，并隐藏打卡时间
     approved_leaves = Absence.query.filter(
         and_(Absence.user_id == current_user_id, Absence.status == 2)
     ).all()
@@ -401,11 +402,7 @@ def get_personal_attendance():
         .scalar()
         or 0
     )
-    if (
-        datetime.now(SHANGHAI_TZ).hour >= 18
-        and has_any_att_today == 0
-        and not on_leave_today
-    ):
+    if has_any_att_today == 0 and not on_leave_today:
         anchor_time = datetime(today.year, today.month, today.day, 0, 0, 0)
         records_list.insert(
             0,
@@ -438,7 +435,7 @@ def get_personal_attendance():
 @app.route("/admin/attendance/daily", methods=["GET"])
 @jwt_required()
 def get_daily_attendance_overview():
-    apply_end_of_day_rules()
+    mark_unclocked_out_employees()
     current_user_id = int(get_jwt_identity())
     user = User.query.get(current_user_id)
 
@@ -519,8 +516,8 @@ def get_daily_attendance_overview():
 @app.route("/admin/attendance/employees", methods=["GET"])
 @jwt_required()
 def get_employees_attendance():
-    # 应用18:00后的规则更新
-    apply_end_of_day_rules()
+    # 应用未签退标记规则
+    mark_unclocked_out_employees()
     current_user_id = int(get_jwt_identity())
     user = User.query.get(current_user_id)
 
@@ -584,10 +581,8 @@ def get_employees_attendance():
             or 0
         )
 
-        # 18:00后，无任何打卡且非请假 → 明确标记为缺勤（用于前端显示）
-        is_absent_today = (
-            (now.hour >= 18) and (has_any_att_today == 0) and (not on_leave_today)
-        )
+        # 18:00后，无任何打卡且非请假 → 明确标记为缺勤（实时显示）
+        is_absent_today = has_any_att_today == 0 and not on_leave_today
 
         # 本月总出勤（不计未来日期）
         monthly_total = (
@@ -888,7 +883,7 @@ def create_absence():
         reason = (data.get("reason") or "").strip()
         if not start_time_str or not end_time_str or not reason:
             return jsonify(message="参数不完整"), 400
-        # 解析 HTML datetime-local 字段，例如 2025-10-28T09:00
+
         try:
             start_time = datetime.fromisoformat(start_time_str)
             end_time = datetime.fromisoformat(end_time_str)
