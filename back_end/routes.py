@@ -822,28 +822,10 @@ def face_action(action):
         ).first()
         if exist:
             return jsonify(ok=False, msg="今日已签到，请勿重复签到"), 400
-        # 早于 08:00 的签到不允许
-        if current_time.hour < 8:
-            return jsonify(ok=False, msg="当前不在打卡时间范围内"), 400
-        status = (
-            "迟到"
-            if current_time.hour > 9
-            or (current_time.hour == 9 and current_time.minute > 0)
-            else "正常"
-        )
-        att = Attendance(user_id=user_id, clock_in_time=current_time, status=status)
+        # 移除时间限制，任何时间都可以签到
+        att = Attendance(user_id=user_id, clock_in_time=current_time, status="正常")
         db.session.add(att)
-    else:  # checkout
-        # 晚于 19:00 的签退不允许（仅允许 19:00:00）
-        if (current_time.hour > 19) or (
-            current_time.hour == 18
-            and (
-                current_time.minute > 0
-                or current_time.second > 0
-                or current_time.microsecond > 0
-            )
-        ):
-            return jsonify(ok=False, msg="当前不在打卡时间范围内"), 400
+    else:  
         already_checked_out = Attendance.query.filter(
             Attendance.user_id == user_id,
             func.date(Attendance.clock_in_time) == today,
@@ -859,12 +841,6 @@ def face_action(action):
         if not att:
             return jsonify(ok=False, msg="今日未签到，无法签退"), 404
         att.clock_out_time = current_time
-        if current_time.hour < 18:
-            att.status = "早退"
-        elif current_time.hour < 19:
-            # 18:00 之后签退，清除“未签退”，其余状态（如迟到）保持
-            if att.status == "未签退":
-                att.status = "正常"
 
     db.session.commit()
     user = User.query.get(user_id)
