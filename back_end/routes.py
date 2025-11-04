@@ -857,6 +857,7 @@ def create_absence():
         start_time_str = data.get("start_time")
         end_time_str = data.get("end_time")
         reason = (data.get("reason") or "").strip()
+        absence_type = data.get("absence_type", 0)  # 默认值为0（病假）
         if not start_time_str or not end_time_str or not reason:
             return jsonify(message="参数不完整"), 400
 
@@ -873,6 +874,7 @@ def create_absence():
             end_time=end_time,
             reason=reason,
             status=0,  # 未读
+            absence_type=absence_type  # 保存请假类型
         )
         db.session.add(absence)
         db.session.commit()
@@ -904,6 +906,7 @@ def get_personal_absences():
             ),
             "reason": a.reason,
             "status": a.status,
+            "absence_type": a.absence_type  # 添加请假类型
         }
         for a in absences
     ]
@@ -943,6 +946,7 @@ def admin_list_absences():
             ),
             "reason": a.reason,
             "status": a.status,
+            "absence_type": a.absence_type  # 添加请假类型
         }
         for a in absences
     ]

@@ -4,10 +4,10 @@ from flask_cors import CORS
 import os
 import pytz
 from sqlalchemy import create_engine  # 用于数据库连接测
-from routes import *
 
 app = Flask(__name__)
-CORS(app)  # 允许跨域请求
+# 配置CORS，允许所有来源的请求和所有方法
+CORS(app, resources={"/*": {"origins": "*", "allow_headers": "*", "methods": ["GET", "POST", "OPTIONS", "PUT", "DELETE"]}})
 
 db_user = os.getenv("DB_USER")
 db_pass = os.getenv("DB_PASS")
@@ -31,6 +31,9 @@ SHANGHAI_TZ = pytz.timezone("Asia/Shanghai")
 # 初始化数据库
 db = SQLAlchemy(app)
 
+
+# 导入路由模块（在应用配置完成后导入，确保路由正确注册）
+from routes import *
 
 if __name__ == "__main__":
     # 测试数据库连接

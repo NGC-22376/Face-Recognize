@@ -19,10 +19,12 @@
       <!-- 左侧导航 -->
       <div class="sidebar">
         <nav class="nav-menu">
-          <div v-if="userProfile.role === '管理员'" class="nav-item" :class="{ active: activeTab === 'dashboard' }" @click="setActiveTab('dashboard')">
+          <div v-if="userProfile.role === '管理员'" class="nav-item" :class="{ active: activeTab === 'dashboard' }"
+            @click="setActiveTab('dashboard')">
             <span>📊</span> 考勤概览
           </div>
-          <div v-if="userProfile.role === '管理员'" class="nav-item" :class="{ active: activeTab === 'employees' }" @click="setActiveTab('employees')">
+          <div v-if="userProfile.role === '管理员'" class="nav-item" :class="{ active: activeTab === 'employees' }"
+            @click="setActiveTab('employees')">
             <span>👥</span> 员工考勤
           </div>
           <div class="nav-item" :class="{ active: activeTab === 'personal' }" @click="setActiveTab('personal')">
@@ -104,7 +106,7 @@
                   <th>迟到次数</th>
                   <th>早退次数</th>
                   <th>正常次数</th>
-                 <th>请假次数</th>
+                  <th>请假次数</th>
                   <th>应出勤天数</th>
                 </tr>
               </thead>
@@ -113,15 +115,17 @@
                   <td>{{ employee.name }}</td>
                   <td>{{ employee.account }}</td>
                   <td>
-                    <span :class="(employee.on_leave_today ? 'status-leave' : (employee.is_absent_today ? 'status-absent' : (employee.today_attendance > 0 ? 'status-present' : 'status-absent')))">
-                      {{ employee.on_leave_today ? '请假' : (employee.is_absent_today ? '未出勤' : (employee.today_attendance > 0 ? '已出勤' : '未出勤')) }}
+                    <span
+                      :class="(employee.on_leave_today ? 'status-leave' : (employee.is_absent_today ? 'status-absent' : (employee.today_attendance > 0 ? 'status-present' : 'status-absent')))">
+                      {{ employee.on_leave_today ? '请假' : (employee.is_absent_today ? '未出勤' : (employee.today_attendance
+                        > 0 ? '已出勤' : '未出勤')) }}
                     </span>
                   </td>
                   <td>{{ employee.monthly_stats.total_days }}</td>
                   <td class="late-count">{{ employee.monthly_stats.late_count }}</td>
                   <td class="early-count">{{ employee.monthly_stats.early_leave_count }}</td>
                   <td class="normal-count">{{ employee.monthly_stats.normal_count }}</td>
-                 <td class="leave-count">{{ employee.monthly_stats.leave_count }}</td>
+                  <td class="leave-count">{{ employee.monthly_stats.leave_count }}</td>
                   <td>{{ employee.monthly_stats.should_attend }}</td>
                 </tr>
               </tbody>
@@ -170,8 +174,10 @@
                 <tbody>
                   <tr v-for="record in recentRecords" :key="record.attendance_id">
                     <td>{{ formatDate(record.clock_in_time) }}</td>
-                    <td>{{ record.status === '请假' ? '-' : (record.status === '未出勤' ? '未打卡' : formatTime(record.clock_in_time)) }}</td>
-                    <td>{{ record.status === '请假' ? '-' : (record.clock_out_time ? formatTime(record.clock_out_time) : '未打卡') }}</td>
+                    <td>{{ record.status === '请假' ? '-' : (record.status === '未出勤' ? '未打卡' :
+                      formatTime(record.clock_in_time)) }}</td>
+                    <td>{{ record.status === '请假' ? '-' : (record.clock_out_time ? formatTime(record.clock_out_time) :
+                      '未打卡') }}</td>
                     <td>
                       <span :class="getStatusClass(record.status)">{{ record.status }}</span>
                     </td>
@@ -190,10 +196,10 @@
               <div class="time-display">{{ currentTime }}</div>
               <div class="date-display">{{ currentDate }}</div>
             </div>
-            
+
             <div class="clock-buttons">
-               <button @click="goFace('clock_in')"  class="clock-btn clock-in">上班打卡</button>
-               <button @click="goFace('clock_out')" class="clock-btn clock-out">下班打卡</button>
+              <button @click="goFace('clock_in')" class="clock-btn clock-in">上班打卡</button>
+              <button @click="goFace('clock_out')" class="clock-btn clock-out">下班打卡</button>
             </div>
 
             <div v-if="clockMessage" class="clock-message" :class="clockMessageType">
@@ -213,6 +219,10 @@
               <input type="datetime-local" v-model="leaveForm.end_time" />
               <label>请假原因</label>
               <textarea v-model="leaveForm.reason" rows="3"></textarea>
+              <label>请假类型</label>
+              <select v-model="leaveForm.absence_type">
+                <option v-for="type in leaveTypes" :key="type.value" :value="type.value">{{ type.label }}</option>
+              </select>
               <button @click="submitLeave" class="clock-btn leave-submit">提交申请</button>
               <div v-if="leaveMessage" class="clock-message" :class="leaveMessageType">{{ leaveMessage }}</div>
             </div>
@@ -225,6 +235,7 @@
                     <th>起始时间</th>
                     <th>结束时间</th>
                     <th>事由</th>
+                    <th>请假类型</th>
                     <th>状态</th>
                   </tr>
                 </thead>
@@ -233,6 +244,7 @@
                     <td>{{ formatDateTime(item.start_time) }}</td>
                     <td>{{ formatDateTime(item.end_time) }}</td>
                     <td>{{ item.reason }}</td>
+                    <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
                     <td>{{ statusMap[item.status] || item.status }}</td>
                   </tr>
                 </tbody>
@@ -242,11 +254,22 @@
           <template v-else>
             <h2>请假审核</h2>
             <div class="tab-switch">
-              <button :class="{ active: leaveAdminTab==='unprocessed' }" @click="leaveAdminTab='unprocessed'; loadAdminLeaves(false)">未处理</button>
-              <button :class="{ active: leaveAdminTab==='processed' }" @click="leaveAdminTab='processed'; loadAdminLeaves(true)">已处理</button>
+              <button :class="{ active: leaveAdminTab === 'unprocessed' }"
+                @click="leaveAdminTab = 'unprocessed'; loadAdminLeaves(false)">未处理</button>
+              <button :class="{ active: leaveAdminTab === 'processed' }"
+                @click="leaveAdminTab = 'processed'; loadAdminLeaves(true)">已处理</button>
             </div>
 
-            <div class="records-table" v-if="leaveAdminTab==='unprocessed'">
+            <!-- 筛选控件 -->
+            <div class="filter-controls" style="margin: 15px 0;">
+              <input type="text" v-model="nameFilter" placeholder="搜索姓名" style="margin-right: 10px; padding: 5px;" />
+              <select v-model="typeFilter" style="padding: 5px;">
+                <option value="-1">全部类型</option>
+                <option v-for="type in leaveTypes" :key="type.value" :value="type.value">{{ type.label }}</option>
+              </select>
+            </div>
+
+            <div class="records-table" v-if="leaveAdminTab === 'unprocessed'">
               <table>
                 <thead>
                   <tr>
@@ -255,16 +278,18 @@
                     <th>起始时间</th>
                     <th>结束时间</th>
                     <th>事由</th>
+                    <th>请假类型</th>
                     <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in adminLeavesUnprocessed" :key="item.id" @click="selectedLeave=item">
+                  <tr v-for="item in filteredUnprocessedLeaves" :key="item.id" @click="selectedLeave = item">
                     <td>{{ item.name }}</td>
                     <td>{{ item.account }}</td>
                     <td>{{ formatDateTime(item.start_time) }}</td>
                     <td>{{ formatDateTime(item.end_time) }}</td>
                     <td>{{ item.reason }}</td>
+                    <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
                     <td>
                       <button class="clock-btn clock-in" @click.stop="reviewLeave(item.id, 'approve')">通过</button>
                       <button class="clock-btn clock-out" @click.stop="reviewLeave(item.id, 'reject')">拒绝</button>
@@ -283,16 +308,18 @@
                     <th>起始时间</th>
                     <th>结束时间</th>
                     <th>事由</th>
+                    <th>请假类型</th>
                     <th>状态</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in adminLeavesProcessed" :key="item.id">
+                  <tr v-for="item in filteredProcessedLeaves" :key="item.id">
                     <td>{{ item.name }}</td>
                     <td>{{ item.account }}</td>
                     <td>{{ formatDateTime(item.start_time) }}</td>
                     <td>{{ formatDateTime(item.end_time) }}</td>
                     <td>{{ item.reason }}</td>
+                    <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
                     <td>{{ statusMap[item.status] || item.status }}</td>
                   </tr>
                 </tbody>
@@ -331,7 +358,7 @@ export default {
         late_count: 0,
         early_leave_count: 0,
         normal_count: 0
-       },
+      },
       employees: [],
       sortBy: 'name',
       sortOrder: 'asc',
@@ -349,7 +376,13 @@ export default {
       clockMessage: '',
       clockMessageType: '',
       // 新增：请假数据
-      leaveForm: { start_time: '', end_time: '', reason: '' },
+      leaveForm: { start_time: '', end_time: '', reason: '', absence_type: 0 },
+      // 请假类型选项
+      leaveTypes: [
+        { value: 0, label: '病假' },
+        { value: 1, label: '私事请假' },
+        { value: 2, label: '公事请假' }
+      ],
       myLeaves: [],
       leaveMessage: '',
       leaveMessageType: '',
@@ -357,15 +390,18 @@ export default {
       leaveAdminTab: 'unprocessed',
       adminLeavesUnprocessed: [],
       adminLeavesProcessed: [],
-      selectedLeave: null
+      selectedLeave: null,
+      // 筛选相关字段
+      nameFilter: '',
+      typeFilter: -1, // -1表示全部类型
     }
   },
   async mounted() {
     this.updateTime()
     setInterval(this.updateTime, 1000)
-    
+
     await this.loadUserProfile()
-    
+
     // 根据用户角色设置默认tab
     if (this.userProfile.role === '管理员') {
       this.activeTab = 'dashboard'
@@ -391,7 +427,7 @@ export default {
       if ((tab === 'dashboard' || tab === 'employees') && this.userProfile.role !== '管理员') {
         return
       }
-      
+
       this.activeTab = tab
       if (tab === 'dashboard') {
         this.loadDashboardData()
@@ -407,7 +443,7 @@ export default {
         }
       }
     },
-    
+
     async loadUserProfile() {
       try {
         const token = localStorage.getItem('access_token')
@@ -423,7 +459,7 @@ export default {
         console.error('Failed to load user profile:', error)
       }
     },
-    
+
     async loadDashboardData() {
       try {
         const token = localStorage.getItem('access_token')
@@ -439,7 +475,7 @@ export default {
         console.error('Failed to load daily stats:', error)
       }
     },
-    
+
     async loadEmployeesData() {
       try {
         const token = localStorage.getItem('access_token')
@@ -457,7 +493,7 @@ export default {
         console.error('Failed to load employees data:', error)
       }
     },
-    
+
     async loadPersonalData() {
       try {
         const token = localStorage.getItem('access_token')
@@ -475,19 +511,19 @@ export default {
         console.error('Failed to load personal data:', error)
       }
     },
-    
+
     async clockIn() {
       await this.performClock('clock_in')
     },
-    
+
     async clockOut() {
       await this.performClock('clock_out')
     },
-    
+
     async performClock(type) {
       this.clockLoading = true
       this.clockMessage = ''
-      
+
       try {
         const token = localStorage.getItem('access_token')
         const response = await fetch(`${this.apiBaseUrl}/attendance`, {
@@ -498,9 +534,9 @@ export default {
           },
           body: JSON.stringify({ type })
         })
-        
+
         const data = await response.json()
-        
+
         if (response.ok) {
           this.clockMessage = data.message
           this.clockMessageType = 'success'
@@ -521,7 +557,7 @@ export default {
         }, 3000)
       }
     },
-    
+
     // 请假相关
     async submitLeave() {
       this.leaveMessage = ''
@@ -550,6 +586,7 @@ export default {
         this.leaveMessageType = 'error'
       }
     },
+
     async loadMyLeaves() {
       try {
         const token = localStorage.getItem('access_token')
@@ -562,6 +599,7 @@ export default {
         }
       } catch (e) { console.error(e) }
     },
+
     async loadAdminLeaves(processed) {
       try {
         const token = localStorage.getItem('access_token')
@@ -575,6 +613,7 @@ export default {
         }
       } catch (e) { console.error(e) }
     },
+
     async reviewLeave(id, decision) {
       try {
         const token = localStorage.getItem('access_token')
@@ -598,7 +637,7 @@ export default {
         }
       } catch (e) { console.error(e) }
     },
-    
+
     updateTime() {
       const now = new Date()
       this.currentTime = now.toLocaleTimeString('zh-CN')
@@ -609,22 +648,23 @@ export default {
         weekday: 'long'
       })
     },
-    
+
     formatDate(dateString) {
       if (!dateString) return ''
       return new Date(dateString).toLocaleDateString('zh-CN')
     },
+
     formatDateTime(dateString) {
       if (!dateString) return ''
       const d = new Date(dateString)
       return d.toLocaleString('zh-CN', { hour12: false })
     },
-    
+
     // 导出考勤数据为CSV
     exportAttendanceData() {
       // 准备CSV数据，添加BOM以支持Excel正确识别UTF-8编码的中文
       let csvContent = '\uFEFF姓名,工号,迟到次数,早退次数,正常次数\n';
-      
+
       // 添加每个员工的数据
       this.employees.forEach(employee => {
         const row = [
@@ -636,49 +676,76 @@ export default {
         ];
         csvContent += row.join(',') + '\n';
       });
-      
+
       // 创建Blob对象
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      
+
       // 创建下载链接
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
-      
+
       // 设置文件名（使用当前年月）
       const now = new Date();
       const year = now.getFullYear();
       const month = String(now.getMonth() + 1).padStart(2, '0');
       const fileName = `${year}年${month}月考勤统计.csv`;
-      
+
       link.setAttribute('href', url);
       link.setAttribute('download', fileName);
       link.style.visibility = 'hidden';
-      
+
       // 添加到DOM并触发下载
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       // 释放URL对象
       URL.revokeObjectURL(url);
     },
-    
+
     formatTime(dateString) {
       if (!dateString) return ''
       return new Date(dateString).toLocaleTimeString('zh-CN')
     },
-    
+
     getStatusClass(status) {
       // 最近出勤记录的状态颜色：正常绿色、请假紫色、其它统一红色
       if (status === '正常') return 'status-normal'
       if (status === '请假') return 'status-leave'
       return 'status-bad'
     },
-    
+
     logout() {
       localStorage.removeItem('access_token')
       this.$router.push('/')
-    }
+    },
+    // 获取请假类型标签
+    getLeaveTypeLabel(type) {
+      const leaveType = this.leaveTypes.find(t => t.value === type);
+      return leaveType ? leaveType.label : '未知类型';
+    },
+
+    // 计算属性：过滤后的待审批请假列表
+    filteredUnprocessedLeaves() {
+      return this.adminLeavesUnprocessed.filter(leave => {
+        // 姓名筛选
+        const nameMatch = leave.name.toLowerCase().includes(this.nameFilter.toLowerCase());
+        // 类型筛选
+        const typeMatch = this.typeFilter === -1 || leave.absence_type === this.typeFilter;
+        return nameMatch && typeMatch;
+      });
+    },
+
+    // 计算属性：过滤后的已审批请假列表
+    filteredProcessedLeaves() {
+      return this.adminLeavesProcessed.filter(leave => {
+        // 姓名筛选
+        const nameMatch = leave.name.toLowerCase().includes(this.nameFilter.toLowerCase());
+        // 类型筛选
+        const typeMatch = this.typeFilter === -1 || leave.absence_type === this.typeFilter;
+        return nameMatch && typeMatch;
+      });
+    },
   }
 }
 </script>
@@ -692,7 +759,7 @@ export default {
 .header {
   background: white;
   padding: 16px 24px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -749,7 +816,7 @@ export default {
 .sidebar {
   width: 240px;
   background: white;
-  box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
 }
 
 .nav-menu {
@@ -783,7 +850,7 @@ export default {
   background: white;
   border-radius: 8px;
   padding: 24px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .stats-cards {
@@ -843,23 +910,28 @@ export default {
   border-radius: 4px;
 }
 
-.employees-table, .records-table {
+.employees-table,
+.records-table {
   overflow-x: auto;
 }
 
-.employees-table table, .records-table table {
+.employees-table table,
+.records-table table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.employees-table th, .employees-table td,
-.records-table th, .records-table td {
+.employees-table th,
+.employees-table td,
+.records-table th,
+.records-table td {
   padding: 12px;
   text-align: left;
   border-bottom: 1px solid #e1e8ed;
 }
 
-.employees-table th, .records-table th {
+.employees-table th,
+.records-table th {
   background: #f8f9fa;
   font-weight: 600;
 }
@@ -1029,10 +1101,10 @@ export default {
 }
 
 .clock-message {
-   padding: 12px;
-   border-radius: 4px;
-   font-weight: 500;
- }
+  padding: 12px;
+  border-radius: 4px;
+  font-weight: 500;
+}
 
 .clock-message.success {
   background: #d4edda;
@@ -1089,19 +1161,22 @@ export default {
   background: #e74c3c;
   color: #fff;
 }
+
 .records-table td .clock-out:hover:not(:disabled) {
   background: #c0392b;
 }
+
 .detail-actions .clock-out {
   background: #e74c3c;
   color: #fff;
 }
+
 .detail-actions .clock-out:hover:not(:disabled) {
   background: #c0392b;
 }
 
 
-.records-table td .clock-btn + .clock-btn {
+.records-table td .clock-btn+.clock-btn {
   margin-left: 16px;
 }
 </style>
