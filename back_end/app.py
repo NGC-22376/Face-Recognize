@@ -19,9 +19,9 @@ db_host = os.getenv('DB_HOST', 'localhost')
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{db_user}:{db_pass}@{db_host}/face_rec'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-app.config['SECRET_KEY'] = 'test'  # 可以自定义，建议复杂一点
-app.config['JWT_SECRET_KEY'] = 'testtest'  # 可以自定义，建议复杂一点
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  # 设置token不过期（开发环境）
+app.config['SECRET_KEY'] = 'test' 
+app.config['JWT_SECRET_KEY'] = 'testtest' 
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  
 
 # 创建中国时区对象（UTC+8）
 SHANGHAI_TZ = pytz.timezone('Asia/Shanghai')
