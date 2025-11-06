@@ -856,3 +856,4 @@ def face_action(action):
     db.session.commit()
     user = User.query.get(user_id)
     return jsonify(ok=True, username=user.name, time=current_time.strftime("%H:%M:%S"))
+
