@@ -10,8 +10,8 @@ import datetime
 app = Flask(__name__)
 CORS(app)  # 允许跨域请求
 
-db_user = os.getenv('DB_USER')
-db_pass = os.getenv('DB_PASS')
+db_user = os.getenv('DB_USER','root')
+db_pass = os.getenv('DB_PASS',"456729")
 db_host = os.getenv('DB_HOST', 'localhost')
 
 
@@ -31,6 +31,7 @@ SHANGHAI_TZ = pytz.timezone('Asia/Shanghai')
 db = SQLAlchemy(app)
 
 from routes import *
+from face import *
 
 if __name__ == '__main__':
     # 测试数据库连接

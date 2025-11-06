@@ -31,7 +31,9 @@
           <div class="nav-item" :class="{ active: activeTab === 'clock' }" @click="setActiveTab('clock')">
             <span>⏰</span> 打卡
           </div>
-          <!-- 新增：请假 -->
+          <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'face_register' }" @click="setActiveTab('face_register')">
+            <span>📷</span> 人脸录入
+          </div>
           <div class="nav-item" :class="{ active: activeTab === 'leave' }" @click="setActiveTab('leave')">
             <span>📝</span> 请假
           </div>
@@ -198,6 +200,29 @@
 
             <div v-if="clockMessage" class="clock-message" :class="clockMessageType">
               {{ clockMessage }}
+            </div>
+          </div>
+        </div>
+
+        <!-- 人脸录入 -->
+        <div v-if="activeTab === 'face_register'" class="tab-content">
+          <h2>人脸录入</h2>
+          <div class="face-register-section">
+            <div class="info-card">
+              <h3>人脸录入说明</h3>
+              <ul>
+                <li>请确保在光线充足的环境下进行录入</li>
+                <li>保持面部清晰可见，不要佩戴帽子或墨镜</li>
+                <li>请正对摄像头，保持自然表情</li>
+                <li>录入成功后即可使用人脸识别打卡功能</li>
+              </ul>
+            </div>
+            <div class="register-action">
+              <button @click="goToFaceRegister" class="register-btn">
+                <span class="btn-icon">📷</span>
+                <span class="btn-text">开始人脸录入</span>
+              </button>
+              <p class="register-tips">点击上方按钮进入人脸录入页面</p>
             </div>
           </div>
         </div>
@@ -385,6 +410,10 @@ export default {
   methods: {
     goFace(type) {
       this.$router.push({ name: 'FaceClock', params: { type } })
+    },
+    // 跳转到人脸录入页面
+    goToFaceRegister() {
+      this.$router.push({ name: 'FaceRegister' })
     },
     setActiveTab(tab) {
       // 检查权限
@@ -1103,5 +1132,81 @@ export default {
 
 .records-table td .clock-btn + .clock-btn {
   margin-left: 16px;
+}
+
+/* 人脸录入样式 */
+.face-register-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.register-info {
+  width: 100%;
+}
+
+.info-card {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 24px;
+  border-left: 4px solid #3498db;
+}
+
+.info-card h3 {
+  margin: 0 0 16px 0;
+  color: #2c3e50;
+}
+
+.info-card ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.info-card li {
+  margin-bottom: 8px;
+  color: #555;
+  line-height: 1.5;
+}
+
+.register-action {
+  text-align: center;
+}
+
+.register-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 20px 40px;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.register-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.btn-icon {
+  font-size: 24px;
+}
+
+.btn-text {
+  flex: 1;
+}
+
+.register-tips {
+  margin-top: 16px;
+  color: #7f8c8d;
+  font-size: 14px;
 }
 </style>
