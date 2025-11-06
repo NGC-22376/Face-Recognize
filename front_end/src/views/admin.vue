@@ -67,6 +67,11 @@
               <div class="stat-label">正常人数</div>
             </div>
           </div>
+          <div class="charts-container">
+            <h3>考勤统计图表</h3>
+            <div id="attendance-chart-1" style="width: 100%; height: 400px;"></div>
+            <div id="attendance-chart-2" style="width: 100%; height: 400px; margin-top: 20px;"></div>
+          </div>
           <div class="date-info">
             <p>统计日期：{{ dailyStats.date }}</p>
           </div>
@@ -130,6 +135,27 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          <!-- 分页控件 -->
+          <div class="pagination-controls" v-if="totalEmployees > 0">
+            <button :disabled="currentPage === 1" @click="handlePageChange(currentPage - 1)">上一页</button>
+            <span>第 {{ currentPage }} 页 / 共 {{ Math.ceil(totalEmployees / pageSize) }} 页</span>
+            <button :disabled="currentPage === Math.ceil(totalEmployees / pageSize)" @click="handlePageChange(currentPage + 1)">下一页</button>
+            
+          </div>
+          <div class="pagination-controls" v-if="totalEmployees > 0">
+            <span>跳转到第</span>
+            <input
+              type="number"
+              v-model.number="jumpToPage"
+              placeholder="跳转页码"
+              min="1"
+              :max="Math.ceil(totalEmployees / pageSize)"
+              style="width: 60px; text-align: center; margin: 0 8px;"
+            />
+            <span>页</span>
+            <button @click="handlePageJump">跳转</button>
           </div>
         </div>
 
@@ -344,6 +370,8 @@
 </template>
 
 <script>
+import * as echarts from 'echarts';
+
 export default {
   name: 'AdminPage',
   data() {
@@ -394,28 +422,42 @@ export default {
       // 筛选相关字段
       nameFilter: '',
       typeFilter: -1, // -1表示全部类型
+      currentPage: 1, // 当前页码
+      pageSize: 10, // 每页显示的记录数
+      totalEmployees: 0, // 员工总数
+      jumpToPage: 1, // 新增：跳转页码
     }
   },
   async mounted() {
-    this.updateTime()
-    setInterval(this.updateTime, 1000)
+    this.updateTime();
+    setInterval(this.updateTime, 1000);
 
-    await this.loadUserProfile()
-
-    // 根据用户角色设置默认tab
+    await this.loadUserProfile();
     if (this.userProfile.role === '管理员') {
-      this.activeTab = 'dashboard'
-      await this.loadDashboardData()
+      this.activeTab = 'dashboard';
+      await this.loadDashboardData();
+      this.$nextTick(() => {
+        this.renderAttendanceCharts();
+      });
     } else {
-      this.activeTab = 'personal'
-      await this.loadPersonalData()
+      this.activeTab = 'personal';
+      await this.loadPersonalData();
     }
+
     // 如果人脸识别完跳回来，自动打卡
     if (this.$route.query.recognized === '1') {
-      const type = this.$route.query.type // clock_in / clock_out
-      await this.performClock(type)       // 复用老接口
-      // 清参数，防止刷新重复
-      await this.$router.replace({ query: {} })
+      const type = this.$route.query.type; // clock_in / clock_out
+      this.performClock(type); // 复用老接口
+      this.$router.replace({ query: {} }); // 清参数，防止刷新重复
+    }
+  },
+  watch: {
+    activeTab(newTab) {
+      if (newTab === 'dashboard' && this.userProfile.role === '管理员') {
+        this.$nextTick(() => {
+          this.renderAttendanceCharts();
+        });
+      }
     }
   },
   methods: {
@@ -478,19 +520,22 @@ export default {
 
     async loadEmployeesData() {
       try {
-        const token = localStorage.getItem('access_token')
-        if (this.sortBy === 'not_checked_out_count') this.sortBy = 'name'
-        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}`, {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}&page=${this.currentPage}&page_size=${this.pageSize}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
-        })
+        });
         if (response.ok) {
-          const data = await response.json()
-          this.employees = data.employees
+          const data = await response.json();
+          this.employees = data.employees || []; // 确保 employees 是数组
+          this.totalEmployees = data.total || 0; // 确保 total 是数字
+          console.log(data.employees);
+        } else {
+          console.error('Failed to load employees data:', await response.text());
         }
       } catch (error) {
-        console.error('Failed to load employees data:', error)
+        console.error('Failed to load employees data:', error);
       }
     },
 
@@ -745,6 +790,151 @@ export default {
         const typeMatch = this.typeFilter === -1 || leave.absence_type === this.typeFilter;
         return nameMatch && typeMatch;
       });
+    },
+
+    handlePageChange(newPage) {
+      this.currentPage = newPage; // 更新当前页码
+      this.loadEmployeesData(); // 重新加载数据
+    },
+
+    handlePageJump() {
+      // 确保跳转的页码在有效范围内
+      if (this.jumpToPage >= 1 && this.jumpToPage <= Math.ceil(this.totalEmployees / this.pageSize)) {
+        this.currentPage = this.jumpToPage;
+        this.loadEmployeesData();
+      } else {
+        alert("请输入有效的页码！");
+      }
+    },
+
+    renderAttendanceChart() {
+      const chartDom = document.getElementById('attendance-chart');
+      const myChart = echarts.init(chartDom);
+      const option = {
+        title: {
+          text: '本月考勤统计',
+          left: 'center'
+        },
+        tooltip: {
+          trigger: 'item'
+        },
+        legend: {
+          bottom: '0%',
+          left: 'center'
+        },
+        series: [
+          {
+            name: '考勤情况',
+            type: 'pie',
+            radius: '50%',
+            data: [
+              { value: this.dailyStats.actual_attendance, name: '实到人数' },
+              { value: this.dailyStats.late_count, name: '迟到人数' },
+              { value: this.dailyStats.early_leave_count, name: '早退人数' },
+              { value: this.dailyStats.normal_count, name: '正常人数' },
+              { value: this.dailyStats.should_attend - this.dailyStats.actual_attendance, name: '未到人数' }
+            ],
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.5)'
+              }
+            }
+          }
+        ]
+      };
+      option && myChart.setOption(option);
+    },
+
+    renderAttendanceCharts() {
+      // 检查数据是否加载完成
+      if (!this.dailyStats) {
+        console.error('dailyStats 数据未加载完成');
+        return;
+      }
+
+      // 图表 1: 实到人数和未到人数
+      const chartDom1 = document.getElementById('attendance-chart-1');
+      if (!chartDom1) {
+        console.error('attendance-chart-1 容器未找到');
+        return;
+      }
+      const chart1 = echarts.init(chartDom1);
+      const option1 = {
+        title: {
+          text: '实到人数与未到人数',
+          left: 'center'
+        },
+        tooltip: {
+          trigger: 'item'
+        },
+        legend: {
+          bottom: '0%',
+          left: 'center'
+        },
+        series: [
+          {
+            name: '考勤情况',
+            type: 'pie',
+            radius: '50%',
+            data: [
+              { value: this.dailyStats.actual_attendance, name: '实到人数' },
+              { value: this.dailyStats.should_attend - this.dailyStats.actual_attendance, name: '未到人数' }
+            ],
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.5)'
+              }
+            }
+          }
+        ]
+      };
+      chart1.setOption(option1);
+
+      // 图表 2: 正常、迟到、早退、请假人数
+      const chartDom2 = document.getElementById('attendance-chart-2');
+      if (!chartDom2) {
+        console.error('attendance-chart-2 容器未找到');
+        return;
+      }
+      const chart2 = echarts.init(chartDom2);
+      const option2 = {
+        title: {
+          text: '考勤详细统计',
+          left: 'center'
+        },
+        tooltip: {
+          trigger: 'item'
+        },
+        legend: {
+          bottom: '0%',
+          left: 'center'
+        },
+        series: [
+          {
+            name: '考勤情况',
+            type: 'pie',
+            radius: '50%',
+            data: [
+              { value: this.dailyStats.normal_count, name: '正常人数' },
+              { value: this.dailyStats.late_count, name: '迟到人数' },
+              { value: this.dailyStats.early_leave_count, name: '早退人数' },
+              { value: this.dailyStats.leave_count, name: '请假人数' }
+            ],
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.5)'
+              }
+            }
+          }
+        ]
+      };
+      chart2.setOption(option2);
     },
   }
 }
@@ -1178,5 +1368,32 @@ export default {
 
 .records-table td .clock-btn+.clock-btn {
   margin-left: 16px;
+}
+
+/* 分页控件样式 */
+.pagination-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 24px 0;
+}
+
+.pagination-controls button {
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  margin: 0 8px;
+}
+
+.pagination-controls button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.pagination-controls span {
+  color: #666;
+  font-size: 14px;
 }
 </style>

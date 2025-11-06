@@ -18,7 +18,8 @@ import os
 from models import Absence
 from datetime import timedelta
 import uuid
-import re
+from sqlalchemy.sql.expression import case
+from pypinyin import lazy_pinyin
 
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
@@ -43,6 +44,8 @@ def unauthorized_callback(error):
 # 用户注册
 @app.route("/register", methods=["POST"])
 def register():
+    import re
+
     data = request.get_json()
 
     # 检查工号格式是否为五位小写英文+三位数字
@@ -128,6 +131,9 @@ def attendance():
     today = current_time.date()
 
     if attendance_type == "clock_in":
+        # 早于 07:00 的签到不允许
+        if current_time.hour < 7:
+            return jsonify({"message": "当前不在打卡时间范围内"}), 400
         # 检查是否已签到
         existing_checkin = Attendance.query.filter(
             and_(
@@ -156,6 +162,16 @@ def attendance():
         return jsonify({"message": "Clock-in recorded successfully"}), 201
     else:
         # 下班打卡 - 更新现有记录
+        # 晚于 18:00 的签退不允许（仅允许 18:00:00）
+        if (current_time.hour > 18) or (
+            current_time.hour == 18
+            and (
+                current_time.minute > 0
+                or current_time.second > 0
+                or current_time.microsecond > 0
+            )
+        ):
+            return jsonify({"message": "当前不在打卡时间范围内"}), 400
         today_attendance = Attendance.query.filter(
             and_(
                 Attendance.user_id == current_user_id,
@@ -183,12 +199,9 @@ def attendance():
         # 判断是否早退（假设18:00为下班时间）
         if current_time.hour < 18:
             today_attendance.status = "早退"
-        elif current_time.hour < 19:
-            # 18:00-18:59之间的签退显示为正常
-            today_attendance.status = "正常"
         else:
-            # 19:00及之后的签退显示为加班
-            today_attendance.status = "加班"
+            # 18:00 之后（等于18:00）签退，统一显示为正常
+            today_attendance.status = "正常"
 
         db.session.commit()
         return jsonify({"message": "Clock-out recorded successfully"}), 200
@@ -217,12 +230,13 @@ def get_user_profile():
     )
 
 
-# 若已签到但未签退且非请假，记为"未签退"
-def mark_unclocked_out_employees():
-    """标记未签退员工"""
-    today = datetime.now(SHANGHAI_TZ).date()
-
-    # 查询所有员工，实时标记未签退
+# 若已签到但未签退且非请假，记为“未签退”
+# 不自动创建缺勤记录（无打卡用户不生成记录）
+def apply_end_of_day_rules():
+    now = datetime.now(SHANGHAI_TZ)
+    today = now.date()
+    if now.hour < 18:
+        return
     employees = User.query.filter_by(role="员工").all()
     for u in employees:
         approved_leave = Absence.query.filter(
@@ -246,14 +260,14 @@ def mark_unclocked_out_employees():
 @jwt_required()
 def get_personal_attendance():
     current_user_id = int(get_jwt_identity())
-    mark_unclocked_out_employees()
+    apply_end_of_day_rules()
 
     now = datetime.now(SHANGHAI_TZ)
     today = date.today()
     current_month = now.month
     current_year = now.year
 
-    # 总出勤天数
+    # 总出勤天数（不计未来日期）
     total_days = (
         db.session.query(func.count(Attendance.attendance_id))
         .filter(
@@ -268,7 +282,7 @@ def get_personal_attendance():
         or 0
     )
 
-    # 迟到次数
+    # 迟到次数（不计未来日期）
     late_count = (
         db.session.query(func.count(Attendance.attendance_id))
         .filter(
@@ -284,7 +298,7 @@ def get_personal_attendance():
         or 0
     )
 
-    # 早退次数
+    # 早退次数（不计未来日期）
     early_leave_count = (
         db.session.query(func.count(Attendance.attendance_id))
         .filter(
@@ -300,7 +314,7 @@ def get_personal_attendance():
         or 0
     )
 
-    # 正常次数
+    # 正常次数（不计未来日期）
     normal_count = (
         db.session.query(func.count(Attendance.attendance_id))
         .filter(
@@ -316,7 +330,7 @@ def get_personal_attendance():
         or 0
     )
 
-    # 最近记录
+    # 最近记录（不含未来日期）
     recent_records = (
         Attendance.query.filter(
             and_(
@@ -329,39 +343,8 @@ def get_personal_attendance():
         .all()
     )
 
-    # 将处于通过的请假区间内的记录标记为“请假”，并隐藏打卡时间
-    approved_leaves = Absence.query.filter(
-        and_(Absence.user_id == current_user_id, Absence.status == 2)
-    ).all()
-
-    def in_leave(dt):
-        if not dt:
-            return False
-        for lv in approved_leaves:
-            if lv.start_time <= dt <= lv.end_time:
-                return True
-        return False
-
-    def covers_workday(day):
-        if not day:
-            return False
-        work_start = datetime(day.year, day.month, day.day, 8, 0, 0)
-        work_end = datetime(day.year, day.month, day.day, 18, 0, 0)
-        for lv in approved_leaves:
-            if lv.start_time <= work_start and lv.end_time >= work_end:
-                return True
-        return False
-
     records_list = []
     for record in recent_records:
-        is_leave = in_leave(record.clock_in_time) or in_leave(record.clock_out_time)
-        day = (
-            record.clock_in_time.date()
-            if record.clock_in_time
-            else (record.clock_out_time.date() if record.clock_out_time else None)
-        )
-        if covers_workday(day):
-            is_leave = True
         records_list.append(
             {
                 "attendance_id": record.attendance_id,
@@ -375,7 +358,7 @@ def get_personal_attendance():
                     if record.clock_out_time
                     else None
                 ),
-                "status": ("请假" if is_leave else record.status),
+                "status": record.status,
             }
         )
 
@@ -402,7 +385,11 @@ def get_personal_attendance():
         .scalar()
         or 0
     )
-    if has_any_att_today == 0 and not on_leave_today:
+    if (
+        datetime.now(SHANGHAI_TZ).hour >= 18
+        and has_any_att_today == 0
+        and not on_leave_today
+    ):
         anchor_time = datetime(today.year, today.month, today.day, 0, 0, 0)
         records_list.insert(
             0,
@@ -435,7 +422,8 @@ def get_personal_attendance():
 @app.route("/admin/attendance/daily", methods=["GET"])
 @jwt_required()
 def get_daily_attendance_overview():
-    mark_unclocked_out_employees()
+    # 应用18:00后的规则更新
+    apply_end_of_day_rules()
     current_user_id = int(get_jwt_identity())
     user = User.query.get(current_user_id)
 
@@ -516,8 +504,8 @@ def get_daily_attendance_overview():
 @app.route("/admin/attendance/employees", methods=["GET"])
 @jwt_required()
 def get_employees_attendance():
-    # 应用未签退标记规则
-    mark_unclocked_out_employees()
+    # 应用18:00后的规则更新
+    apply_end_of_day_rules()
     current_user_id = int(get_jwt_identity())
     user = User.query.get(current_user_id)
 
@@ -525,214 +513,112 @@ def get_employees_attendance():
     if not user or user.role != "管理员":
         return jsonify({"message": "Access denied. Admin role required."}), 403
 
+    today = date.today()
+
     # 获取排序参数
     sort_by = request.args.get(
         "sort_by", "name"
     )  # name, late_count, early_leave_count, normal_count, leave_count
     sort_order = request.args.get("sort_order", "asc")  # asc, desc
+    page = int(request.args.get("page", 1))
+    page_size = int(request.args.get("page_size", 10))
 
-    now = datetime.now(SHANGHAI_TZ)
-    current_month = now.month
-    current_year = now.year
-    today = date.today()
+    # 验证页码和每页大小
+    if page < 1:
+        return jsonify({"message": "页码必须大于等于1"}), 400
+    if page_size < 1:
+        return jsonify({"message": "每页大小必须大于等于1"}), 400
 
-    # 获取所有员工
-    employees = User.query.filter_by(role="员工").all()
+    # 动态计算统计数据并排序
+    subquery = (
+        db.session.query(
+            User.user_id,
+            User.name,
+            User.account,
+            func.count(Attendance.attendance_id).label("total_days"),
+            func.sum(case((Attendance.status == "迟到", 1), else_=0)).label("late_count"),
+            func.sum(case((Attendance.status == "早退", 1), else_=0)).label("early_leave_count"),
+            func.sum(case((Attendance.status == "正常", 1), else_=0)).label("normal_count"),
+            func.sum(case((Absence.status == 2, 1), else_=0)).label("leave_count"),
+        )
+        .outerjoin(Attendance, Attendance.user_id == User.user_id)
+        .outerjoin(Absence, Absence.user_id == User.user_id)
+        .filter(User.role == "员工")
+        .group_by(User.user_id)
+        .subquery()
+    )
+
+    query = db.session.query(subquery)
+
+    # 获取查询结果
+    employees = query.all()
+
+    # 如果按姓名排序，使用拼音排序
+    if sort_by == "name":
+        employees = sorted(
+            employees,
+            key=lambda x: "".join(lazy_pinyin(x.name)),
+            reverse=(sort_order == "desc"),
+        )
+    else:
+        # 其他字段排序
+        employees = sorted(
+            employees,
+            key=lambda x: getattr(x, sort_by),
+            reverse=(sort_order == "desc"),
+        )
+
+    # 分页
+    total = len(employees)
+    employees = employees[(page - 1) * page_size : page * page_size]
+
     employees_list = []
-
-    for user in employees:
-        # 是否当天请假
-        on_leave_today = (
-            Absence.query.filter(
-                and_(
-                    Absence.user_id == user.user_id,
+    for row in employees:
+        employees_list.append(
+            {
+            "user_id": row.user_id,
+            "name": row.name,
+            "account": row.account,
+            "monthly_stats": {
+                "total_days": row.total_days,
+                "late_count": row.late_count,
+                "early_leave_count": row.early_leave_count,
+                "normal_count": row.normal_count,
+                "leave_count": row.leave_count,
+            },
+            "on_leave_today": db.session.query(func.count(Absence.id))
+                .filter(
+                    Absence.user_id == row.user_id,
                     Absence.status == 2,
                     func.date(Absence.start_time) <= today,
                     func.date(Absence.end_time) >= today,
                 )
-            ).first()
-            is not None
-        )
-
-        # 当天是否存在任何考勤记录
-        has_any_att_today = (
-            db.session.query(func.count(Attendance.attendance_id))
-            .filter(
-                and_(
-                    Attendance.user_id == user.user_id,
+                .scalar() > 0,
+            "is_absent_today": db.session.query(func.count(Attendance.attendance_id))
+                .filter(
+                    Attendance.user_id == row.user_id,
                     func.date(Attendance.clock_in_time) == today,
                 )
-            )
-            .scalar()
-            or 0
-        )
-
-        # 今日出勤（排除请假、缺勤）
-        today_attendance = (
-            db.session.query(func.count(Attendance.attendance_id))
-            .filter(
-                and_(
-                    Attendance.user_id == user.user_id,
+                .scalar() == 0,
+            "today_attendance": db.session.query(func.count(Attendance.attendance_id))
+                .filter(
+                    Attendance.user_id == row.user_id,
                     func.date(Attendance.clock_in_time) == today,
-                    Attendance.status.notin_(["请假", "缺勤"]),
                 )
-            )
-            .scalar()
-            or 0
-        )
-
-        # 18:00后，无任何打卡且非请假 → 明确标记为缺勤（实时显示）
-        is_absent_today = has_any_att_today == 0 and not on_leave_today
-
-        # 本月总出勤（不计未来日期）
-        monthly_total = (
-            db.session.query(func.count(Attendance.attendance_id))
-            .filter(
-                and_(
-                    Attendance.user_id == user.user_id,
-                    extract("month", Attendance.clock_in_time) == current_month,
-                    extract("year", Attendance.clock_in_time) == current_year,
-                    func.date(Attendance.clock_in_time) <= today,
-                )
-            )
-            .scalar()
-            or 0
-        )
-
-        # 本月迟到次数（不计未来日期）
-        monthly_late = (
-            db.session.query(func.count(Attendance.attendance_id))
-            .filter(
-                and_(
-                    Attendance.user_id == user.user_id,
-                    extract("month", Attendance.clock_in_time) == current_month,
-                    extract("year", Attendance.clock_in_time) == current_year,
-                    Attendance.status == "迟到",
-                    func.date(Attendance.clock_in_time) <= today,
-                )
-            )
-            .scalar()
-            or 0
-        )
-
-        # 本月早退次数（不计未来日期）
-        monthly_early_leave = (
-            db.session.query(func.count(Attendance.attendance_id))
-            .filter(
-                and_(
-                    Attendance.user_id == user.user_id,
-                    extract("month", Attendance.clock_in_time) == current_month,
-                    extract("year", Attendance.clock_in_time) == current_year,
-                    Attendance.status == "早退",
-                    func.date(Attendance.clock_in_time) <= today,
-                )
-            )
-            .scalar()
-            or 0
-        )
-
-        # 本月正常次数（不计未来日期）
-        monthly_normal = (
-            db.session.query(func.count(Attendance.attendance_id))
-            .filter(
-                and_(
-                    Attendance.user_id == user.user_id,
-                    extract("month", Attendance.clock_in_time) == current_month,
-                    extract("year", Attendance.clock_in_time) == current_year,
-                    Attendance.status == "正常",
-                    func.date(Attendance.clock_in_time) <= today,
-                )
-            )
-            .scalar()
-            or 0
-        )
-
-        # 本月请假次数（不计未来日期，统计通过的请假申请次数）
-        monthly_leave = (
-            db.session.query(func.count(Absence.id))
-            .filter(
-                and_(
-                    Absence.user_id == user.user_id,
-                    Absence.status == 2,
-                    extract("month", Absence.start_time) == current_month,
-                    extract("year", Absence.start_time) == current_year,
-                    func.date(Absence.start_time) <= today,
-                )
-            )
-            .scalar()
-            or 0
-        )
-
-        # 本月未签退次数（不计未来日期）
-        monthly_not_checked_out = (
-            db.session.query(func.count(Attendance.attendance_id))
-            .filter(
-                and_(
-                    Attendance.user_id == user.user_id,
-                    extract("month", Attendance.clock_in_time) == current_month,
-                    extract("year", Attendance.clock_in_time) == current_year,
-                    Attendance.status == "未签退",
-                    func.date(Attendance.clock_in_time) <= today,
-                )
-            )
-            .scalar()
-            or 0
-        )
-
-        employees_list.append(
-            {
-                "user_id": user.user_id,
-                "name": user.name,
-                "account": user.account,
-                "today_attendance": today_attendance,
-                "is_absent_today": is_absent_today,
-                "on_leave_today": on_leave_today,
-                "monthly_stats": {
-                    "total_days": monthly_total,
-                    "late_count": monthly_late,
-                    "early_leave_count": monthly_early_leave,
-                    "normal_count": monthly_normal,
-                    "leave_count": monthly_leave,
-                    "not_checked_out_count": monthly_not_checked_out,
-                    "should_attend": 22,
-                },
+                .scalar(),
             }
         )
 
-    if sort_by == "late_count":
-        employees_list.sort(
-            key=lambda x: x["monthly_stats"]["late_count"],
-            reverse=(sort_order == "desc"),
-        )
-    elif sort_by == "early_leave_count":
-        employees_list.sort(
-            key=lambda x: x["monthly_stats"]["early_leave_count"],
-            reverse=(sort_order == "desc"),
-        )
-    elif sort_by == "normal_count":
-        employees_list.sort(
-            key=lambda x: x["monthly_stats"]["normal_count"],
-            reverse=(sort_order == "desc"),
-        )
-    elif sort_by == "leave_count":
-        employees_list.sort(
-            key=lambda x: x["monthly_stats"]["leave_count"],
-            reverse=(sort_order == "desc"),
-        )
-    elif sort_by == "not_checked_out_count":
-        employees_list.sort(
-            key=lambda x: x["monthly_stats"]["not_checked_out_count"],
-            reverse=(sort_order == "desc"),
-        )
-    else:  # 默认按姓名排序
-        employees_list.sort(key=lambda x: x["name"], reverse=(sort_order == "desc"))
-
-    return (
-        jsonify(
-            {"employees": employees_list, "sort_by": sort_by, "sort_order": sort_order}
-        ),
-        200,
-    )
+    return jsonify(
+        {
+            "employees": employees_list,
+            "total": total,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+            "current_page": page,
+            "page_size": page_size,
+        }
+    ), 200
 
 
 # 人脸图片与特征存储目录
@@ -822,10 +708,28 @@ def face_action(action):
         ).first()
         if exist:
             return jsonify(ok=False, msg="今日已签到，请勿重复签到"), 400
-        # 移除时间限制，任何时间都可以签到
-        att = Attendance(user_id=user_id, clock_in_time=current_time, status="正常")
+        # 早于 08:00 的签到不允许
+        if current_time.hour < 8:
+            return jsonify(ok=False, msg="当前不在打卡时间范围内"), 400
+        status = (
+            "迟到"
+            if current_time.hour > 9
+            or (current_time.hour == 9 and current_time.minute > 0)
+            else "正常"
+        )
+        att = Attendance(user_id=user_id, clock_in_time=current_time, status=status)
         db.session.add(att)
-    else:  
+    else:  # checkout
+        # 晚于 19:00 的签退不允许（仅允许 19:00:00）
+        if (current_time.hour > 19) or (
+            current_time.hour == 18
+            and (
+                current_time.minute > 0
+                or current_time.second > 0
+                or current_time.microsecond > 0
+            )
+        ):
+            return jsonify(ok=False, msg="当前不在打卡时间范围内"), 400
         already_checked_out = Attendance.query.filter(
             Attendance.user_id == user_id,
             func.date(Attendance.clock_in_time) == today,
@@ -841,133 +745,14 @@ def face_action(action):
         if not att:
             return jsonify(ok=False, msg="今日未签到，无法签退"), 404
         att.clock_out_time = current_time
+        if current_time.hour < 18:
+            att.status = "早退"
+        elif current_time.hour < 19:
+            # 18:00 之后签退，清除“未签退”，其余状态（如迟到）保持
+            if att.status == "未签退":
+                att.status = "正常"
 
     db.session.commit()
     user = User.query.get(user_id)
     return jsonify(ok=True, username=user.name, time=current_time.strftime("%H:%M:%S"))
 
-
-# 请假申请：用户提交
-@app.route("/absence", methods=["POST"])
-@jwt_required()
-def create_absence():
-    try:
-        current_user_id = int(get_jwt_identity())
-        data = request.get_json() or {}
-        start_time_str = data.get("start_time")
-        end_time_str = data.get("end_time")
-        reason = (data.get("reason") or "").strip()
-        absence_type = data.get("absence_type", 0)  # 默认值为0（病假）
-        if not start_time_str or not end_time_str or not reason:
-            return jsonify(message="参数不完整"), 400
-
-        try:
-            start_time = datetime.fromisoformat(start_time_str)
-            end_time = datetime.fromisoformat(end_time_str)
-        except Exception:
-            return jsonify(message="时间格式不正确"), 400
-        if end_time <= start_time:
-            return jsonify(message="结束时间必须大于开始时间"), 400
-        absence = Absence(
-            user_id=current_user_id,
-            start_time=start_time,
-            end_time=end_time,
-            reason=reason,
-            status=0,  # 未读
-            absence_type=absence_type  # 保存请假类型
-        )
-        db.session.add(absence)
-        db.session.commit()
-        return jsonify(message="请假申请已提交", id=absence.id), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify(message=f"服务器错误: {str(e)}"), 500
-
-
-# 个人请假申请列表
-@app.route("/absence/personal", methods=["GET"])
-@jwt_required()
-def get_personal_absences():
-    current_user_id = int(get_jwt_identity())
-    absences = (
-        Absence.query.filter_by(user_id=current_user_id)
-        .order_by(Absence.start_time.desc())
-        .all()
-    )
-    res = [
-        {
-            "id": a.id,
-            "user_id": a.user_id,
-            "start_time": (
-                a.start_time.strftime("%Y-%m-%d %H:%M:%S") if a.start_time else None
-            ),
-            "end_time": (
-                a.end_time.strftime("%Y-%m-%d %H:%M:%S") if a.end_time else None
-            ),
-            "reason": a.reason,
-            "status": a.status,
-            "absence_type": a.absence_type  # 添加请假类型
-        }
-        for a in absences
-    ]
-    return jsonify(absences=res), 200
-
-
-# 管理员查看请假申请列表（processed=true 查看已处理，否则查看未读）
-@app.route("/admin/absence", methods=["GET"])
-@jwt_required()
-def admin_list_absences():
-    current_user_id = int(get_jwt_identity())
-    user = User.query.get(current_user_id)
-    if not user or user.role != "管理员":
-        return jsonify(message="Access denied. Admin role required."), 403
-    processed = request.args.get("processed", "false").lower() == "true"
-    query = Absence.query
-    if processed:
-        query = query.filter(Absence.status.in_([1, 2]))
-    else:
-        query = query.filter(Absence.status == 0)
-    absences = query.order_by(Absence.start_time.desc()).all()
-    res = [
-        {
-            "id": a.id,
-            "name": (
-                User.query.get(a.user_id).name if User.query.get(a.user_id) else None
-            ),
-            "account": (
-                User.query.get(a.user_id).account if User.query.get(a.user_id) else None
-            ),
-            "user_id": a.user_id,
-            "start_time": (
-                a.start_time.strftime("%Y-%m-%d %H:%M:%S") if a.start_time else None
-            ),
-            "end_time": (
-                a.end_time.strftime("%Y-%m-%d %H:%M:%S") if a.end_time else None
-            ),
-            "reason": a.reason,
-            "status": a.status,
-            "absence_type": a.absence_type  # 添加请假类型
-        }
-        for a in absences
-    ]
-    return jsonify(absences=res), 200
-
-
-# 管理员审核请假申请
-@app.route("/admin/absence/<int:absence_id>", methods=["PATCH"])
-@jwt_required()
-def admin_review_absence(absence_id):
-    current_user_id = int(get_jwt_identity())
-    user = User.query.get(current_user_id)
-    if not user or user.role != "管理员":
-        return jsonify(message="Access denied. Admin role required."), 403
-    data = request.get_json() or {}
-    decision = data.get("decision")
-    if decision not in ("approve", "reject"):
-        return jsonify(message="非法操作"), 400
-    absence = Absence.query.get(absence_id)
-    if not absence:
-        return jsonify(message="记录不存在"), 404
-    absence.status = 2 if decision == "approve" else 1
-    db.session.commit()
-    return jsonify(message="操作成功", id=absence.id, status=absence.status), 200
