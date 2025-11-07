@@ -187,7 +187,7 @@ def extract_feature(img_path):
     try:
         # 加载图片
         image = fr.load_image_file(img_path)
-        # 检测人脸位置
+        # 检测人脸位置ch
         face_locations = fr.face_locations(image)
         if not face_locations:
             raise Exception("未检测到人脸")
