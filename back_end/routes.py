@@ -2,7 +2,13 @@ from flask import request, jsonify
 from app import app, db, SHANGHAI_TZ
 from models import User, Attendance, Face, Absence
 from flask_bcrypt import Bcrypt
-from flask_jwt_extended import (JWTManager, create_access_token, jwt_required, get_jwt_identity, get_jwt)
+from flask_jwt_extended import (
+    JWTManager,
+    create_access_token,
+    jwt_required,
+    get_jwt_identity,
+    get_jwt,
+)
 from datetime import datetime, date, timedelta
 from sqlalchemy import func, and_, extract
 import face_recognition as fr
@@ -38,13 +44,18 @@ def register():
     import re
 
     data = request.get_json()
-    
+
     # 新增：检查密保问题和答案是否为空
     required_fields = [
-        "name", "account", "password", 
-        "security_question_1", "security_answer_1",
-        "security_question_2", "security_answer_2",
-        "security_question_3", "security_answer_3"
+        "name",
+        "account",
+        "password",
+        "security_question_1",
+        "security_answer_1",
+        "security_question_2",
+        "security_answer_2",
+        "security_question_3",
+        "security_answer_3",
     ]
     if not all(data.get(field) for field in required_fields):
         return jsonify({"message": "所有字段（包括密保问题和答案）都不能为空"}), 400
@@ -64,16 +75,22 @@ def register():
 
     # 哈希密码和所有密保答案
     hashed_password = bcrypt.generate_password_hash(data["password"]).decode("utf-8")
-    hashed_answer_1 = bcrypt.generate_password_hash(data["security_answer_1"]).decode("utf-8")
-    hashed_answer_2 = bcrypt.generate_password_hash(data["security_answer_2"]).decode("utf-8")
-    hashed_answer_3 = bcrypt.generate_password_hash(data["security_answer_3"]).decode("utf-8")
+    hashed_answer_1 = bcrypt.generate_password_hash(data["security_answer_1"]).decode(
+        "utf-8"
+    )
+    hashed_answer_2 = bcrypt.generate_password_hash(data["security_answer_2"]).decode(
+        "utf-8"
+    )
+    hashed_answer_3 = bcrypt.generate_password_hash(data["security_answer_3"]).decode(
+        "utf-8"
+    )
 
     # 创建 User 对象时加入密保信息
     new_user = User(
         name=data["name"],
         account=data["account"],
         password=hashed_password,
-        role=data.get("role", "员工"), 
+        role=data.get("role", "员工"),
         security_question_1=data["security_question_1"],
         security_answer_1=hashed_answer_1,
         security_question_2=data["security_question_2"],
@@ -104,7 +121,6 @@ def register():
     )
 
 
-
 @app.route("/password-recovery/get-questions", methods=["POST"])
 def get_security_questions():
     data = request.get_json()
@@ -120,11 +136,13 @@ def get_security_questions():
         {"id": 2, "text": user.security_question_2},
         {"id": 3, "text": user.security_question_3},
     ]
-    
+
     # 随机选择一个问题返回，增加安全性
     import random
+
     selected_question = random.choice(questions)
     return jsonify({"question": selected_question}), 200
+
 
 # 验证密保答案
 @app.route("/password-recovery/verify-answer", methods=["POST"])
@@ -146,7 +164,7 @@ def verify_security_answer():
         correct_answer_hash = user.security_answer_2
     elif question_id == 3:
         correct_answer_hash = user.security_answer_3
-    
+
     if not correct_answer_hash:
         return jsonify({"message": "无效的问题ID或用户未设置此问题"}), 400
     # 使用 bcrypt 校验答案
@@ -154,13 +172,14 @@ def verify_security_answer():
         # 验证成功，生成一个有时效性的临时token
         expires = timedelta(minutes=10)
         reset_token = create_access_token(
-            identity=str(user.user_id), 
+            identity=str(user.user_id),
             expires_delta=expires,
-            additional_claims={"purpose": "password_reset"}
+            additional_claims={"purpose": "password_reset"},
         )
         return jsonify({"message": "验证成功", "reset_token": reset_token}), 200
     else:
         return jsonify({"message": "密保答案错误"}), 401
+
 
 # 使用临时token重置密码
 @app.route("/password-recovery/reset-password", methods=["POST"])
@@ -365,7 +384,7 @@ def calculate_should_attend_days(user_id, year, month, today):
         Absence.user_id == user_id,
         Absence.status == 2,
         func.date(Absence.start_time) <= today,
-        func.date(Absence.end_time) >= first_day_of_month
+        func.date(Absence.end_time) >= first_day_of_month,
     ).all()
 
     leave_workdays = set()
@@ -377,7 +396,7 @@ def calculate_should_attend_days(user_id, year, month, today):
             if d.weekday() < 5:
                 leave_workdays.add(d)
             d += timedelta(days=1)
-    
+
     leave_day_count = len(leave_workdays)
 
     # 3. 返回最终结果
@@ -459,8 +478,10 @@ def get_personal_attendance():
         or 0
     )
 
-
-
+    # 应出勤天数计算（不计未来日期）
+    should_attend_days = calculate_should_attend_days(
+        current_user_id, current_year, current_month, today
+    )
 
     # 最近记录（不含未来日期）
     recent_records = (
@@ -541,7 +562,7 @@ def get_personal_attendance():
                     "late_count": late_count,
                     "early_leave_count": early_leave_count,
                     "normal_count": normal_count,
-                    "should_attend": should_attend_days, 
+                    "should_attend": should_attend_days,
                 },
                 "recent_records": records_list,
             }
@@ -655,13 +676,13 @@ def get_employees_attendance():
     # 安全地获取和转换分页参数
     page_param = request.args.get("page", 1)
     page_size_param = request.args.get("page_size", 10)
-    
+
     # 处理可能为'undefined'或其他非数字值的情况
     try:
         page = int(page_param)
     except (ValueError, TypeError):
         page = 1
-        
+
     try:
         page_size = int(page_size_param)
     except (ValueError, TypeError):
@@ -680,9 +701,15 @@ def get_employees_attendance():
             User.name,
             User.account,
             func.count(Attendance.attendance_id).label("total_days"),
-            func.sum(case((Attendance.status == "迟到", 1), else_=0)).label("late_count"),
-            func.sum(case((Attendance.status == "早退", 1), else_=0)).label("early_leave_count"),
-            func.sum(case((Attendance.status == "正常", 1), else_=0)).label("normal_count"),
+            func.sum(case((Attendance.status == "迟到", 1), else_=0)).label(
+                "late_count"
+            ),
+            func.sum(case((Attendance.status == "早退", 1), else_=0)).label(
+                "early_leave_count"
+            ),
+            func.sum(case((Attendance.status == "正常", 1), else_=0)).label(
+                "normal_count"
+            ),
             func.sum(case((Absence.status == 2, 1), else_=0)).label("leave_count"),
         )
         .outerjoin(Attendance, Attendance.user_id == User.user_id)
@@ -720,31 +747,37 @@ def get_employees_attendance():
     for row in employees:
         employees_list.append(
             {
-            "user_id": row.user_id,
-            "name": row.name,
-            "account": row.account,
-            "monthly_stats": {
-                "total_days": row.total_days,
-                "late_count": row.late_count,
-                "early_leave_count": row.early_leave_count,
-                "normal_count": row.normal_count,
-                "leave_count": row.leave_count,
-            },
-            "on_leave_today": db.session.query(func.count(Absence.id))
+                "user_id": row.user_id,
+                "name": row.name,
+                "account": row.account,
+                "monthly_stats": {
+                    "total_days": row.total_days,
+                    "late_count": row.late_count,
+                    "early_leave_count": row.early_leave_count,
+                    "normal_count": row.normal_count,
+                    "leave_count": row.leave_count,
+                },
+                "on_leave_today": db.session.query(func.count(Absence.id))
                 .filter(
                     Absence.user_id == row.user_id,
                     Absence.status == 2,
                     func.date(Absence.start_time) <= today,
                     func.date(Absence.end_time) >= today,
                 )
-                .scalar() > 0,
-            "is_absent_today": db.session.query(func.count(Attendance.attendance_id))
+                .scalar()
+                > 0,
+                "is_absent_today": db.session.query(
+                    func.count(Attendance.attendance_id)
+                )
                 .filter(
                     Attendance.user_id == row.user_id,
                     func.date(Attendance.clock_in_time) == today,
                 )
-                .scalar() == 0,
-            "today_attendance": db.session.query(func.count(Attendance.attendance_id))
+                .scalar()
+                == 0,
+                "today_attendance": db.session.query(
+                    func.count(Attendance.attendance_id)
+                )
                 .filter(
                     Attendance.user_id == row.user_id,
                     func.date(Attendance.clock_in_time) == today,
@@ -753,16 +786,20 @@ def get_employees_attendance():
             }
         )
 
-    return jsonify(
-        {
-            "employees": employees_list,
-            "total": total,
-            "sort_by": sort_by,
-            "sort_order": sort_order,
-            "current_page": page,
-            "page_size": page_size,
-        }
-    ), 200
+    return (
+        jsonify(
+            {
+                "employees": employees_list,
+                "total": total,
+                "sort_by": sort_by,
+                "sort_order": sort_order,
+                "current_page": page,
+                "page_size": page_size,
+            }
+        ),
+        200,
+    )
+
 
 # 请假申请：用户提交
 @app.route("/absence", methods=["POST"])
@@ -774,9 +811,22 @@ def create_absence():
         start_time_str = data.get("start_time")
         end_time_str = data.get("end_time")
         reason = (data.get("reason") or "").strip()
+
+        # 检查absence_type是否在请求数据中
+        if "absence_type" not in data:
+            return jsonify(message="您未选择请假类型"), 400
+
         absence_type = data.get("absence_type", 0)  # 默认值为0（病假）
-        if not start_time_str or not end_time_str or not reason:
-            return jsonify(message="参数不完整"), 400
+
+        # 检查其他必要参数
+        if not start_time_str:
+            return jsonify(message="请填写/选择请假开始时间"), 400
+
+        if not end_time_str:
+            return jsonify(message="请填写/选择请假结束时间"), 400
+
+        if not reason:
+            return jsonify(message="请填写请假原因"), 400
 
         try:
             start_time = datetime.fromisoformat(start_time_str)
@@ -791,7 +841,7 @@ def create_absence():
             end_time=end_time,
             reason=reason,
             status=0,  # 未读
-            absence_type=absence_type  # 保存请假类型
+            absence_type=absence_type,  # 保存请假类型
         )
         db.session.add(absence)
         db.session.commit()
@@ -809,14 +859,14 @@ def get_personal_absences():
     # 获取分页参数，默认为第1页
     page = request.args.get("page", 1, type=int)
     per_page = 5
-    
+
     # 使用paginate进行分页查询
     pagination = (
         Absence.query.filter_by(user_id=current_user_id)
         .order_by(Absence.start_time.desc())
         .paginate(page=page, per_page=per_page, error_out=False)
     )
-    
+
     absences = pagination.items
     res = [
         {
@@ -830,19 +880,24 @@ def get_personal_absences():
             ),
             "reason": a.reason,
             "status": a.status,
-            "absence_type": a.absence_type  # 添加请假类型
+            "absence_type": a.absence_type,  # 添加请假类型
         }
         for a in absences
     ]
-    
+
     # 返回分页信息和数据
-    return jsonify({
-        "absences": res,
-        "total": pagination.total,
-        "pages": pagination.pages,
-        "current_page": pagination.page,
-        "per_page": per_page
-    }), 200
+    return (
+        jsonify(
+            {
+                "absences": res,
+                "total": pagination.total,
+                "pages": pagination.pages,
+                "current_page": pagination.page,
+                "per_page": per_page,
+            }
+        ),
+        200,
+    )
 
 
 # 管理员查看请假申请列表（支持分页，每页5条）
@@ -853,22 +908,38 @@ def admin_list_absences():
     user = User.query.get(current_user_id)
     if not user or user.role != "管理员":
         return jsonify(message="Access denied. Admin role required."), 403
-    
+
     processed = request.args.get("processed", "false").lower() == "true"
     # 获取分页参数，默认为第1页
     page = request.args.get("page", 1, type=int)
+    # 固定每页5条记录，保持分页功能
     per_page = 5
     
+    # 获取过滤参数
+    name_filter = request.args.get("name")
+    absence_type_filter = request.args.get("absence_type", type=int)
+
     query = Absence.query
     if processed:
         query = query.filter(Absence.status.in_([1, 2]))
     else:
         query = query.filter(Absence.status == 0)
     
-    # 使用paginate进行分页查询
-    pagination = query.order_by(Absence.start_time.desc()).paginate(page=page, per_page=per_page, error_out=False)
-    absences = pagination.items
+    # 应用姓名过滤
+    if name_filter:
+        # 通过用户表关联过滤
+        query = query.join(User).filter(User.name.ilike(f"%{name_filter}%"))
     
+    # 应用请假类型过滤
+    if absence_type_filter is not None:
+        query = query.filter(Absence.absence_type == absence_type_filter)
+
+    # 使用paginate进行分页查询
+    pagination = query.order_by(Absence.start_time.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    absences = pagination.items
+
     res = [
         {
             "id": a.id,
@@ -887,19 +958,24 @@ def admin_list_absences():
             ),
             "reason": a.reason,
             "status": a.status,
-            "absence_type": a.absence_type  # 添加请假类型
+            "absence_type": a.absence_type,  # 添加请假类型
         }
         for a in absences
     ]
-    
+
     # 返回分页信息和数据
-    return jsonify({
-        "absences": res,
-        "total": pagination.total,
-        "pages": pagination.pages,
-        "current_page": pagination.page,
-        "per_page": per_page
-    }), 200
+    return (
+        jsonify(
+            {
+                "absences": res,
+                "total": pagination.total,
+                "pages": pagination.pages,
+                "current_page": pagination.page,
+                "per_page": per_page,
+            }
+        ),
+        200,
+    )
 
 
 # 管理员审核请假申请

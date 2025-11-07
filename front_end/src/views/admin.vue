@@ -303,7 +303,7 @@
               </table>
               
               <!-- 分页控件 -->
-              <div class="pagination" v-if="pagination.myLeaves.pages > 1">
+              <div class="pagination" v-if="pagination.myLeaves.total > 0">
                 <button 
                   @click="changeMyLeavesPage(pagination.myLeaves.currentPage - 1)" 
                   :disabled="pagination.myLeaves.currentPage === 1"
@@ -383,9 +383,9 @@
               </table>
               
               <!-- 分页控件 -->
-              <div class="pagination" v-if="pagination.adminLeaves.unprocessed.pages > 1">
+              <div class="pagination" v-if="pagination.adminLeaves.unprocessed.total > 0">
                 <button 
-                  @click="pagination.adminLeaves.unprocessed.currentPage = Math.max(1, pagination.adminLeaves.unprocessed.currentPage - 1)" 
+                  @click="changeAdminLeavesPage(false, Math.max(1, pagination.adminLeaves.unprocessed.currentPage - 1))" 
                   :disabled="pagination.adminLeaves.unprocessed.currentPage === 1"
                   class="pagination-btn"
                 >
@@ -395,14 +395,14 @@
                 <span 
                   v-for="page in generatePageNumbers(pagination.adminLeaves.unprocessed.pages, pagination.adminLeaves.unprocessed.currentPage)" 
                   :key="page"
-                  @click="pagination.adminLeaves.unprocessed.currentPage = page"
+                  @click="changeAdminLeavesPage(false, page)"
                   :class="['pagination-item', { active: page === pagination.adminLeaves.unprocessed.currentPage }]"
                 >
                   {{ page }}
                 </span>
                 
                 <button 
-                  @click="pagination.adminLeaves.unprocessed.currentPage = Math.min(pagination.adminLeaves.unprocessed.pages, pagination.adminLeaves.unprocessed.currentPage + 1)" 
+                  @click="changeAdminLeavesPage(false, Math.min(pagination.adminLeaves.unprocessed.pages, pagination.adminLeaves.unprocessed.currentPage + 1))" 
                   :disabled="pagination.adminLeaves.unprocessed.currentPage === pagination.adminLeaves.unprocessed.pages"
                   class="pagination-btn"
                 >
@@ -442,9 +442,9 @@
               </table>
               
               <!-- 分页控件 -->
-              <div class="pagination" v-if="pagination.adminLeaves.processed.pages > 1">
+              <div class="pagination" v-if="pagination.adminLeaves.processed.total > 0">
                 <button 
-                  @click="pagination.adminLeaves.processed.currentPage = Math.max(1, pagination.adminLeaves.processed.currentPage - 1)" 
+                  @click="changeAdminLeavesPage(true, Math.max(1, pagination.adminLeaves.processed.currentPage - 1))" 
                   :disabled="pagination.adminLeaves.processed.currentPage === 1"
                   class="pagination-btn"
                 >
@@ -454,14 +454,14 @@
                 <span 
                   v-for="page in generatePageNumbers(pagination.adminLeaves.processed.pages, pagination.adminLeaves.processed.currentPage)" 
                   :key="page"
-                  @click="pagination.adminLeaves.processed.currentPage = page"
+                  @click="changeAdminLeavesPage(true, page)"
                   :class="['pagination-item', { active: page === pagination.adminLeaves.processed.currentPage }]"
                 >
                   {{ page }}
                 </span>
                 
                 <button 
-                  @click="pagination.adminLeaves.processed.currentPage = Math.min(pagination.adminLeaves.processed.pages, pagination.adminLeaves.processed.currentPage + 1)" 
+                  @click="changeAdminLeavesPage(true, Math.min(pagination.adminLeaves.processed.pages, pagination.adminLeaves.processed.currentPage + 1))" 
                   :disabled="pagination.adminLeaves.processed.currentPage === pagination.adminLeaves.processed.pages"
                   class="pagination-btn"
                 >
@@ -551,24 +551,45 @@ export default {
           currentPage: 1,
           total: 0,
           pages: 0,
-          perPage: 5
+          perPage: 10
         },
         adminLeaves: {
           unprocessed: {
             currentPage: 1,
             total: 0,
             pages: 0,
-            perPage: 5
+            perPage: 10
           },
           processed: {
             currentPage: 1,
             total: 0,
             pages: 0,
-            perPage: 5
+            perPage: 10
           }
         }
       }
     }
+  },
+  watch: {
+    activeTab(newTab) {
+      if (newTab === 'dashboard' && this.userProfile.role === '管理员') {
+        this.$nextTick(() => {
+          this.renderAttendanceCharts();
+        });
+      }
+    },
+    // 监听nameFilter变化
+    nameFilter(newVal, oldVal) {
+      if (newVal !== oldVal) {
+        this.resetAndRecalculatePagination();
+      }
+    },
+    // 监听typeFilter变化
+    typeFilter(newVal, oldVal) {
+      if (newVal !== oldVal) {
+        this.resetAndRecalculatePagination();
+      }
+    },
   },
   async mounted() {
     this.updateTime();
@@ -593,54 +614,15 @@ export default {
       this.$router.replace({ query: {} }); // 清参数，防止刷新重复
     }
   },
-  watch: {
-    activeTab(newTab) {
-      if (newTab === 'dashboard' && this.userProfile.role === '管理员') {
-        this.$nextTick(() => {
-          this.renderAttendanceCharts();
-        });
+  methods: {
+    // 重置分页到第一页
+    resetPagination() {
+      if (this.leaveAdminTab === 'unprocessed') {
+        this.pagination.adminLeaves.unprocessed.currentPage = 1;
+      } else {
+        this.pagination.adminLeaves.processed.currentPage = 1;
       }
     },
-    // 监听nameFilter变化
-    nameFilter(newVal, oldVal) {
-      if (newVal !== oldVal) {
-        // 根据当前标签页类型重置分页
-        if (this.leaveAdminTab === 'unprocessed') {
-          this.pagination.adminLeaves.unprocessed.currentPage = 1;
-          // 重新计算总页数
-          const perPage = this.pagination.adminLeaves.unprocessed.perPage || 5;
-          // 直接计算过滤后的总量，避免依赖计算属性
-          let filteredCount = this.adminLeavesUnprocessed.filter(leave => {
-            const nameMatch = newVal ? 
-              leave.name.toLowerCase().includes(newVal.toLowerCase()) : 
-              true;
-            const typeMatch = this.typeFilter && this.typeFilter !== -1 ? 
-              leave.absence_type === parseInt(this.typeFilter) : 
-              true;
-            return nameMatch && typeMatch;
-          }).length;
-          this.pagination.adminLeaves.unprocessed.total = filteredCount;
-          this.pagination.adminLeaves.unprocessed.pages = Math.ceil(filteredCount / perPage);
-        } else {
-          this.pagination.adminLeaves.processed.currentPage = 1;
-          // 重新计算总页数
-          const perPage = this.pagination.adminLeaves.processed.perPage || 5;
-          let filteredCount = this.adminLeavesProcessed.filter(leave => {
-            const nameMatch = newVal ? 
-              leave.name.toLowerCase().includes(newVal.toLowerCase()) : 
-              true;
-            const typeMatch = this.typeFilter && this.typeFilter !== -1 ? 
-              leave.absence_type === parseInt(this.typeFilter) : 
-              true;
-            return nameMatch && typeMatch;
-          }).length;
-          this.pagination.adminLeaves.processed.total = filteredCount;
-          this.pagination.adminLeaves.processed.pages = Math.ceil(filteredCount / perPage);
-        }
-      }
-    }
-  },
-  methods: {
     goFace(type) {
       this.$router.push({ name: 'FaceClock', params: { type } })
     },
@@ -843,21 +825,33 @@ export default {
     async loadAdminLeaves(processed, page = 1) {
       try {
         const token = localStorage.getItem('access_token')
-        const res = await fetch(`${this.apiBaseUrl}/admin/absence?processed=${processed ? 'true' : 'false'}&page=${page}`, {
+        // 构建查询参数
+        let queryParams = `processed=${processed ? 'true' : 'false'}&page=${page}`
+        
+        // 添加过滤参数
+        if (this.nameFilter) {
+          queryParams += `&name=${encodeURIComponent(this.nameFilter)}`
+        }
+        if (this.typeFilter !== -1 && this.typeFilter !== '-1') {
+          queryParams += `&absence_type=${this.typeFilter}`
+        }
+        
+        // 使用后端分页和过滤，每页5条记录
+        const res = await fetch(`${this.apiBaseUrl}/admin/absence?${queryParams}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
         const data = await res.json()
         if (res.ok) {
           if (processed) {
             this.adminLeavesProcessed = data.absences || []
-            // 更新分页信息
+            // 使用后端返回的分页信息
             this.pagination.adminLeaves.processed.currentPage = data.current_page || 1
             this.pagination.adminLeaves.processed.total = data.total || 0
             this.pagination.adminLeaves.processed.pages = data.pages || 0
             this.pagination.adminLeaves.processed.perPage = data.per_page || 5
           } else {
             this.adminLeavesUnprocessed = data.absences || []
-            // 更新分页信息
+            // 使用后端返回的分页信息
             this.pagination.adminLeaves.unprocessed.currentPage = data.current_page || 1
             this.pagination.adminLeaves.unprocessed.total = data.total || 0
             this.pagination.adminLeaves.unprocessed.pages = data.pages || 0
@@ -869,7 +863,16 @@ export default {
 
     async reviewLeave(id, decision) {
       try {
-        const token = localStorage.getItem('access_token')
+        // 添加按钮点击反馈
+        console.log('审核按钮被点击，ID:', id, '决定:', decision);
+        
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+          alert('登录已过期，请重新登录');
+          this.$router.push('/');
+          return;
+        }
+        
         const res = await fetch(`${this.apiBaseUrl}/admin/absence/${id}`, {
           method: 'PATCH',
           headers: {
@@ -877,22 +880,38 @@ export default {
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({ decision })
-        })
-        const data = await res.json()
+        });
+        
+        const data = await res.json();
+        
         if (res.ok) {
           // 审核后刷新列表，保持当前页码
-          const isProcessed = this.leaveAdminTab === 'processed'
+          const isProcessed = this.leaveAdminTab === 'processed';
           const currentPage = isProcessed ? 
             this.pagination.adminLeaves.processed.currentPage : 
-            this.pagination.adminLeaves.unprocessed.currentPage
-          this.loadAdminLeaves(isProcessed, currentPage)
-          this.selectedLeave = null
+            this.pagination.adminLeaves.unprocessed.currentPage;
+          
+          // 重新加载未处理列表（因为当前记录会被移到已处理列表）
+          this.loadAdminLeaves(false, currentPage);
+          
+          // 如果当前在已处理标签页，也刷新已处理列表
+          if (this.leaveAdminTab === 'processed') {
+            this.loadAdminLeaves(true, this.pagination.adminLeaves.processed.currentPage);
+          }
+          
+          this.selectedLeave = null;
           // 同步刷新个人考勤（如果涉及到本人）
-          this.loadPersonalData()
+          this.loadPersonalData();
         } else {
-          alert(data.message || '操作失败')
+          // 服务器返回错误
+          alert(data.message || '操作失败：服务器返回错误');
+          console.error('审核失败:', data);
         }
-      } catch (e) { console.error(e) }
+      } catch (e) {
+        // 网络或其他错误
+        alert('操作失败：网络错误或服务器异常');
+        console.error('审核请假时发生错误:', e);
+      }
     },
     
     // 分页相关方法
@@ -925,36 +944,14 @@ export default {
       return pages
     },
     
-    // 重置并重新计算分页的方法
+    // 重置分页到第一页
     resetAndRecalculatePagination() {
       if (this.leaveAdminTab === 'unprocessed') {
         this.pagination.adminLeaves.unprocessed.currentPage = 1;
-        // 重新计算筛选后的总页数
-        const filteredCount = this.adminLeavesUnprocessed.filter(item => {
-          const nameMatch = this.nameFilter ? 
-            item.name.toLowerCase().includes(this.nameFilter.toLowerCase()) : 
-            true;
-          const typeMatch = this.typeFilter !== -1 ? 
-            item.absence_type === parseInt(this.typeFilter) : 
-            true;
-          return nameMatch && typeMatch;
-        }).length;
-        this.pagination.adminLeaves.unprocessed.total = filteredCount;
-        this.pagination.adminLeaves.unprocessed.pages = Math.ceil(filteredCount / this.pagination.adminLeaves.unprocessed.perPage);
+        this.loadAdminLeaves(false, 1);
       } else {
         this.pagination.adminLeaves.processed.currentPage = 1;
-        // 重新计算筛选后的总页数
-        const filteredCount = this.adminLeavesProcessed.filter(item => {
-          const nameMatch = this.nameFilter ? 
-            item.name.toLowerCase().includes(this.nameFilter.toLowerCase()) : 
-            true;
-          const typeMatch = this.typeFilter !== -1 ? 
-            item.absence_type === parseInt(this.typeFilter) : 
-            true;
-          return nameMatch && typeMatch;
-        }).length;
-        this.pagination.adminLeaves.processed.total = filteredCount;
-        this.pagination.adminLeaves.processed.pages = Math.ceil(filteredCount / this.pagination.adminLeaves.processed.perPage);
+        this.loadAdminLeaves(true, 1);
       }
     },
 
@@ -1190,51 +1187,13 @@ export default {
       }
   },
   computed: {
-    // 过滤未处理的请假申请
+    // 未处理的请假申请（直接返回后端返回的数据）
     filteredUnprocessedLeaves() {
-      // 先进行筛选
-      const filtered = this.adminLeavesUnprocessed.filter(item => {
-        // 姓名过滤（不区分大小写）
-        const nameMatch = this.nameFilter ? 
-          item.name.toLowerCase().includes(this.nameFilter.toLowerCase()) : 
-          true;
-        // 请假类型过滤
-        const typeMatch = this.typeFilter !== -1 ? 
-          item.absence_type === parseInt(this.typeFilter) : 
-          true;
-        return nameMatch && typeMatch;
-      });
-      
-      // 再进行分页处理
-      const currentPage = this.pagination.adminLeaves.unprocessed.currentPage || 1;
-      const perPage = this.pagination.adminLeaves.unprocessed.perPage || 5;
-      const startIndex = (currentPage - 1) * perPage;
-      const endIndex = startIndex + perPage;
-      
-      return filtered.slice(startIndex, endIndex);
+      return this.adminLeavesUnprocessed;
     },
-    // 过滤已处理的请假申请
+    // 已处理的请假申请（直接返回后端返回的数据）
     filteredProcessedLeaves() {
-      // 先进行筛选
-      const filtered = this.adminLeavesProcessed.filter(item => {
-        // 姓名过滤（不区分大小写）
-        const nameMatch = this.nameFilter ? 
-          item.name.toLowerCase().includes(this.nameFilter.toLowerCase()) : 
-          true;
-        // 请假类型过滤
-        const typeMatch = this.typeFilter !== -1 ? 
-          item.absence_type === parseInt(this.typeFilter) : 
-          true;
-        return nameMatch && typeMatch;
-      });
-      
-      // 再进行分页处理
-      const currentPage = this.pagination.adminLeaves.processed.currentPage || 1;
-      const perPage = this.pagination.adminLeaves.processed.perPage || 5;
-      const startIndex = (currentPage - 1) * perPage;
-      const endIndex = startIndex + perPage;
-      
-      return filtered.slice(startIndex, endIndex);
+      return this.adminLeavesProcessed;
     }
   }
 }

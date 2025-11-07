@@ -50,3 +50,4 @@ class Absence(db.Model):
     end_time = db.Column(db.DateTime, nullable=False)
     status = db.Column(db.Integer, nullable=False, default=0, comment='0:未审批, 1:已拒绝, 2:已通过')
     reason = db.Column(db.Text, nullable=False)
+    absence_type = db.Column(db.Integer, nullable=False, default=0, comment='0:病假, 1:私事请假, 2:公事请假')
