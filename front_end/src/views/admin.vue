@@ -19,12 +19,10 @@
       <!-- 左侧导航 -->
       <div class="sidebar">
         <nav class="nav-menu">
-          <div v-if="userProfile.role === '管理员'" class="nav-item" :class="{ active: activeTab === 'dashboard' }"
-            @click="setActiveTab('dashboard')">
+          <div v-if="userProfile.role === '管理员'" class="nav-item" :class="{ active: activeTab === 'dashboard' }" @click="setActiveTab('dashboard')">
             <span>📊</span> 考勤概览
           </div>
-          <div v-if="userProfile.role === '管理员'" class="nav-item" :class="{ active: activeTab === 'employees' }"
-            @click="setActiveTab('employees')">
+          <div v-if="userProfile.role === '管理员'" class="nav-item" :class="{ active: activeTab === 'employees' }" @click="setActiveTab('employees')">
             <span>👥</span> 员工考勤
           </div>
           <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'personal' }"
@@ -38,6 +36,9 @@
           <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'face_register' }"
             @click="setActiveTab('face_register')">
             <span>📷</span> 人脸录入
+          </div>
+          <div v-if="userProfile.role === '管理员'" class="nav-item" :class="{ active: activeTab === 'face_review' }" @click="setActiveTab('face_review')">
+            <span>👁️</span> 人脸录入审核
           </div>
           <div class="nav-item" :class="{ active: activeTab === 'leave' }" @click="setActiveTab('leave')">
             <span>📝</span> 请假
@@ -127,9 +128,9 @@
                   <td>{{ employee.account }}</td>
                   <td>
                     <span
-                      :class="(employee.on_leave_today ? 'status-leave' : (employee.is_absent_today ? 'status-absent' : (employee.today_attendance > 0 ? 'status-present' : 'status-absent')))">
-                      {{ employee.on_leave_today ? '请假' : (employee.is_absent_today ? '未出勤' : (employee.today_attendance
-                        > 0 ? '已出勤' : '未出勤')) }}
+                      :class="(employee.on_leave_today ? 'status-leave' : (employee.is_absent_today ? 'status-absent' : (employee.today_attendance > 0 ? 'status-present' : 'status-absent')))"
+                    >
+                      {{ employee.on_leave_today ? '请假' : (employee.is_absent_today ? '未出勤' : (employee.today_attendance > 0 ? '已出勤' : '未出勤')) }}
                     </span>
                   </td>
                   <td>{{ employee.monthly_stats.total_days }}</td>
@@ -202,10 +203,8 @@
                 <tbody>
                   <tr v-for="record in recentRecords" :key="record.attendance_id">
                     <td>{{ formatDate(record.clock_in_time) }}</td>
-                    <td>{{ record.status === '请假' ? '-' : (record.status === '未出勤' ? '未打卡' :
-                      formatTime(record.clock_in_time)) }}</td>
-                    <td>{{ record.status === '请假' ? '-' : (record.clock_out_time ? formatTime(record.clock_out_time) :
-                      '未打卡') }}</td>
+                    <td>{{ record.status === '请假' ? '-' : (record.status === '未出勤' ? '未打卡' : formatTime(record.clock_in_time)) }}</td>
+                    <td>{{ record.status === '请假' ? '-' : (record.clock_out_time ? formatTime(record.clock_out_time) : '未打卡') }}</td>
                     <td>
                       <span :class="getStatusClass(record.status)">{{ record.status }}</span>
                     </td>
@@ -259,7 +258,127 @@
           </div>
         </div>
 
-        <!-- 新增：请假（员工提交 / 管理员审核） -->
+        <!-- 人脸录入审核 -->
+        <div v-if="activeTab === 'face_review' && userProfile.role === '管理员'" class="tab-content">
+          <h2>人脸录入审核</h2>
+
+          <!-- 标签切换 -->
+          <div class="tab-switch">
+            <button :class="{ active: faceReviewTab === 'pending' }" @click="faceReviewTab = 'pending'; loadPendingFaceEnrollments()">
+              待审核
+            </button>
+            <button :class="{ active: faceReviewTab === 'processed' }" @click="faceReviewTab = 'processed'; loadReviewedFaceEnrollments()">
+              已处理
+            </button>
+          </div>
+
+          <!-- 筛选控件 -->
+          <div class="filter-controls" style="margin: 15px 0;">
+            <input
+              type="text"
+              v-model="faceNameFilter"
+              placeholder="搜索姓名"
+              style="margin-right: 10px; padding: 5px; width: 200px;"
+            />
+            <select
+              v-model.number="faceStatusFilter"
+              style="padding: 5px; margin-right: 10px;"
+              v-if="faceReviewTab === 'processed'"
+            >
+              <option value="-1">全部状态</option>
+              <option value="1">已通过</option>
+              <option value="2">已拒绝</option>
+            </select>
+          </div>
+
+          <!-- 待审核列表 -->
+          <div v-if="faceReviewTab === 'pending'" class="records-table">
+            <div v-if="loadingPending" class="loading-state">加载中...</div>
+            <template v-else>
+            <table>
+              <thead>
+                <tr>
+                  <th>姓名</th>
+                  <th>工号</th>
+                  <th>提交时间</th>
+                  <th>人脸照片</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="enrollment in filteredPendingEnrollments" :key="enrollment.id">
+                  <td>{{ enrollment.user_name }}</td>
+                  <td>{{ enrollment.user_account }}</td>
+                  <td>{{ formatDateTime(enrollment.created_time) }}</td>
+                  <td>
+                    <div class="face-image-preview">
+                      <img
+                        :src="getEnrollmentImageUrl(enrollment.image_path)"
+                        alt="人脸照片"
+                        @click="showImagePreview(enrollment.image_path)"
+                        class="preview-image"
+                      />
+                    </div>
+                  </td>
+                  <td>
+                    <button class="clock-btn clock-in" @click="reviewFaceEnrollment(enrollment.id, true)">通过</button>
+                    <button class="clock-btn clock-out" @click="reviewFaceEnrollment(enrollment.id, false)">拒绝</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-if="filteredPendingEnrollments.length === 0" class="empty-state">
+              暂无待审核的申请
+            </div>
+            </template>
+          </div>
+
+          <!-- 已处理列表 -->
+          <div v-else class="records-table">
+            <div v-if="loadingReviewed" class="loading-state">加载中...</div>
+            <template v-else>
+            <table>
+              <thead>
+                <tr>
+                  <th>姓名</th>
+                  <th>工号</th>
+                  <th>提交时间</th>
+                  <th>审核时间</th>
+                  <th>状态</th>
+                  <th>审核意见</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="enrollment in filteredReviewedEnrollments" :key="enrollment.id">
+                  <td>{{ enrollment.user_name }}</td>
+                  <td>{{ enrollment.user_account }}</td>
+                  <td>{{ formatDateTime(enrollment.created_time) }}</td>
+                  <td>{{ formatDateTime(enrollment.reviewed_time) }}</td>
+                  <td>
+                    <span :class="getFaceEnrollmentStatusClass(enrollment.status)">
+                      {{ getFaceEnrollmentStatusText(enrollment.status) }}
+                    </span>
+                  </td>
+                  <td>{{ enrollment.review_comment || '-' }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-if="filteredReviewedEnrollments.length === 0" class="empty-state">
+              暂无已处理的申请
+            </div>
+            </template>
+          </div>
+
+          <!-- 图片预览模态框 -->
+          <div v-if="showPreview" class="image-preview-modal" @click="closeImagePreview">
+            <div class="modal-content" @click.stop>
+              <button class="close-btn" @click="closeImagePreview">×</button>
+              <img :src="previewImageUrl" alt="预览图片" />
+            </div>
+          </div>
+        </div>
+
+        <!-- 请假（员工提交 / 管理员审核） -->
         <div v-if="activeTab === 'leave'" class="tab-content">
           <template v-if="userProfile.role === '员工'">
             <h2>请假申请</h2>
@@ -356,12 +475,18 @@
           <template v-else>
             <h2>请假审核</h2>
             <div class="tab-switch">
-              <button :class="{ active: leaveAdminTab === 'unprocessed' }"
-                @click="leaveAdminTab = 'unprocessed'; loadAdminLeaves(false)">未处理</button>
-              <button :class="{ active: leaveAdminTab === 'approved' }"
-                @click="leaveAdminTab = 'approved'; loadAdminLeaves(null, 1, 2)">已通过</button>
-              <button :class="{ active: leaveAdminTab === 'rejected' }"
-                @click="leaveAdminTab = 'rejected'; loadAdminLeaves(null, 1, 1)">已拒绝</button>
+              <button
+                :class="{ active: leaveAdminTab === 'unprocessed' }"
+                @click="leaveAdminTab = 'unprocessed'; loadAdminLeaves(false)"
+              >
+                未处理
+              </button>
+              <button
+                :class="{ active: leaveAdminTab === 'processed' }"
+                @click="leaveAdminTab = 'processed'; loadAdminLeaves(true)"
+              >
+                已处理
+              </button>
             </div>
 
             <!-- 筛选控件 -->
@@ -596,7 +721,7 @@ export default {
   name: 'AdminPage',
   data() {
     return {
-      activeTab: 'personal', // 默认显示个人考勤，管理员会在mounted中改为dashboard
+      activeTab: 'personal',
       userProfile: {},
       apiBaseUrl: 'http://localhost:5000',
       dailyStats: {
@@ -624,9 +749,9 @@ export default {
       clockLoading: false,
       clockMessage: '',
       clockMessageType: '',
-      // 新增：请假数据
+
+      // 请假数据
       leaveForm: { start_time: '', end_time: '', reason: '', absence_type: 0 },
-      // 请假类型选项
       leaveTypes: [
         { value: 0, label: '病假' },
         { value: 1, label: '私事请假' },
@@ -647,7 +772,6 @@ export default {
       adminLeavesApproved: [],  // 已通过的请假申请
       adminLeavesRejected: [],  // 已拒绝的请假申请
       selectedLeave: null,
-      // 筛选相关字段
       nameFilter: '',
       typeFilter: -1, // -1表示全部类型
       currentPage: 1,
@@ -717,8 +841,8 @@ export default {
     },
   },
   async mounted() {
-    this.updateTime();
-    setInterval(this.updateTime, 1000);
+    this.updateTime()
+    setInterval(this.updateTime, 1000)
 
     await this.loadUserProfile();
     if (this.userProfile.role === '管理员') {
@@ -734,11 +858,12 @@ export default {
 
     // 如果人脸识别完跳回来，自动打卡
     if (this.$route.query.recognized === '1') {
-      const type = this.$route.query.type; // clock_in / clock_out
-      this.performClock(type); // 复用老接口
-      this.$router.replace({ query: {} }); // 清参数，防止刷新重复
+      const type = this.$route.query.type // clock_in / clock_out
+      await this.performClock(type)
+      await this.$router.replace({ query: {} })
     }
   },
+
   methods: {
     // 重置分页到第一页
     resetPagination() {
@@ -755,10 +880,11 @@ export default {
     goFace(type) {
       this.$router.push({ name: 'FaceClock', params: { type } })
     },
-    // 跳转到人脸录入页面
+
     goToFaceRegister() {
       this.$router.push({ name: 'FaceRegister' })
     },
+
     setActiveTab(tab) {
       // 检查权限
       if ((tab === 'dashboard' || tab === 'employees') && this.userProfile.role !== '管理员') {
@@ -772,6 +898,8 @@ export default {
         this.loadEmployeesData()
       } else if (tab === 'personal') {
         this.loadPersonalData()
+      } else if (tab === 'face_review') {
+        this.switchFaceReviewTab('pending')
       } else if (tab === 'leave') {
         if (this.userProfile.role === '员工') {
           // 重置到第一页
@@ -783,6 +911,459 @@ export default {
           this.loadAdminLeaves(false, 1)
         }
       }
+    },
+
+    // 切换人脸审核标签页
+    switchFaceReviewTab(tab) {
+      this.faceReviewTab = tab
+      this.faceNameFilter = ''
+      this.faceStatusFilter = -1
+      if (tab === 'pending') {
+        this.loadPendingFaceEnrollments()
+      } else {
+        this.loadReviewedFaceEnrollments()
+      }
+    },
+
+    // 处理筛选条件变化
+    handleFaceFilterChange() {
+      // 筛选逻辑已经在计算属性中处理，这里只需要确保数据已加载
+      if (this.faceReviewTab === 'pending' && this.pendingFaceEnrollments.length === 0) {
+        this.loadPendingFaceEnrollments()
+      } else if (this.faceReviewTab === 'processed' && this.reviewedFaceEnrollments.length === 0) {
+        this.loadReviewedFaceEnrollments()
+      }
+    },
+
+    // 加载待审核的人脸录入申请
+    async loadPendingFaceEnrollments() {
+      this.loadingPending = true
+      try {
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/pending`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          this.pendingFaceEnrollments = data.enrollments || []
+        } else {
+          console.error('加载待审核列表失败，状态码:', response.status)
+          ElMessage.error('加载待审核列表失败')
+        }
+      } catch (error) {
+        console.error('Failed to load pending face enrollments:', error)
+        ElMessage.error('加载待审核列表失败')
+      } finally {
+        this.loadingPending = false
+      }
+    },
+
+    // 加载已审核的人脸录入申请
+    async loadReviewedFaceEnrollments() {
+      this.loadingReviewed = true
+      try {
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/all`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          // 过滤出已审核的记录（状态不为0）
+          this.reviewedFaceEnrollments = (data.enrollments || []).filter(
+            item => item.status !== 0
+          )
+        } else {
+          console.error('加载已处理列表失败，状态码:', response.status)
+          ElMessage.error('加载已处理列表失败')
+        }
+      } catch (error) {
+        console.error('Failed to load reviewed face enrollments:', error)
+        ElMessage.error('加载已处理列表失败')
+      } finally {
+        this.loadingReviewed = false
+      }
+    },
+
+    // 获取人脸录入图片URL
+    getEnrollmentImageUrl(imagePath) {
+      if (imagePath && !imagePath.startsWith('http')) {
+        return `${this.apiBaseUrl}/${imagePath}`
+      }
+      return imagePath
+    },
+
+    // 审核人脸录入申请
+    async reviewFaceEnrollment(enrollmentId, approve) {
+      try {
+        const comment = approve ? '审核通过' : '图片不清晰或不符合要求'
+
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/${enrollmentId}/review`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            approve: approve,
+            comment: comment
+          })
+        })
+
+        const data = await response.json()
+        if (response.ok) {
+          ElMessage.success(data.msg)
+          // 重新加载列表
+          if (this.faceReviewTab === 'pending') {
+            this.loadPendingFaceEnrollments()
+          } else {
+            this.loadReviewedFaceEnrollments()
+          }
+        } else {
+          ElMessage.error(data.msg || '审核失败')
+        }
+      } catch (error) {
+        console.error('Review face enrollment failed:', error)
+        ElMessage.error('网络错误，请重试')
+      }
+    },
+
+    // 显示图片预览
+    showImagePreview(imagePath) {
+      this.previewImageUrl = this.getEnrollmentImageUrl(imagePath)
+      this.showPreview = true
+    },
+
+    // 关闭图片预览
+    closeImagePreview() {
+      this.showPreview = false
+      this.previewImageUrl = ''
+    },
+
+    // 获取人脸审核状态文本
+    getFaceEnrollmentStatusText(status) {
+      const statusMap = {
+        0: '待审核',
+        1: '已通过',
+        2: '已拒绝'
+      }
+      return statusMap[status] || '未知状态'
+    },
+
+    // 获取人脸审核状态样式类
+    getFaceEnrollmentStatusClass(status) {
+      const classMap = {
+        0: 'status-pending',
+        1: 'status-approved',
+        2: 'status-rejected'
+      }
+      return classMap[status] || 'status-pending'
+    },
+
+    // 切换人脸审核标签页
+    switchFaceReviewTab(tab) {
+      this.faceReviewTab = tab
+      this.faceNameFilter = ''
+      this.faceStatusFilter = -1
+      if (tab === 'pending') {
+        this.loadPendingFaceEnrollments()
+      } else {
+        this.loadReviewedFaceEnrollments()
+      }
+    },
+
+    // 处理筛选条件变化
+    handleFaceFilterChange() {
+      // 筛选逻辑已经在计算属性中处理，这里只需要确保数据已加载
+      if (this.faceReviewTab === 'pending' && this.pendingFaceEnrollments.length === 0) {
+        this.loadPendingFaceEnrollments()
+      } else if (this.faceReviewTab === 'processed' && this.reviewedFaceEnrollments.length === 0) {
+        this.loadReviewedFaceEnrollments()
+      }
+    },
+
+    // 加载待审核的人脸录入申请
+    async loadPendingFaceEnrollments() {
+      this.loadingPending = true
+      try {
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/pending`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          this.pendingFaceEnrollments = data.enrollments || []
+        } else {
+          console.error('加载待审核列表失败，状态码:', response.status)
+          ElMessage.error('加载待审核列表失败')
+        }
+      } catch (error) {
+        console.error('Failed to load pending face enrollments:', error)
+        ElMessage.error('加载待审核列表失败')
+      } finally {
+        this.loadingPending = false
+      }
+    },
+
+    // 加载已审核的人脸录入申请
+    async loadReviewedFaceEnrollments() {
+      this.loadingReviewed = true
+      try {
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/all`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          // 过滤出已审核的记录（状态不为0）
+          this.reviewedFaceEnrollments = (data.enrollments || []).filter(
+            item => item.status !== 0
+          )
+        } else {
+          console.error('加载已处理列表失败，状态码:', response.status)
+          ElMessage.error('加载已处理列表失败')
+        }
+      } catch (error) {
+        console.error('Failed to load reviewed face enrollments:', error)
+        ElMessage.error('加载已处理列表失败')
+      } finally {
+        this.loadingReviewed = false
+      }
+    },
+
+    // 获取人脸录入图片URL
+    getEnrollmentImageUrl(imagePath) {
+      if (imagePath && !imagePath.startsWith('http')) {
+        return `${this.apiBaseUrl}/${imagePath}`
+      }
+      return imagePath
+    },
+
+    // 审核人脸录入申请
+    async reviewFaceEnrollment(enrollmentId, approve) {
+      try {
+        const comment = approve ? '审核通过' : '图片不清晰或不符合要求'
+
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/${enrollmentId}/review`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            approve: approve,
+            comment: comment
+          })
+        })
+
+        const data = await response.json()
+        if (response.ok) {
+          ElMessage.success(data.msg)
+          // 重新加载列表
+          if (this.faceReviewTab === 'pending') {
+            this.loadPendingFaceEnrollments()
+          } else {
+            this.loadReviewedFaceEnrollments()
+          }
+        } else {
+          ElMessage.error(data.msg || '审核失败')
+        }
+      } catch (error) {
+        console.error('Review face enrollment failed:', error)
+        ElMessage.error('网络错误，请重试')
+      }
+    },
+
+    // 显示图片预览
+    showImagePreview(imagePath) {
+      this.previewImageUrl = this.getEnrollmentImageUrl(imagePath)
+      this.showPreview = true
+    },
+
+    // 关闭图片预览
+    closeImagePreview() {
+      this.showPreview = false
+      this.previewImageUrl = ''
+    },
+
+    // 获取人脸审核状态文本
+    getFaceEnrollmentStatusText(status) {
+      const statusMap = {
+        0: '待审核',
+        1: '已通过',
+        2: '已拒绝'
+      }
+      return statusMap[status] || '未知状态'
+    },
+
+    // 获取人脸审核状态样式类
+    getFaceEnrollmentStatusClass(status) {
+      const classMap = {
+        0: 'status-pending',
+        1: 'status-approved',
+        2: 'status-rejected'
+      }
+      return classMap[status] || 'status-pending'
+    },
+
+    // 切换人脸审核标签页
+    switchFaceReviewTab(tab) {
+      this.faceReviewTab = tab
+      this.faceNameFilter = ''
+      this.faceStatusFilter = -1
+      if (tab === 'pending') {
+        this.loadPendingFaceEnrollments()
+      } else {
+        this.loadReviewedFaceEnrollments()
+      }
+    },
+
+    // 处理筛选条件变化
+    handleFaceFilterChange() {
+      // 筛选逻辑已经在计算属性中处理，这里只需要确保数据已加载
+      if (this.faceReviewTab === 'pending' && this.pendingFaceEnrollments.length === 0) {
+        this.loadPendingFaceEnrollments()
+      } else if (this.faceReviewTab === 'processed' && this.reviewedFaceEnrollments.length === 0) {
+        this.loadReviewedFaceEnrollments()
+      }
+    },
+
+    // 加载待审核的人脸录入申请
+    async loadPendingFaceEnrollments() {
+      this.loadingPending = true
+      try {
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/pending`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          this.pendingFaceEnrollments = data.enrollments || []
+        } else {
+          console.error('加载待审核列表失败，状态码:', response.status)
+          ElMessage.error('加载待审核列表失败')
+        }
+      } catch (error) {
+        console.error('Failed to load pending face enrollments:', error)
+        ElMessage.error('加载待审核列表失败')
+      } finally {
+        this.loadingPending = false
+      }
+    },
+
+    // 加载已审核的人脸录入申请
+    async loadReviewedFaceEnrollments() {
+      this.loadingReviewed = true
+      try {
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/all`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          // 过滤出已审核的记录（状态不为0）
+          this.reviewedFaceEnrollments = (data.enrollments || []).filter(
+            item => item.status !== 0
+          )
+        } else {
+          console.error('加载已处理列表失败，状态码:', response.status)
+          ElMessage.error('加载已处理列表失败')
+        }
+      } catch (error) {
+        console.error('Failed to load reviewed face enrollments:', error)
+        ElMessage.error('加载已处理列表失败')
+      } finally {
+        this.loadingReviewed = false
+      }
+    },
+
+    // 获取人脸录入图片URL
+    getEnrollmentImageUrl(imagePath) {
+      if (imagePath && !imagePath.startsWith('http')) {
+        return `${this.apiBaseUrl}/${imagePath}`
+      }
+      return imagePath
+    },
+
+    // 审核人脸录入申请
+    async reviewFaceEnrollment(enrollmentId, approve) {
+      try {
+        const comment = approve ? '审核通过' : '图片不清晰或不符合要求'
+
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/${enrollmentId}/review`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            approve: approve,
+            comment: comment
+          })
+        })
+
+        const data = await response.json()
+        if (response.ok) {
+          ElMessage.success(data.msg)
+          // 重新加载列表
+          if (this.faceReviewTab === 'pending') {
+            this.loadPendingFaceEnrollments()
+          } else {
+            this.loadReviewedFaceEnrollments()
+          }
+        } else {
+          ElMessage.error(data.msg || '审核失败')
+        }
+      } catch (error) {
+        console.error('Review face enrollment failed:', error)
+        ElMessage.error('网络错误，请重试')
+      }
+    },
+
+    // 显示图片预览
+    showImagePreview(imagePath) {
+      this.previewImageUrl = this.getEnrollmentImageUrl(imagePath)
+      this.showPreview = true
+    },
+
+    // 关闭图片预览
+    closeImagePreview() {
+      this.showPreview = false
+      this.previewImageUrl = ''
+    },
+
+    // 获取人脸审核状态文本
+    getFaceEnrollmentStatusText(status) {
+      const statusMap = {
+        0: '待审核',
+        1: '已通过',
+        2: '已拒绝'
+      }
+      return statusMap[status] || '未知状态'
+    },
+
+    // 获取人脸审核状态样式类
+    getFaceEnrollmentStatusClass(status) {
+      const classMap = {
+        0: 'status-pending',
+        1: 'status-approved',
+        2: 'status-rejected'
+      }
+      return classMap[status] || 'status-pending'
     },
 
     async loadUserProfile() {
@@ -818,25 +1399,26 @@ export default {
     },
 
     async loadEmployeesData() {
-      // 增加加载状态
-      this.isLoading = true;
+      this.isLoading = true
       try {
-        const token = localStorage.getItem('access_token');
-        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}&page=${this.currentPage}&page_size=${this.pageSize}`, {
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
-        });
+        })
+
         if (response.ok) {
-          const data = await response.json();
-          this.employees = data.employees || []; // 确保 employees 是数组
-          this.totalEmployees = data.total || 0; // 确保 total 是数字
-          console.log(data.employees);
+          const data = await response.json()
+          this.employees = data.employees
         } else {
-          console.error('Failed to load employees data:', await response.text());
+          console.error('Failed to load data, status:', response.status)
+          alert('加载员工数据失败！')
         }
       } catch (error) {
-        console.error('Failed to load employees data:', error);
+        console.error('Failed to load employees data:', error)
+      } finally {
+        this.isLoading = false
       }
     },
 
@@ -961,7 +1543,9 @@ export default {
           this.pagination.myLeaves.pages = data.pages || 0
           this.pagination.myLeaves.perPage = data.per_page || 5
         }
-      } catch (e) { console.error(e) }
+      } catch (e) {
+        console.error(e)
+      }
     },
 
     async loadAdminLeaves(processed, page = 1, status = null) {
@@ -1283,12 +1867,15 @@ export default {
       return d.toLocaleString('zh-CN', { hour12: false })
     },
 
+    formatTime(dateString) {
+      if (!dateString) return ''
+      return new Date(dateString).toLocaleTimeString('zh-CN')
+    },
+
     // 导出考勤数据为CSV
     exportAttendanceData() {
-      // 准备CSV数据，添加BOM以支持Excel正确识别UTF-8编码的中文
-      let csvContent = '\uFEFF姓名,工号,迟到次数,早退次数,正常次数\n';
+      let csvContent = '\uFEFF姓名,工号,迟到次数,早退次数,正常次数\n'
 
-      // 添加每个员工的数据
       this.employees.forEach(employee => {
         const row = [
           employee.name,
@@ -1296,43 +1883,31 @@ export default {
           employee.monthly_stats.late_count,
           employee.monthly_stats.early_leave_count,
           employee.monthly_stats.normal_count
-        ];
-        csvContent += row.join(',') + '\n';
-      });
+        ]
+        csvContent += row.join(',') + '\n'
+      })
 
-      // 创建Blob对象
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
 
-      // 创建下载链接
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
+      const now = new Date()
+      const year = now.getFullYear()
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      const fileName = `${year}年${month}月考勤统计.csv`
 
-      // 设置文件名（使用当前年月）
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const fileName = `${year}年${month}月考勤统计.csv`;
+      link.setAttribute('href', url)
+      link.setAttribute('download', fileName)
+      link.style.visibility = 'hidden'
 
-      link.setAttribute('href', url);
-      link.setAttribute('download', fileName);
-      link.style.visibility = 'hidden';
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
 
-      // 添加到DOM并触发下载
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      // 释放URL对象
-      URL.revokeObjectURL(url);
-    },
-
-    formatTime(dateString) {
-      if (!dateString) return ''
-      return new Date(dateString).toLocaleTimeString('zh-CN')
+      URL.revokeObjectURL(url)
     },
 
     getStatusClass(status) {
-      // 最近出勤记录的状态颜色：正常绿色、请假紫色、其它统一红色
       if (status === '正常') return 'status-normal'
       if (status === '请假') return 'status-leave'
       return 'status-bad'
@@ -1342,7 +1917,7 @@ export default {
       localStorage.removeItem('access_token')
       this.$router.push('/')
     },
-    // 获取请假类型标签
+
     getLeaveTypeLabel(type) {
       const leaveType = this.leaveTypes.find(t => t.value === type);
       return leaveType ? leaveType.label : '未知类型';
@@ -1867,7 +2442,6 @@ export default {
   transition: all 0.2s;
 }
 
-
 .leave-submit {
   padding: 8px 16px;
   /* 10px * 0.8, 20px * 0.8 */
@@ -1877,7 +2451,6 @@ export default {
   margin-top: 8px;
   /* 10px * 0.8 */
 }
-
 
 .section-actions {
   display: flex;
@@ -2068,7 +2641,6 @@ export default {
 .detail-actions .clock-out:hover:not(:disabled) {
   background: #c0392b;
 }
-
 
 .records-table td .clock-btn+.clock-btn {
   margin-left: 16px;

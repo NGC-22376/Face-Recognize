@@ -281,7 +281,7 @@ const confirmEnroll = async () => {
       alertType.value = 'warning'
       confirmDialogVisible.value = false
     } else if(!res.alreadyExists && res.ok){
-      result.value = '人脸录入成功！'
+      result.value = '录入信息已发送给管理员审核，请等待审核通过！'
       alertType.value = 'success'
       confirmDialogVisible.value = false
     } else {

@@ -1,6 +1,6 @@
 from flask import request, jsonify
 from app import app, db, SHANGHAI_TZ
-from models import User, Attendance, Face
+from models import User, Attendance, Face, FaceEnrollment
 from flask_jwt_extended import jwt_required, get_jwt_identity
 import face_recognition as fr
 import numpy as np
@@ -201,11 +201,18 @@ def extract_feature(img_path):
         raise e
 
 # 人脸录入
+# 人脸录入审核状态
+ENROLLMENT_PENDING = 0
+ENROLLMENT_APPROVED = 1
+ENROLLMENT_REJECTED = 2
+
+
+# 人脸录入（需要审核）
 @app.post("/face/enroll")
 @jwt_required()
 def face_enroll():
     """
-    人脸录入接口（需要登录态）
+    人脸录入接口（需要审核）
     """
     try:
         # 参数验证
@@ -226,65 +233,73 @@ def face_enroll():
         user = User.query.get(user_id)
         if not user:
             return jsonify(ok=False, msg="用户不存在"), 404
-        # 检查是否已录入人脸
-        exist = Face.query.filter_by(user_id=user_id).first()
-        if exist:
+        # 检查是否已有人脸记录（无论是否审核通过）
+        existing_face = Face.query.filter_by(user_id=user_id).first()
+        if existing_face:
             return jsonify(
-                ok=True,
-                alreadyExists=True,
-                msg="该用户已录入过人脸信息！"
+                ok=False,
+                msg="已录入过人脸，无法重复录入"
+            )
+        # 检查是否有待审核的录入申请
+        pending_enrollment = FaceEnrollment.query.filter_by(
+            user_id=user_id,
+            status=ENROLLMENT_PENDING
+        ).first()
+        if pending_enrollment:
+            return jsonify(
+                ok=False,
+                msg="您已有人脸录入申请正在审核中，请等待审核结果"
             )
         # 处理上传的图片
         file = request.files["file"]
         if file.filename == '':
             return jsonify(ok=False, msg="未选择文件"), 400
-        # 保存图片并提取特征
-        img_path = save_image(file)
+        # 保存临时图片
         try:
-            feature = extract_feature(img_path)
+            img_path = save_temp_image(file)
         except Exception as e:
-            os.remove(img_path)  # 删除临时图片
+            app.logger.error(f"图片保存失败: {str(e)}")
+            return jsonify(ok=False, msg="图片保存失败"), 500
+        # 看照片是否能正常编码，不保存
+        try:
+            unknown = extract_feature(img_path)
+        except Exception as e:
+            os.remove(img_path)
             if "未检测到人脸" in str(e):
                 return jsonify(ok=False, msg="未检测到人脸，请确保面部清晰可见"), 400
             else:
                 app.logger.error(f"人脸特征提取失败: {str(e)}")
-                return jsonify(ok=False, msg="人脸特征提取失败，请重试"), 500
-        # 保存特征文件
-        feature_path = os.path.join("FaceFeature", f"{user_id}.npy")
+                return jsonify(ok=False, msg="人脸特征提取失败"), 500
+        # 创建待审核记录
         try:
-            np.save(feature_path, feature)
-        except Exception as e:
-            os.remove(img_path)  # 删除临时图片
-            app.logger.error(f"特征文件保存失败: {str(e)}")
-            return jsonify(ok=False, msg="人脸数据保存失败"), 500
-        # 创建人脸记录
-        try:
-            new_face = Face(
+            new_enrollment = FaceEnrollment(
                 user_id=user_id,
-                image_path=feature_path,
-                rec_time=datetime.now(SHANGHAI_TZ),
-                result="已录入",
+                image_path=img_path,
+                status=ENROLLMENT_PENDING,
+                created_time=datetime.now(SHANGHAI_TZ)
             )
-            db.session.add(new_face)
+            db.session.add(new_enrollment)
             db.session.commit()
         except Exception as e:
-            # 回滚操作：删除已保存的文件
-            if os.path.exists(feature_path):
-                os.remove(feature_path)
+            # 删除已保存的临时图片
             if os.path.exists(img_path):
                 os.remove(img_path)
-            app.logger.error(f"数据库操作失败: {str(e)}")
-            return jsonify(ok=False, msg="人脸信息保存失败"), 500
-        # 录入成功，删除临时图片（特征已保存）
-        if os.path.exists(img_path):
-            os.remove(img_path)
+            app.logger.error(f"审核记录创建失败: {str(e)}")
+            return jsonify(ok=False, msg="申请提交失败"), 500
         return jsonify(
             ok=True,
-            alreadyExists=False,
-            msg="人脸录入成功！",
-            username=user.name
+            msg="录入信息已发送给管理员审核，请等待审核通过",
+            enrollment_id=new_enrollment.id
         )
     except Exception as e:
         # 全局异常处理
-        app.logger.error(f"人脸录入异常: {str(e)}")
+        app.logger.error(f"人脸录入申请异常: {str(e)}")
         return jsonify(ok=False, msg="系统异常，请稍后重试"), 500
+
+def save_temp_image(file):
+    """保存临时图片"""
+    ext = file.filename.rsplit(".", 1)[-1] if "." in file.filename else "jpg"
+    filename = f"enrollment_{uuid.uuid4().hex}.{ext}"
+    path = os.path.join("temp_images", filename)
+    file.save(path)
+    return path

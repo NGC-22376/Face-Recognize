@@ -6,7 +6,7 @@ import pytz
 from app import app, db
 from flask_bcrypt import Bcrypt
 from sqlalchemy import text
-from models import User, Attendance, Absence, Face
+from models import User, Attendance, Absence, Face, FaceEnrollment
 
 # 创建中国时区对象（UTC+8）
 SHANGHAI_TZ = pytz.timezone('Asia/Shanghai')
@@ -49,8 +49,8 @@ def create_tables_with_sqlalchemy():
 
 def insert_test_data():
     """插入用户测试数据"""
-    try:
-        with app.app_context():
+    with app.app_context():
+        try:
             print("正在预计算哈希值...")
             admin_password = bcrypt.generate_password_hash('admin123').decode('utf-8')
             common_password = bcrypt.generate_password_hash('123456').decode('utf-8')
@@ -108,15 +108,15 @@ def insert_test_data():
             
             return True
             
-    except Exception as e:
-        db.session.rollback()
-        print(f"插入用户数据时发生错误: {e}")
-        return False
+        except Exception as e:
+           db.session.rollback()
+           print(f"插入用户数据时发生错误: {e}")
+           return False
 
 def insert_attendance_data():
     """为所有员工生成从本月第一天到今天的考勤数据"""
-    try:
-        with app.app_context():
+    with app.app_context():
+        try:
             print("\n正在生成考勤测试数据...")
 
             # 1. 定义考勤规则
@@ -204,10 +204,10 @@ def insert_attendance_data():
                 
             return True
 
-    except Exception as e:
-        db.session.rollback()
-        print(f"插入考勤数据时发生错误: {e}")
-        return False
+        except Exception as e:
+            db.session.rollback()
+            print(f"插入考勤数据时发生错误: {e}")
+            return False
         
 def main():
     """主函数，执行数据库初始化流程"""
