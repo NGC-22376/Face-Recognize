@@ -16,6 +16,13 @@ class User(db.Model):
     security_question_3 = db.Column(db.String(255), nullable=True)
     security_answer_3 = db.Column(db.String(255), nullable=True, comment='哈希后的密保答案3')
 
+    security_question_1 = db.Column(db.String(255), nullable=True)
+    security_answer_1 = db.Column(db.String(255), nullable=True, comment='哈希后的密保答案1')
+    security_question_2 = db.Column(db.String(255), nullable=True)
+    security_answer_2 = db.Column(db.String(255), nullable=True, comment='哈希后的密保答案2')
+    security_question_3 = db.Column(db.String(255), nullable=True)
+    security_answer_3 = db.Column(db.String(255), nullable=True, comment='哈希后的密保答案3')
+
     # 关联关系
     faces = db.relationship("Face", backref="user", cascade="all, delete-orphan")
     attendances = db.relationship(
