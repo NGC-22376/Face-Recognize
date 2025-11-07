@@ -1,11 +1,10 @@
-# D:\Projects\F_rec\Face-Recognize\back_end\setup_database.py
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import pymysql
 import os
 import random
-from datetime import datetime, timedelta, date, time # 新增 time 和 date 模块
+from datetime import datetime, timedelta, time
 import pytz
 from app import app, db
 from flask_bcrypt import Bcrypt
@@ -18,7 +17,7 @@ SHANGHAI_TZ = pytz.timezone('Asia/Shanghai')
 # 数据库连接配置
 DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_USER = os.getenv('DB_USER', 'root')
-DB_PASSWORD = os.getenv('DB_PASS', '456729') # 请确保替换为你的密码
+DB_PASSWORD = os.getenv('DB_PASS', '456729')
 DB_NAME = 'face_rec'
 
 bcrypt = Bcrypt()
@@ -41,8 +40,8 @@ def create_tables_with_sqlalchemy():
     try:
         with app.app_context():
             print("正在删除旧表并创建新表...")
-            db.drop_all()  # 删除所有旧表，确保结构最新
-            db.create_all()  # 根据 models.py 创建所有新表
+            db.drop_all()
+            db.create_all()
             print("使用 SQLAlchemy 创建表成功！")
             return True
     except Exception as e:
@@ -51,8 +50,8 @@ def create_tables_with_sqlalchemy():
 
 def insert_test_data():
     """插入用户测试数据"""
-    try:
-        with app.app_context():
+    with app.app_context():
+        try:
             print("正在预计算哈希值...")
             admin_password = bcrypt.generate_password_hash('admin123').decode('utf-8')
             common_password = bcrypt.generate_password_hash('123456').decode('utf-8')
@@ -84,12 +83,12 @@ def insert_test_data():
                 account = f'empid{i:03d}'
                 name = random.choice(surnames) + "".join(random.sample(given_name_chars, random.randint(1, 2)))
                 employee = User(
-                    account=account, 
-                    name=name, 
-                    password=common_password, 
+                    account=account,
+                    name=name,
+                    password=common_password,
                     role='员工',
                     security_question_1="您的身份证号码后六位是多少？",
-                    security_answer_1=employee_answer_1_hashed, 
+                    security_answer_1=employee_answer_1_hashed,
                     security_question_2="您所在部门的全称是什么？",
                     security_answer_2=employee_answer_2_hashed,
                     security_question_3="您大学时期的专业全称是什么？",
@@ -105,15 +104,16 @@ def insert_test_data():
             
             return True
             
-    except Exception as e:
-        db.session.rollback()
-        print(f"插入用户数据时发生错误: {e}")
-        return False
+        except Exception as e:
+            # 现在 rollback() 在 app_context 内部，可以安全执行
+            db.session.rollback()
+            print(f"插入用户数据时发生错误: {e}")
+            return False
 
 def insert_attendance_data():
     """为所有员工生成从本月第一天到今天的考勤数据"""
-    try:
-        with app.app_context():
+    with app.app_context():
+        try:
             print("\n正在生成考勤测试数据...")
 
             # 1. 定义考勤规则
@@ -126,7 +126,6 @@ def insert_attendance_data():
             delta = today - start_date
             
             # 3. 获取所有员工 (user_id > 1)
-            # 假设管理员ID为1，员工ID从2开始
             employee_ids = [user.user_id for user in User.query.filter(User.role == '员工').all()]
             if not employee_ids:
                 print("未找到员工用户，跳过考勤数据生成。")
@@ -154,12 +153,10 @@ def insert_attendance_data():
                     base_in_time = datetime.combine(current_date, WORK_START_TIME, tzinfo=SHANGHAI_TZ)
                     # 模拟15%的迟到率
                     if random.random() < 0.15:
-                        # 迟到 1 到 59 分钟
                         delay = timedelta(minutes=random.randint(1, 59))
                         clock_in = base_in_time + delay
                         status_parts.append('迟到')
                     else:
-                        # 正常/早到: 提前 0 到 30 分钟
                         early_arrival = timedelta(minutes=random.randint(0, 30))
                         clock_in = base_in_time - early_arrival
                         
@@ -167,12 +164,10 @@ def insert_attendance_data():
                     base_out_time = datetime.combine(current_date, WORK_END_TIME, tzinfo=SHANGHAI_TZ)
                     # 模拟15%的早退率
                     if random.random() < 0.15:
-                        # 早退 1 到 59 分钟
                         early_departure = timedelta(minutes=random.randint(1, 59))
                         clock_out = base_out_time - early_departure
                         status_parts.append('早退')
                     else:
-                        # 正常/加班: 延迟 0 到 90 分钟
                         overtime = timedelta(minutes=random.randint(0, 90))
                         clock_out = base_out_time + overtime
 
@@ -180,9 +175,8 @@ def insert_attendance_data():
                     if not status_parts:
                         status = '正常'
                     else:
-                        status = '、'.join(status_parts) # 例如 "迟到、早退"
+                        status = '、'.join(status_parts)
                         
-                    # 创建考勤对象
                     record = Attendance(
                         user_id=user_id,
                         clock_in_time=clock_in,
@@ -201,10 +195,11 @@ def insert_attendance_data():
                 
             return True
 
-    except Exception as e:
-        db.session.rollback()
-        print(f"插入考勤数据时发生错误: {e}")
-        return False
+        except Exception as e:
+            # 现在 rollback() 在 app_context 内部，可以安全执行
+            db.session.rollback()
+            print(f"插入考勤数据时发生错误: {e}")
+            return False
         
 def main():
     """主函数，执行数据库初始化流程"""
