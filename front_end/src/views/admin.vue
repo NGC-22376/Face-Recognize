@@ -144,19 +144,20 @@
           </div>
 
           <!-- 分页控件 -->
-          <div class="pagination-controls" v-if="totalEmployees > 0">
-            <button :disabled="currentPage === 1" @click="handlePageChange(currentPage - 1)">上一页</button>
-            <span>第 {{ currentPage }} 页 / 共 {{ Math.ceil(totalEmployees / pageSize) }} 页</span>
-            <button :disabled="currentPage === Math.ceil(totalEmployees / pageSize)"
-              @click="handlePageChange(currentPage + 1)">下一页</button>
-
-          </div>
-          <div class="pagination-controls" v-if="totalEmployees > 0">
-            <span>跳转到第</span>
-            <input type="number" v-model.number="jumpToPage" placeholder="跳转页码" min="1"
-              :max="Math.ceil(totalEmployees / pageSize)" style="width: 60px; text-align: center; margin: 0 8px;" />
-            <span>页</span>
-            <button @click="handlePageJump">跳转</button>
+          <div class="pagination-wrapper" v-if="totalEmployees > 0">
+            <div class="pagination-controls">
+              <button :disabled="currentPage === 1" @click="handlePageChange(currentPage - 1)">上一页</button>
+              <span>第 {{ currentPage }} 页 / 共 {{ Math.ceil(totalEmployees / pageSize) }} 页</span>
+              <button :disabled="currentPage === Math.ceil(totalEmployees / pageSize)"
+                @click="handlePageChange(currentPage + 1)">下一页</button>
+            </div>
+            <div class="pagination-controls">
+              <span>跳转到第</span>
+              <input type="number" v-model.number="jumpToPage" placeholder="跳转页码" min="1"
+                :max="Math.ceil(totalEmployees / pageSize)" style="width: 60px; text-align: center; margin: 0 8px;" />
+              <span>页</span>
+              <button @click="handlePageJump">跳转</button>
+            </div>
           </div>
         </div>
 
@@ -1521,11 +1522,27 @@ export default {
 
 /* 分页样式 */
 .pagination {
-  margin-top: 20px;
+  margin-top: 15px;
   display: flex;
   justify-content: center;
   align-items: center;
   gap: 10px;
+}
+
+.pagination-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  margin: 30px 0;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
 }
 
 .pagination-btn {
