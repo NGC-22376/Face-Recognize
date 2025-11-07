@@ -545,12 +545,6 @@ export default {
       // 筛选相关字段
       nameFilter: '',
       typeFilter: -1, // -1表示全部类型
-<<<<<<< HEAD
-      currentPage: 1, // 当前页码
-      pageSize: 10, // 每页显示的记录数
-      totalEmployees: 0, // 员工总数
-      jumpToPage: 1, // 新增：跳转页码
-=======
       // 分页相关数据
       pagination: {
         myLeaves: {
@@ -574,7 +568,6 @@ export default {
           }
         }
       }
->>>>>>> main
     }
   },
   async mounted() {
@@ -680,18 +673,11 @@ export default {
       this.isLoading = true; 
       try {
         const token = localStorage.getItem('access_token');
-<<<<<<< HEAD
         const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}&page=${this.currentPage}&page_size=${this.pageSize}`, {
-=======
-        // if (this.sortBy === 'not_checked_out_count') this.sortBy = 'name'
-        
-        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}`, {
->>>>>>> main
           headers: {
             'Authorization': `Bearer ${token}`
           }
         });
-<<<<<<< HEAD
         if (response.ok) {
           const data = await response.json();
           this.employees = data.employees || []; // 确保 employees 是数组
@@ -702,21 +688,6 @@ export default {
         }
       } catch (error) {
         console.error('Failed to load employees data:', error);
-=======
-        
-        if (response.ok) {
-          const data = await response.json();
-          this.employees = data.employees;
-        } else {
-          // 失败处理
-          console.error('Failed to load data, status:', response.status);
-          alert('加载员工数据失败！');
-        }
-      } catch (error) {
-        console.error('Failed to load employees data:', error);
-      } finally {
-        this.isLoading = false; 
->>>>>>> main
       }
     },
 
@@ -1124,7 +1095,6 @@ export default {
         }
       }
     },
-<<<<<<< HEAD
 
     handlePageChange(newPage) {
       this.currentPage = newPage; // 更新当前页码
@@ -1270,76 +1240,6 @@ export default {
       };
       chart2.setOption(option2);
     },
-=======
-    // 监听typeFilter变化
-    typeFilter(newVal, oldVal) {
-      if (newVal !== oldVal) {
-        // 根据当前标签页类型重置分页
-        if (this.leaveAdminTab === 'unprocessed') {
-          this.pagination.adminLeaves.unprocessed.currentPage = 1;
-          // 重新计算总页数
-          const perPage = this.pagination.adminLeaves.unprocessed.perPage || 5;
-          let filteredCount = this.adminLeavesUnprocessed.filter(leave => {
-            const nameMatch = this.nameFilter ? 
-              leave.name.toLowerCase().includes(this.nameFilter.toLowerCase()) : 
-              true;
-            const typeMatch = newVal && newVal !== -1 ? 
-              leave.absence_type === parseInt(newVal) : 
-              true;
-            return nameMatch && typeMatch;
-          }).length;
-          this.pagination.adminLeaves.unprocessed.total = filteredCount;
-          this.pagination.adminLeaves.unprocessed.pages = Math.ceil(filteredCount / perPage);
-        } else {
-          this.pagination.adminLeaves.processed.currentPage = 1;
-          // 重新计算总页数
-          const perPage = this.pagination.adminLeaves.processed.perPage || 5;
-          let filteredCount = this.adminLeavesProcessed.filter(leave => {
-            const nameMatch = this.nameFilter ? 
-              leave.name.toLowerCase().includes(this.nameFilter.toLowerCase()) : 
-              true;
-            const typeMatch = newVal && newVal !== -1 ? 
-              leave.absence_type === parseInt(newVal) : 
-              true;
-            return nameMatch && typeMatch;
-          }).length;
-          this.pagination.adminLeaves.processed.total = filteredCount;
-          this.pagination.adminLeaves.processed.pages = Math.ceil(filteredCount / perPage);
-        }
-      }
-    },
-    // 监听标签页切换
-    leaveAdminTab(newTab) {
-      // 标签页切换时重新计算对应标签的分页信息
-      if (newTab === 'unprocessed') {
-        const perPage = this.pagination.adminLeaves.unprocessed.perPage || 5;
-        let filteredCount = this.adminLeavesUnprocessed.filter(leave => {
-          const nameMatch = this.nameFilter ? 
-            leave.name.toLowerCase().includes(this.nameFilter.toLowerCase()) : 
-            true;
-          const typeMatch = this.typeFilter && this.typeFilter !== -1 ? 
-            leave.absence_type === parseInt(this.typeFilter) : 
-            true;
-          return nameMatch && typeMatch;
-        }).length;
-        this.pagination.adminLeaves.unprocessed.total = filteredCount;
-        this.pagination.adminLeaves.unprocessed.pages = Math.ceil(filteredCount / perPage);
-      } else {
-        const perPage = this.pagination.adminLeaves.processed.perPage || 5;
-        let filteredCount = this.adminLeavesProcessed.filter(leave => {
-          const nameMatch = this.nameFilter ? 
-            leave.name.toLowerCase().includes(this.nameFilter.toLowerCase()) : 
-            true;
-          const typeMatch = this.typeFilter && this.typeFilter !== -1 ? 
-            leave.absence_type === parseInt(this.typeFilter) : 
-            true;
-          return nameMatch && typeMatch;
-        }).length;
-        this.pagination.adminLeaves.processed.total = filteredCount;
-        this.pagination.adminLeaves.processed.pages = Math.ceil(filteredCount / perPage);
-      }
-    }
->>>>>>> main
   }
 }
 </script>
@@ -1817,32 +1717,6 @@ export default {
   margin-left: 16px;
 }
 
-<<<<<<< HEAD
-/* 分页控件样式 */
-.pagination-controls {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin: 24px 0;
-}
-
-.pagination-controls button {
-  padding: 8px 16px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  background: #fff;
-  cursor: pointer;
-  margin: 0 8px;
-}
-
-.pagination-controls button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.pagination-controls span {
-  color: #666;
-=======
 /* 人脸录入样式 */
 .face-register-section {
   display: flex;
@@ -1916,7 +1790,6 @@ export default {
 .register-tips {
   margin-top: 16px;
   color: #7f8c8d;
->>>>>>> main
   font-size: 14px;
 }
 </style>
