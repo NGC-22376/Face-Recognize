@@ -859,11 +859,35 @@ def get_personal_absences():
     # 获取分页参数，默认为第1页
     page = request.args.get("page", 1, type=int)
     per_page = 5
+    # 获取状态过滤参数
+    status = request.args.get("status", type=int)
+    # 获取排序参数
+    sort_by = request.args.get("sort_by", "start_time")  # 默认按起始时间排序
+    order = request.args.get("order", "desc")  # 默认倒序
 
+    # 构建查询
+    query = Absence.query.filter_by(user_id=current_user_id)
+    
+    # 如果提供了状态参数，则按状态过滤
+    if status is not None:
+        query = query.filter(Absence.status == status)
+    
+    # 确定排序字段
+    if sort_by == "end_time":
+        sort_field = Absence.end_time
+    else:
+        sort_field = Absence.start_time
+    
+    # 确定排序方向
+    if order == "asc":
+        sort_field = sort_field.asc()
+    else:
+        sort_field = sort_field.desc()
+    
     # 使用paginate进行分页查询
     pagination = (
-        Absence.query.filter_by(user_id=current_user_id)
-        .order_by(Absence.start_time.desc())
+        query
+        .order_by(sort_field)
         .paginate(page=page, per_page=per_page, error_out=False)
     )
 

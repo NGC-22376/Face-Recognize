@@ -280,6 +280,33 @@
 
             <div class="records-table">
               <h3>历史请假申请</h3>
+              <!-- 用户端历史请假记录页签和排序控件 -->
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <!-- 10px * 0.8 -->
+                <div class="tab-switch">
+                  <button :class="{ active: myLeavesTab === 'pending' }"
+                    @click="myLeavesTab = 'pending'; loadMyLeaves(1)">申请中</button>
+                  <button :class="{ active: myLeavesTab === 'approved' }"
+                    @click="myLeavesTab = 'approved'; loadMyLeaves(1)">已通过</button>
+                  <button :class="{ active: myLeavesTab === 'rejected' }"
+                    @click="myLeavesTab = 'rejected'; loadMyLeaves(1)">已拒绝</button>
+                </div>
+
+                <!-- 用户端历史请假记录排序控件 -->
+                <div class="sort-controls" style="display: flex; align-items: center; gap: 8px;">
+                  <!-- 10px * 0.8 -->
+                  <label>排序方式:</label>
+                  <select v-model="myLeavesSortBy" @change="loadMyLeaves(1)" style="padding: 5px;">
+                    <option value="start_time">起始时间</option>
+                    <option value="end_time">结束时间</option>
+                  </select>
+                  <select v-model="myLeavesSortOrder" @change="loadMyLeaves(1)" style="padding: 5px;">
+                    <option value="asc">正序</option>
+                    <option value="desc">倒序</option>
+                  </select>
+                </div>
+              </div>
+
               <table>
                 <thead>
                   <tr>
@@ -339,9 +366,11 @@
 
             <!-- 筛选控件 -->
             <div class="filter-controls"
-              style="margin: 15px 0; display: flex; justify-content: space-between; align-items: center;">
+              style="margin: 12px 0; display: flex; justify-content: space-between; align-items: center;">
+              <!-- 15px * 0.8 -->
               <div>
-                <input type="text" v-model="nameFilter" placeholder="搜索姓名" style="margin-right: 10px; padding: 5px;" />
+                <input type="text" v-model="nameFilter" placeholder="搜索姓名" style="margin-right: 8px; padding: 5px;" />
+                <!-- 10px * 0.8 -->
                 <select v-model="typeFilter" style="padding: 5px;">
                   <option value="-1">全部类型</option>
                   <option v-for="type in leaveTypes" :key="type.value" :value="type.value">{{ type.label }}</option>
@@ -351,7 +380,8 @@
                 <button class="batch-process-btn" @click="toggleBatchMode" v-if="!isBatchMode">
                   批量处理
                 </button>
-                <div v-else style="display: flex; gap: 10px;">
+                <div v-else style="display: flex; gap: 8px;">
+                  <!-- 10px * 0.8 -->
                   <button class="batch-btn batch-approve" @click="batchReview('approve')"
                     :disabled="isBatchProcessing || selectedLeaves.length === 0">
                     {{ isBatchProcessing ? '处理中' : '批量通过' }}
@@ -603,6 +633,11 @@ export default {
         { value: 2, label: '公事请假' }
       ],
       myLeaves: [],
+      // 用户端历史请假记录页签
+      myLeavesTab: 'pending', // pending: 申请中(未读), approved: 已通过, rejected: 已拒绝
+      // 用户端历史请假记录排序
+      myLeavesSortBy: 'start_time', // 默认按起始时间排序
+      myLeavesSortOrder: 'desc', // 默认倒序
       leaveMessage: '',
       leaveMessageType: '',
       statusMap: { 0: '未读', 1: '拒绝', 2: '通过' },
@@ -901,7 +936,20 @@ export default {
     async loadMyLeaves(page = 1) {
       try {
         const token = localStorage.getItem('access_token')
-        const res = await fetch(`${this.apiBaseUrl}/absence/personal?page=${page}`, {
+        // 根据当前页签确定状态参数
+        let statusParam = '';
+        if (this.myLeavesTab === 'pending') {
+          statusParam = '&status=0'; // 未读
+        } else if (this.myLeavesTab === 'approved') {
+          statusParam = '&status=2'; // 已通过
+        } else if (this.myLeavesTab === 'rejected') {
+          statusParam = '&status=1'; // 已拒绝
+        }
+
+        // 添加排序参数
+        const sortParam = `&sort_by=${this.myLeavesSortBy}&order=${this.myLeavesSortOrder}`;
+
+        const res = await fetch(`${this.apiBaseUrl}/absence/personal?page=${page}${statusParam}${sortParam}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
         const data = await res.json()
@@ -1522,11 +1570,13 @@ export default {
 
 /* 分页样式 */
 .pagination {
-  margin-top: 15px;
+  margin-top: 12px;
+  /* 15px * 0.8 */
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  /* 10px * 0.8 */
 }
 
 .pagination-wrapper {
@@ -1534,19 +1584,23 @@ export default {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
-  margin: 30px 0;
+  gap: 16px;
+  /* 20px * 0.8 */
+  margin: 24px 0;
+  /* 30px * 0.8 */
 }
 
 .pagination-controls {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 15px;
+  gap: 12px;
+  /* 15px * 0.8 */
 }
 
 .pagination-btn {
-  padding: 6px 12px;
+  padding: 4.8px 9.6px;
+  /* 6px * 0.8, 12px * 0.8 */
   background: #3498db;
   color: white;
   border: none;
@@ -1560,7 +1614,8 @@ export default {
 }
 
 .pagination-item {
-  padding: 6px 12px;
+  padding: 4.8px 9.6px;
+  /* 6px * 0.8, 12px * 0.8 */
   cursor: pointer;
   border-radius: 4px;
 }
@@ -1575,7 +1630,8 @@ export default {
 }
 
 .pagination-info {
-  margin-left: 10px;
+  margin-left: 8px;
+  /* 10px * 0.8 */
   color: #666;
 }
 
@@ -1813,10 +1869,13 @@ export default {
 
 
 .leave-submit {
-  padding: 10px 20px;
+  padding: 8px 16px;
+  /* 10px * 0.8, 20px * 0.8 */
   font-size: 14px;
   background: #3498DB;
   color: #fff;
+  margin-top: 8px;
+  /* 10px * 0.8 */
 }
 
 
@@ -1923,12 +1982,15 @@ export default {
 
 .tab-switch {
   display: flex;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 9.6px;
+  /* 12px * 0.8 */
+  margin-bottom: 9.6px;
+  /* 12px * 0.8 */
 }
 
 .tab-switch button {
-  padding: 8px 12px;
+  padding: 6.4px 9.6px;
+  /* 8px * 0.8, 12px * 0.8 */
   border: 1px solid #ddd;
   border-radius: 4px;
   background: #fff;
@@ -2014,12 +2076,14 @@ export default {
 
 /* 批量处理按钮样式 */
 .batch-btn {
-  padding: 8px 16px;
+  padding: 6.4px 12.8px;
+  /* 8px * 0.8, 16px * 0.8 */
   border: none;
   border-radius: 4px;
   cursor: pointer;
   font-weight: 500;
-  margin-left: 10px;
+  margin-left: 8px;
+  /* 10px * 0.8 */
 }
 
 .batch-btn:disabled {
@@ -2143,5 +2207,55 @@ export default {
 
 .reason-cell:hover {
   text-decoration: underline;
+}
+
+/* 请假表单控件样式 */
+.leave-form input[type="datetime-local"],
+.leave-form textarea,
+.leave-form select {
+  width: 100%;
+  padding: 4px;
+  margin:4px 0 8px 0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  box-sizing: border-box;
+  background-color: #fff;
+}
+
+.leave-form input[type="datetime-local"]:focus,
+.leave-form textarea:focus,
+.leave-form select:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 1.92px rgba(52, 152, 219, 0.2);
+  /* 2.4px * 0.8 */
+}
+
+.leave-form label {
+  display: block;
+  margin-top: 7.68px;
+  /* 9.6px * 0.8 */
+  font-weight: 500;
+  color: #333;
+}
+
+/* 管理员页面筛选控件样式 */
+.filter-controls select {
+  width: 150%;
+  /* 增加为原本的1.5倍 */
+  padding: 6.4px;
+  /* 8px * 0.8 */
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.filter-controls input[type="text"] {
+  padding: 6.4px;
+  /* 8px * 0.8 */
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
 }
 </style>
