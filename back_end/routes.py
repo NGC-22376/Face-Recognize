@@ -2,13 +2,8 @@ from flask import request, jsonify
 from app import app, db, SHANGHAI_TZ
 from models import User, Attendance, Face
 from flask_bcrypt import Bcrypt
-from flask_jwt_extended import (
-    JWTManager,
-    create_access_token,
-    jwt_required,
-    get_jwt_identity,
-)
-from datetime import datetime, date
+from flask_jwt_extended import (JWTManager,create_access_token,jwt_required,get_jwt_identity, get_jwt)
+from datetime import datetime, date,timedelta
 from sqlalchemy import func, and_, extract
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -44,6 +39,16 @@ def unauthorized_callback(error):
 @app.route("/register", methods=["POST"])
 def register():
     data = request.get_json()
+    
+    # 新增：检查密保问题和答案是否为空
+    required_fields = [
+        "name", "account", "password", 
+        "security_question_1", "security_answer_1",
+        "security_question_2", "security_answer_2",
+        "security_question_3", "security_answer_3"
+    ]
+    if not all(data.get(field) for field in required_fields):
+        return jsonify({"message": "所有字段（包括密保问题和答案）都不能为空"}), 400
 
     # 检查工号格式是否为五位小写英文+三位数字
     account_pattern = r"^[a-z]{5}\d{3}$"
@@ -58,12 +63,24 @@ def register():
     if existing_user:
         return jsonify({"message": "账号已存在，请使用其他账号"}), 400
 
+    # 哈希密码和所有密保答案
     hashed_password = bcrypt.generate_password_hash(data["password"]).decode("utf-8")
+    hashed_answer_1 = bcrypt.generate_password_hash(data["security_answer_1"]).decode("utf-8")
+    hashed_answer_2 = bcrypt.generate_password_hash(data["security_answer_2"]).decode("utf-8")
+    hashed_answer_3 = bcrypt.generate_password_hash(data["security_answer_3"]).decode("utf-8")
+
+    # 创建 User 对象时加入密保信息
     new_user = User(
         name=data["name"],
         account=data["account"],
         password=hashed_password,
-        role=data["role"],
+        role=data.get("role", "员工"), 
+        security_question_1=data["security_question_1"],
+        security_answer_1=hashed_answer_1,
+        security_question_2=data["security_question_2"],
+        security_answer_2=hashed_answer_2,
+        security_question_3=data["security_question_3"],
+        security_answer_3=hashed_answer_3,
     )
 
     db.session.add(new_user)
@@ -86,6 +103,86 @@ def register():
         ),
         201,
     )
+
+
+
+@app.route("/password-recovery/get-questions", methods=["POST"])
+def get_security_questions():
+    data = request.get_json()
+    account = data.get("account")
+    if not account:
+        return jsonify({"message": "账号不能为空"}), 400
+    user = User.query.filter_by(account=account).first()
+    if not user:
+        return jsonify({"message": "账号不存在"}), 404
+    # 从User模型中直接获取问题
+    questions = [
+        {"id": 1, "text": user.security_question_1},
+        {"id": 2, "text": user.security_question_2},
+        {"id": 3, "text": user.security_question_3},
+    ]
+    
+    # 随机选择一个问题返回，增加安全性
+    import random
+    selected_question = random.choice(questions)
+    return jsonify({"question": selected_question}), 200
+
+# 验证密保答案
+@app.route("/password-recovery/verify-answer", methods=["POST"])
+def verify_security_answer():
+    data = request.get_json()
+    account = data.get("account")
+    question_id = data.get("question_id")
+    answer = data.get("answer")
+    if not all([account, question_id, answer]):
+        return jsonify({"message": "请求参数不完整"}), 400
+    user = User.query.filter_by(account=account).first()
+    if not user:
+        return jsonify({"message": "账号不存在"}), 404
+    # 根据 question_id 获取对应的密保答案哈希值
+    correct_answer_hash = None
+    if question_id == 1:
+        correct_answer_hash = user.security_answer_1
+    elif question_id == 2:
+        correct_answer_hash = user.security_answer_2
+    elif question_id == 3:
+        correct_answer_hash = user.security_answer_3
+    
+    if not correct_answer_hash:
+        return jsonify({"message": "无效的问题ID或用户未设置此问题"}), 400
+    # 使用 bcrypt 校验答案
+    if bcrypt.check_password_hash(correct_answer_hash, answer):
+        # 验证成功，生成一个有时效性的临时token
+        expires = timedelta(minutes=10)
+        reset_token = create_access_token(
+            identity=str(user.user_id), 
+            expires_delta=expires,
+            additional_claims={"purpose": "password_reset"}
+        )
+        return jsonify({"message": "验证成功", "reset_token": reset_token}), 200
+    else:
+        return jsonify({"message": "密保答案错误"}), 401
+
+# 使用临时token重置密码
+@app.route("/password-recovery/reset-password", methods=["POST"])
+@jwt_required()
+def reset_password_with_token():
+    jwt_claims = get_jwt()
+    if jwt_claims.get("purpose") != "password_reset":
+        return jsonify({"message": "无效的Token，请重新验证"}), 403
+    current_user_id = int(get_jwt_identity())
+    data = request.get_json()
+    new_password = data.get("new_password")
+    if not new_password or len(new_password) < 6:
+        return jsonify({"message": "新密码格式不正确"}), 400
+    user = User.query.get(current_user_id)
+    if not user:
+        return jsonify({"message": "用户不存在"}), 404
+    # 更新密码
+    hashed_password = bcrypt.generate_password_hash(new_password).decode("utf-8")
+    user.password = hashed_password
+    db.session.commit()
+    return jsonify({"message": "密码重置成功"}), 200
 
 
 # 用户登录
@@ -242,6 +339,42 @@ def mark_unclocked_out_employees():
     db.session.commit()
 
 
+# 计算指定用户在某月应出勤的天数（截至today）
+def calculate_should_attend_days(user_id, year, month, today):
+    # 1. 计算从本月1号到今天为止，总共有多少个工作日
+    workdays_upto_today = 0
+    first_day_of_month = date(year, month, 1)
+    current_day = first_day_of_month
+    while current_day <= today:
+        if current_day.weekday() < 5:  # 0-4 是周一到周五
+            workdays_upto_today += 1
+        current_day += timedelta(days=1)
+
+    # 2. 计算本月到今天为止，已批准的请假覆盖了多少个工作日
+    approved_leaves_this_month = Absence.query.filter(
+        Absence.user_id == user_id,
+        Absence.status == 2,
+        func.date(Absence.start_time) <= today,
+        func.date(Absence.end_time) >= first_day_of_month
+    ).all()
+
+    leave_workdays = set()
+    for leave in approved_leaves_this_month:
+        start_date = max(leave.start_time.date(), first_day_of_month)
+        end_date = min(leave.end_time.date(), today)
+        d = start_date
+        while d <= end_date:
+            if d.weekday() < 5:
+                leave_workdays.add(d)
+            d += timedelta(days=1)
+    
+    leave_day_count = len(leave_workdays)
+
+    # 3. 返回最终结果
+    return workdays_upto_today - leave_day_count
+
+
+# 获取个人考勤记录和统计
 @app.route("/attendance/personal", methods=["GET"])
 @jwt_required()
 def get_personal_attendance():
@@ -315,6 +448,13 @@ def get_personal_attendance():
         .scalar()
         or 0
     )
+
+
+    # 应出勤天数计算（不计未来日期）
+    should_attend_days = calculate_should_attend_days(
+        current_user_id, current_year, current_month, today
+    )
+
 
     # 最近记录
     recent_records = (
@@ -422,7 +562,7 @@ def get_personal_attendance():
                     "late_count": late_count,
                     "early_leave_count": early_leave_count,
                     "normal_count": normal_count,
-                    "should_attend": 22,  # 假设每月应出勤22天
+                    "should_attend": should_attend_days, 
                 },
                 "recent_records": records_list,
             }
@@ -527,7 +667,7 @@ def get_employees_attendance():
 
     # 获取排序参数
     sort_by = request.args.get(
-        "sort_by", "name"
+        "sort_by", "account"
     )  # name, late_count, early_leave_count, normal_count, leave_count
     sort_order = request.args.get("sort_order", "asc")  # asc, desc
 
@@ -678,7 +818,11 @@ def get_employees_attendance():
             .scalar()
             or 0
         )
-
+        
+        # 应出勤天数计算（不计未来日期）
+        should_attend_days = calculate_should_attend_days(
+            current_user_id, current_year, current_month, today
+        )
         employees_list.append(
             {
                 "user_id": user.user_id,
@@ -694,7 +838,7 @@ def get_employees_attendance():
                     "normal_count": monthly_normal,
                     "leave_count": monthly_leave,
                     "not_checked_out_count": monthly_not_checked_out,
-                    "should_attend": 22,
+                    "should_attend": should_attend_days,
                 },
             }
         )
@@ -724,8 +868,10 @@ def get_employees_attendance():
             key=lambda x: x["monthly_stats"]["not_checked_out_count"],
             reverse=(sort_order == "desc"),
         )
-    else:  # 默认按姓名排序
+    elif sort_by == "name":
         employees_list.sort(key=lambda x: x["name"], reverse=(sort_order == "desc"))
+    elif sort_by == "account": # 默认按工号
+        employees_list.sort(key=lambda x: x["account"], reverse=(sort_order == "desc"))
 
     return (
         jsonify(
@@ -736,8 +882,8 @@ def get_employees_attendance():
 
 
 # 人脸图片与特征存储目录
-os.makedirs("FaceImage", exist_ok=True)
-os.makedirs("FaceFeature", exist_ok=True)
+os.makedirs("/backend/FaceImage", exist_ok=True)
+os.makedirs("/backend/FaceFeature", exist_ok=True)
 
 
 # 保存上传的人脸图片

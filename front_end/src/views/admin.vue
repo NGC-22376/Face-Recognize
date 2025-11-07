@@ -27,10 +27,10 @@
             @click="setActiveTab('employees')">
             <span>👥</span> 员工考勤
           </div>
-          <div class="nav-item" :class="{ active: activeTab === 'personal' }" @click="setActiveTab('personal')">
+          <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'personal' }" @click="setActiveTab('personal')">
             <span>👤</span> 个人考勤
           </div>
-          <div class="nav-item" :class="{ active: activeTab === 'clock' }" @click="setActiveTab('clock')">
+          <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'clock' }" @click="setActiveTab('clock')">
             <span>⏰</span> 打卡
           </div>
           <!-- 新增：请假 -->
@@ -80,6 +80,7 @@
               <div class="sort-controls">
                 <label>排序方式：</label>
                 <select v-model="sortBy" @change="loadEmployeesData">
+                  <option value="account">工号</option>
                   <option value="name">姓名</option>
                   <option value="late_count">迟到次数</option>
                   <option value="early_leave_count">早退次数</option>
@@ -360,8 +361,9 @@ export default {
         normal_count: 0
       },
       employees: [],
-      sortBy: 'name',
+      sortBy: 'account',
       sortOrder: 'asc',
+      isLoading: false,
       personalStats: {
         should_attend: 0,
         total_days: 0,
@@ -477,20 +479,30 @@ export default {
     },
 
     async loadEmployeesData() {
+      // 增加加载状态
+      this.isLoading = true; 
       try {
-        const token = localStorage.getItem('access_token')
-        if (this.sortBy === 'not_checked_out_count') this.sortBy = 'name'
+        const token = localStorage.getItem('access_token');
+        // if (this.sortBy === 'not_checked_out_count') this.sortBy = 'name'
+        
         const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
-        })
+        });
+        
         if (response.ok) {
-          const data = await response.json()
-          this.employees = data.employees
+          const data = await response.json();
+          this.employees = data.employees;
+        } else {
+          // 失败处理
+          console.error('Failed to load data, status:', response.status);
+          alert('加载员工数据失败！');
         }
       } catch (error) {
-        console.error('Failed to load employees data:', error)
+        console.error('Failed to load employees data:', error);
+      } finally {
+        this.isLoading = false; 
       }
     },
 

@@ -3,6 +3,7 @@ import Login from '../views/login.vue'
 import Admin from '../views/admin.vue'
 import FaceClock from '../views/face-clock.vue'
 import FaceRegister from '../views/face-register.vue'
+import PasswordRecovery from '../views/password_recovery.vue'
 
 const routes = [
   {
@@ -32,7 +33,13 @@ const routes = [
     name: 'FaceClock',
     component: FaceClock,
     meta: { requiresAuth: true } //必须登录
-  }
+  },
+  {
+    path: '/password-recovery', 
+    name: 'PasswordRecoveryPage',
+    component: PasswordRecovery,
+    meta: { requiresAuth: false } //不需要登录
+  },
 ]
 
 const router = createRouter({

@@ -53,6 +53,6 @@ class Absence(db.Model):
     )
     start_time = db.Column(db.DateTime, nullable=False)
     end_time = db.Column(db.DateTime, nullable=False)
-    status = db.Column(db.Integer, nullable=False, default=0)  # 0未读 1拒绝 2通过
+    status = db.Column(db.Integer, nullable=False, default=0, comment='0:未审批, 1:已拒绝, 2:已通过')
     reason = db.Column(db.Text, nullable=False)
     absence_type = db.Column(db.Integer, nullable=False, default=0)  # 0病假 1私事请假 2公事请假
