@@ -652,8 +652,20 @@ def get_employees_attendance():
         "sort_by", "account"
     )  # name, late_count, early_leave_count, normal_count, leave_count
     sort_order = request.args.get("sort_order", "asc")  # asc, desc
-    page = int(request.args.get("page", 1))
-    page_size = int(request.args.get("page_size", 10))
+    # 安全地获取和转换分页参数
+    page_param = request.args.get("page", 1)
+    page_size_param = request.args.get("page_size", 10)
+    
+    # 处理可能为'undefined'或其他非数字值的情况
+    try:
+        page = int(page_param)
+    except (ValueError, TypeError):
+        page = 1
+        
+    try:
+        page_size = int(page_size_param)
+    except (ValueError, TypeError):
+        page_size = 10
 
     # 验证页码和每页大小
     if page < 1:
