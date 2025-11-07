@@ -884,16 +884,23 @@ def create_absence():
         return jsonify(message=f"服务器错误: {str(e)}"), 500
 
 
-# 个人请假申请列表
+# 个人请假申请列表（支持分页，每页5条）
 @app.route("/absence/personal", methods=["GET"])
 @jwt_required()
 def get_personal_absences():
     current_user_id = int(get_jwt_identity())
-    absences = (
+    # 获取分页参数，默认为第1页
+    page = request.args.get("page", 1, type=int)
+    per_page = 5
+    
+    # 使用paginate进行分页查询
+    pagination = (
         Absence.query.filter_by(user_id=current_user_id)
         .order_by(Absence.start_time.desc())
-        .all()
+        .paginate(page=page, per_page=per_page, error_out=False)
     )
+    
+    absences = pagination.items
     res = [
         {
             "id": a.id,
@@ -910,10 +917,18 @@ def get_personal_absences():
         }
         for a in absences
     ]
-    return jsonify(absences=res), 200
+    
+    # 返回分页信息和数据
+    return jsonify({
+        "absences": res,
+        "total": pagination.total,
+        "pages": pagination.pages,
+        "current_page": pagination.page,
+        "per_page": per_page
+    }), 200
 
 
-# 管理员查看请假申请列表（processed=true 查看已处理，否则查看未读）
+# 管理员查看请假申请列表（支持分页，每页5条）
 @app.route("/admin/absence", methods=["GET"])
 @jwt_required()
 def admin_list_absences():
@@ -921,13 +936,22 @@ def admin_list_absences():
     user = User.query.get(current_user_id)
     if not user or user.role != "管理员":
         return jsonify(message="Access denied. Admin role required."), 403
+    
     processed = request.args.get("processed", "false").lower() == "true"
+    # 获取分页参数，默认为第1页
+    page = request.args.get("page", 1, type=int)
+    per_page = 5
+    
     query = Absence.query
     if processed:
         query = query.filter(Absence.status.in_([1, 2]))
     else:
         query = query.filter(Absence.status == 0)
-    absences = query.order_by(Absence.start_time.desc()).all()
+    
+    # 使用paginate进行分页查询
+    pagination = query.order_by(Absence.start_time.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    absences = pagination.items
+    
     res = [
         {
             "id": a.id,
@@ -950,7 +974,15 @@ def admin_list_absences():
         }
         for a in absences
     ]
-    return jsonify(absences=res), 200
+    
+    # 返回分页信息和数据
+    return jsonify({
+        "absences": res,
+        "total": pagination.total,
+        "pages": pagination.pages,
+        "current_page": pagination.page,
+        "per_page": per_page
+    }), 200
 
 
 # 管理员审核请假申请
