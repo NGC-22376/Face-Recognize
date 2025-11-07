@@ -25,13 +25,16 @@
           <div v-if="userProfile.role === '管理员'" class="nav-item" :class="{ active: activeTab === 'employees' }" @click="setActiveTab('employees')">
             <span>👥</span> 员工考勤
           </div>
-          <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'personal' }" @click="setActiveTab('personal')">
+          <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'personal' }"
+            @click="setActiveTab('personal')">
             <span>👤</span> 个人考勤
           </div>
-          <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'clock' }" @click="setActiveTab('clock')">
+          <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'clock' }"
+            @click="setActiveTab('clock')">
             <span>⏰</span> 打卡
           </div>
-          <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'face_register' }" @click="setActiveTab('face_register')">
+          <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'face_register' }"
+            @click="setActiveTab('face_register')">
             <span>📷</span> 人脸录入
           </div>
           <div v-if="userProfile.role === '管理员'" class="nav-item" :class="{ active: activeTab === 'face_review' }" @click="setActiveTab('face_review')">
@@ -69,6 +72,11 @@
               <div class="stat-number">{{ dailyStats.normal_count }}</div>
               <div class="stat-label">正常人数</div>
             </div>
+          </div>
+          <div class="charts-container">
+            <h3>考勤统计图表</h3>
+            <div id="attendance-chart-1" style="width: 100%; height: 400px;"></div>
+            <div id="attendance-chart-2" style="width: 100%; height: 400px; margin-top: 20px;"></div>
           </div>
           <div class="date-info">
             <p>统计日期：{{ dailyStats.date }}</p>
@@ -134,6 +142,23 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          <!-- 分页控件 -->
+          <div class="pagination-wrapper" v-if="totalEmployees > 0">
+            <div class="pagination-controls">
+              <button :disabled="currentPage === 1" @click="handlePageChange(currentPage - 1)">上一页</button>
+              <span>第 {{ currentPage }} 页 / 共 {{ Math.ceil(totalEmployees / pageSize) }} 页</span>
+              <button :disabled="currentPage === Math.ceil(totalEmployees / pageSize)"
+                @click="handlePageChange(currentPage + 1)">下一页</button>
+            </div>
+            <div class="pagination-controls">
+              <span>跳转到第</span>
+              <input type="number" v-model.number="jumpToPage" placeholder="跳转页码" min="1"
+                :max="Math.ceil(totalEmployees / pageSize)" style="width: 60px; text-align: center; margin: 0 8px;" />
+              <span>页</span>
+              <button @click="handlePageJump">跳转</button>
+            </div>
           </div>
         </div>
 
@@ -373,7 +398,34 @@
             </div>
 
             <div class="records-table">
-              <h3>我的请假申请</h3>
+              <h3>历史请假申请</h3>
+              <!-- 用户端历史请假记录页签和排序控件 -->
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <!-- 10px * 0.8 -->
+                <div class="tab-switch">
+                  <button :class="{ active: myLeavesTab === 'pending' }"
+                    @click="myLeavesTab = 'pending'; loadMyLeaves(1)">申请中</button>
+                  <button :class="{ active: myLeavesTab === 'approved' }"
+                    @click="myLeavesTab = 'approved'; loadMyLeaves(1)">已通过</button>
+                  <button :class="{ active: myLeavesTab === 'rejected' }"
+                    @click="myLeavesTab = 'rejected'; loadMyLeaves(1)">已拒绝</button>
+                </div>
+
+                <!-- 用户端历史请假记录排序控件 -->
+                <div class="sort-controls" style="display: flex; align-items: center; gap: 8px;">
+                  <!-- 10px * 0.8 -->
+                  <label>排序方式:</label>
+                  <select v-model="myLeavesSortBy" @change="loadMyLeaves(1)" style="padding: 5px;">
+                    <option value="start_time">起始时间</option>
+                    <option value="end_time">结束时间</option>
+                  </select>
+                  <select v-model="myLeavesSortOrder" @change="loadMyLeaves(1)" style="padding: 5px;">
+                    <option value="asc">正序</option>
+                    <option value="desc">倒序</option>
+                  </select>
+                </div>
+              </div>
+
               <table>
                 <thead>
                   <tr>
@@ -394,6 +446,30 @@
                   </tr>
                 </tbody>
               </table>
+
+              <!-- 分页控件 -->
+              <div class="pagination" v-if="pagination.myLeaves.total > 0">
+                <button @click="changeMyLeavesPage(pagination.myLeaves.currentPage - 1)"
+                  :disabled="pagination.myLeaves.currentPage === 1" class="pagination-btn">
+                  上一页
+                </button>
+
+                <span v-for="page in generatePageNumbers(pagination.myLeaves.pages, pagination.myLeaves.currentPage)"
+                  :key="page" @click="changeMyLeavesPage(page)"
+                  :class="['pagination-item', { active: page === pagination.myLeaves.currentPage }]">
+                  {{ page }}
+                </span>
+
+                <button @click="changeMyLeavesPage(pagination.myLeaves.currentPage + 1)"
+                  :disabled="pagination.myLeaves.currentPage === pagination.myLeaves.pages" class="pagination-btn">
+                  下一页
+                </button>
+
+                <span class="pagination-info">
+                  共 {{ pagination.myLeaves.total }} 条记录，第 {{ pagination.myLeaves.currentPage }} / {{
+                    pagination.myLeaves.pages }} 页
+                </span>
+              </div>
             </div>
           </template>
           <template v-else>
@@ -414,45 +490,103 @@
             </div>
 
             <!-- 筛选控件 -->
-            <div class="filter-controls" style="margin: 15px 0;">
-              <input type="text" v-model="nameFilter" placeholder="搜索姓名" style="margin-right: 10px; padding: 5px;" />
-              <select v-model="typeFilter" style="padding: 5px;">
-                <option value="-1">全部类型</option>
-                <option v-for="type in leaveTypes" :key="type.value" :value="type.value">{{ type.label }}</option>
-              </select>
+            <div class="filter-controls"
+              style="margin: 12px 0; display: flex; justify-content: space-between; align-items: center;">
+              <!-- 15px * 0.8 -->
+              <div>
+                <input type="text" v-model="nameFilter" placeholder="搜索姓名" style="margin-right: 8px; padding: 5px;" />
+                <!-- 10px * 0.8 -->
+                <select v-model="typeFilter" style="padding: 5px;">
+                  <option value="-1">全部类型</option>
+                  <option v-for="type in leaveTypes" :key="type.value" :value="type.value">{{ type.label }}</option>
+                </select>
+              </div>
+              <div v-if="leaveAdminTab === 'unprocessed'">
+                <button class="batch-process-btn" @click="toggleBatchMode" v-if="!isBatchMode">
+                  批量处理
+                </button>
+                <div v-else style="display: flex; gap: 8px;">
+                  <!-- 10px * 0.8 -->
+                  <button class="batch-btn batch-approve" @click="batchReview('approve')"
+                    :disabled="isBatchProcessing || selectedLeaves.length === 0">
+                    {{ isBatchProcessing ? '处理中' : '批量通过' }}
+                  </button>
+                  <button class="batch-btn batch-reject" @click="batchReview('reject')"
+                    :disabled="isBatchProcessing || selectedLeaves.length === 0">
+                    {{ isBatchProcessing ? '处理中' : '批量拒绝' }}
+                  </button>
+                  <button class="batch-btn batch-exit" @click="toggleBatchMode">
+                    退出
+                  </button>
+                </div>
+              </div>
             </div>
 
+            <!-- 未处理标签页内容 -->
             <div class="records-table" v-if="leaveAdminTab === 'unprocessed'">
               <table>
                 <thead>
                   <tr>
+                    <th v-if="!isBatchMode">操作</th>
+                    <th v-else>选择</th>
                     <th>姓名</th>
                     <th>工号</th>
                     <th>起始时间</th>
                     <th>结束时间</th>
                     <th>事由</th>
                     <th>请假类型</th>
-                    <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in filteredUnprocessedLeaves" :key="item.id" @click="selectedLeave = item">
+                  <tr v-for="item in filteredUnprocessedLeaves" :key="item.id">
                     <td>{{ item.name }}</td>
                     <td>{{ item.account }}</td>
                     <td>{{ formatDateTime(item.start_time) }}</td>
                     <td>{{ formatDateTime(item.end_time) }}</td>
-                    <td>{{ item.reason }}</td>
+                    <td @click="selectedLeave = item" class="reason-cell">{{ item.reason }}</td>
                     <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
-                    <td>
+                    <td v-if="!isBatchMode">
                       <button class="clock-btn clock-in" @click.stop="reviewLeave(item.id, 'approve')">通过</button>
                       <button class="clock-btn clock-out" @click.stop="reviewLeave(item.id, 'reject')">拒绝</button>
+                    </td>
+                    <td v-else>
+                      <input type="checkbox" v-model="selectedLeaves" :value="item.id" class="batch-checkbox">
                     </td>
                   </tr>
                 </tbody>
               </table>
+
+              <!-- 未处理分页控件 -->
+              <div class="pagination" v-if="pagination.adminLeaves.unprocessed.total > 0 && !isBatchMode">
+                <button
+                  @click="changeAdminLeavesPage(false, Math.max(1, pagination.adminLeaves.unprocessed.currentPage - 1))"
+                  :disabled="pagination.adminLeaves.unprocessed.currentPage === 1" class="pagination-btn">
+                  上一页
+                </button>
+
+                <span
+                  v-for="page in generatePageNumbers(pagination.adminLeaves.unprocessed.pages, pagination.adminLeaves.unprocessed.currentPage)"
+                  :key="page" @click="changeAdminLeavesPage(false, page)"
+                  :class="['pagination-item', { active: page === pagination.adminLeaves.unprocessed.currentPage }]">
+                  {{ page }}
+                </span>
+
+                <button
+                  @click="changeAdminLeavesPage(false, Math.min(pagination.adminLeaves.unprocessed.pages, pagination.adminLeaves.unprocessed.currentPage + 1))"
+                  :disabled="pagination.adminLeaves.unprocessed.currentPage === pagination.adminLeaves.unprocessed.pages"
+                  class="pagination-btn">
+                  下一页
+                </button>
+
+                <span class="pagination-info">
+                  共筛选到 {{ pagination.adminLeaves.unprocessed.total }} 条记录，第 {{
+                    pagination.adminLeaves.unprocessed.currentPage }} / {{ pagination.adminLeaves.unprocessed.pages }} 页
+                </span>
+              </div>
             </div>
 
-            <div class="records-table" v-else>
+            <!-- 已通过标签页内容 -->
+            <div class="records-table" v-else-if="leaveAdminTab === 'approved'">
               <table>
                 <thead>
                   <tr>
@@ -466,7 +600,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in filteredProcessedLeaves" :key="item.id">
+                  <tr v-for="item in filteredApprovedLeaves" :key="item.id">
                     <td>{{ item.name }}</td>
                     <td>{{ item.account }}</td>
                     <td>{{ formatDateTime(item.start_time) }}</td>
@@ -477,6 +611,90 @@
                   </tr>
                 </tbody>
               </table>
+
+              <!-- 已通过分页控件 -->
+              <div class="pagination" v-if="pagination.adminLeaves.approved.total > 0 && !isBatchMode">
+                <button
+                  @click="changeAdminLeavesPage('approved', Math.max(1, pagination.adminLeaves.approved.currentPage - 1))"
+                  :disabled="pagination.adminLeaves.approved.currentPage === 1" class="pagination-btn">
+                  上一页
+                </button>
+
+                <span
+                  v-for="page in generatePageNumbers(pagination.adminLeaves.approved.pages, pagination.adminLeaves.approved.currentPage)"
+                  :key="page" @click="changeAdminLeavesPage('approved', page)"
+                  :class="['pagination-item', { active: page === pagination.adminLeaves.approved.currentPage }]">
+                  {{ page }}
+                </span>
+
+                <button
+                  @click="changeAdminLeavesPage('approved', Math.min(pagination.adminLeaves.approved.pages, pagination.adminLeaves.approved.currentPage + 1))"
+                  :disabled="pagination.adminLeaves.approved.currentPage === pagination.adminLeaves.approved.pages"
+                  class="pagination-btn">
+                  下一页
+                </button>
+
+                <span class="pagination-info">
+                  共筛选到 {{ pagination.adminLeaves.approved.total }} 条记录，第 {{
+                    pagination.adminLeaves.approved.currentPage }} / {{ pagination.adminLeaves.approved.pages }} 页
+                </span>
+              </div>
+            </div>
+
+            <!-- 已拒绝标签页内容 -->
+            <div class="records-table" v-else-if="leaveAdminTab === 'rejected'">
+              <table>
+                <thead>
+                  <tr>
+                    <th>姓名</th>
+                    <th>工号</th>
+                    <th>起始时间</th>
+                    <th>结束时间</th>
+                    <th>事由</th>
+                    <th>请假类型</th>
+                    <th>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in filteredRejectedLeaves" :key="item.id">
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.account }}</td>
+                    <td>{{ formatDateTime(item.start_time) }}</td>
+                    <td>{{ formatDateTime(item.end_time) }}</td>
+                    <td>{{ item.reason }}</td>
+                    <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
+                    <td>{{ statusMap[item.status] || item.status }}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <!-- 已拒绝分页控件 -->
+              <div class="pagination" v-if="pagination.adminLeaves.rejected.total > 0 && !isBatchMode">
+                <button
+                  @click="changeAdminLeavesPage('rejected', Math.max(1, pagination.adminLeaves.rejected.currentPage - 1))"
+                  :disabled="pagination.adminLeaves.rejected.currentPage === 1" class="pagination-btn">
+                  上一页
+                </button>
+
+                <span
+                  v-for="page in generatePageNumbers(pagination.adminLeaves.rejected.pages, pagination.adminLeaves.rejected.currentPage)"
+                  :key="page" @click="changeAdminLeavesPage('rejected', page)"
+                  :class="['pagination-item', { active: page === pagination.adminLeaves.rejected.currentPage }]">
+                  {{ page }}
+                </span>
+
+                <button
+                  @click="changeAdminLeavesPage('rejected', Math.min(pagination.adminLeaves.rejected.pages, pagination.adminLeaves.rejected.currentPage + 1))"
+                  :disabled="pagination.adminLeaves.rejected.currentPage === pagination.adminLeaves.rejected.pages"
+                  class="pagination-btn">
+                  下一页
+                </button>
+
+                <span class="pagination-info">
+                  共筛选到 {{ pagination.adminLeaves.rejected.total }} 条记录，第 {{
+                    pagination.adminLeaves.rejected.currentPage }} / {{ pagination.adminLeaves.rejected.pages }} 页
+                </span>
+              </div>
             </div>
 
             <div v-if="selectedLeave" class="leave-detail">
@@ -497,7 +715,7 @@
 </template>
 
 <script>
-import { ElMessage } from 'element-plus'
+import * as echarts from 'echarts';
 
 export default {
   name: 'AdminPage',
@@ -540,80 +758,102 @@ export default {
         { value: 2, label: '公事请假' }
       ],
       myLeaves: [],
+      // 用户端历史请假记录页签
+      myLeavesTab: 'pending', // pending: 申请中(未读), approved: 已通过, rejected: 已拒绝
+      // 用户端历史请假记录排序
+      myLeavesSortBy: 'start_time', // 默认按起始时间排序
+      myLeavesSortOrder: 'desc', // 默认倒序
       leaveMessage: '',
       leaveMessageType: '',
       statusMap: { 0: '未读', 1: '拒绝', 2: '通过' },
       leaveAdminTab: 'unprocessed',
       adminLeavesUnprocessed: [],
       adminLeavesProcessed: [],
+      adminLeavesApproved: [],  // 已通过的请假申请
+      adminLeavesRejected: [],  // 已拒绝的请假申请
       selectedLeave: null,
       nameFilter: '',
-      typeFilter: -1,
-
-      // 人脸审核相关
-      faceReviewTab: 'pending',
-      faceNameFilter: '',
-      faceStatusFilter: -1,
-      pendingFaceEnrollments: [],
-      reviewedFaceEnrollments: [],
-      showPreview: false,
-      previewImageUrl: '',
-      loadingPending: false,
-      loadingReviewed: false,
+      typeFilter: -1, // -1表示全部类型
+      currentPage: 1,
+      pageSize: 10,
+      totalEmployees: 0,
+      jumpToPage: 1,
+      // 分页相关数据
+      pagination: {
+        myLeaves: {
+          currentPage: 1,
+          total: 0,
+          pages: 0,
+          perPage: 10
+        },
+        adminLeaves: {
+          unprocessed: {
+            currentPage: 1,
+            total: 0,
+            pages: 0,
+            perPage: 10
+          },
+          processed: {
+            currentPage: 1,
+            total: 0,
+            pages: 0,
+            perPage: 10
+          },
+          approved: {
+            currentPage: 1,
+            total: 0,
+            pages: 0,
+            perPage: 10
+          },
+          rejected: {
+            currentPage: 1,
+            total: 0,
+            pages: 0,
+            perPage: 10
+          }
+        }
+      },
+      // 批量处理相关状态
+      isBatchProcessing: false,
+      isBatchMode: false,
+      selectedLeaves: [] // 选中的请假申请ID数组
     }
   },
-
-  computed: {
-    // 过滤后的待审核申请
-    filteredPendingEnrollments() {
-      return this.pendingFaceEnrollments.filter(enrollment => {
-        return enrollment.user_name.toLowerCase().includes(this.faceNameFilter.toLowerCase()) ||
-               enrollment.user_account.toLowerCase().includes(this.faceNameFilter.toLowerCase())
-      })
+  watch: {
+    activeTab(newTab) {
+      if (newTab === 'dashboard' && this.userProfile.role === '管理员') {
+        this.$nextTick(() => {
+          this.renderAttendanceCharts();
+        });
+      }
     },
-
-    // 过滤后的已审核申请
-    filteredReviewedEnrollments() {
-      return this.reviewedFaceEnrollments.filter(enrollment => {
-        const nameMatch = enrollment.user_name.toLowerCase().includes(this.faceNameFilter.toLowerCase()) ||
-                         enrollment.user_account.toLowerCase().includes(this.faceNameFilter.toLowerCase())
-        const statusMatch = this.faceStatusFilter === -1 || enrollment.status === this.faceStatusFilter
-        return nameMatch && statusMatch
-      })
+    // 监听nameFilter变化
+    nameFilter(newVal, oldVal) {
+      if (newVal !== oldVal) {
+        this.resetAndRecalculatePagination();
+      }
     },
-
-    // 过滤后的待审批请假列表
-    filteredUnprocessedLeaves() {
-      return this.adminLeavesUnprocessed.filter(leave => {
-        const nameMatch = leave.name.toLowerCase().includes(this.nameFilter.toLowerCase())
-        const typeMatch = this.typeFilter === -1 || leave.absence_type === this.typeFilter
-        return nameMatch && typeMatch
-      })
-    },
-
-    // 过滤后的已审批请假列表
-    filteredProcessedLeaves() {
-      return this.adminLeavesProcessed.filter(leave => {
-        const nameMatch = leave.name.toLowerCase().includes(this.nameFilter.toLowerCase())
-        const typeMatch = this.typeFilter === -1 || leave.absence_type === this.typeFilter
-        return nameMatch && typeMatch
-      })
+    // 监听typeFilter变化
+    typeFilter(newVal, oldVal) {
+      if (newVal !== oldVal) {
+        this.resetAndRecalculatePagination();
+      }
     },
   },
-
   async mounted() {
     this.updateTime()
     setInterval(this.updateTime, 1000)
 
-    await this.loadUserProfile()
-
-    // 根据用户角色设置默认tab
+    await this.loadUserProfile();
     if (this.userProfile.role === '管理员') {
-      this.activeTab = 'dashboard'
-      await this.loadDashboardData()
+      this.activeTab = 'dashboard';
+      await this.loadDashboardData();
+      this.$nextTick(() => {
+        this.renderAttendanceCharts();
+      });
     } else {
-      this.activeTab = 'personal'
-      await this.loadPersonalData()
+      this.activeTab = 'personal';
+      await this.loadPersonalData();
     }
 
     // 如果人脸识别完跳回来，自动打卡
@@ -625,6 +865,18 @@ export default {
   },
 
   methods: {
+    // 重置分页到第一页
+    resetPagination() {
+      if (this.leaveAdminTab === 'unprocessed') {
+        this.pagination.adminLeaves.unprocessed.currentPage = 1;
+      } else if (this.leaveAdminTab === 'approved') {
+        this.pagination.adminLeaves.approved.currentPage = 1;
+      } else if (this.leaveAdminTab === 'rejected') {
+        this.pagination.adminLeaves.rejected.currentPage = 1;
+      } else {
+        this.pagination.adminLeaves.processed.currentPage = 1;
+      }
+    },
     goFace(type) {
       this.$router.push({ name: 'FaceClock', params: { type } })
     },
@@ -650,11 +902,317 @@ export default {
         this.switchFaceReviewTab('pending')
       } else if (tab === 'leave') {
         if (this.userProfile.role === '员工') {
-          this.loadMyLeaves()
+          // 重置到第一页
+          this.pagination.myLeaves.currentPage = 1
+          this.loadMyLeaves(1)
         } else {
-          this.loadAdminLeaves(false)
+          // 重置到第一页
+          this.pagination.adminLeaves.unprocessed.currentPage = 1
+          this.loadAdminLeaves(false, 1)
         }
       }
+    },
+
+    // 切换人脸审核标签页
+    switchFaceReviewTab(tab) {
+      this.faceReviewTab = tab
+      this.faceNameFilter = ''
+      this.faceStatusFilter = -1
+      if (tab === 'pending') {
+        this.loadPendingFaceEnrollments()
+      } else {
+        this.loadReviewedFaceEnrollments()
+      }
+    },
+
+    // 处理筛选条件变化
+    handleFaceFilterChange() {
+      // 筛选逻辑已经在计算属性中处理，这里只需要确保数据已加载
+      if (this.faceReviewTab === 'pending' && this.pendingFaceEnrollments.length === 0) {
+        this.loadPendingFaceEnrollments()
+      } else if (this.faceReviewTab === 'processed' && this.reviewedFaceEnrollments.length === 0) {
+        this.loadReviewedFaceEnrollments()
+      }
+    },
+
+    // 加载待审核的人脸录入申请
+    async loadPendingFaceEnrollments() {
+      this.loadingPending = true
+      try {
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/pending`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          this.pendingFaceEnrollments = data.enrollments || []
+        } else {
+          console.error('加载待审核列表失败，状态码:', response.status)
+          ElMessage.error('加载待审核列表失败')
+        }
+      } catch (error) {
+        console.error('Failed to load pending face enrollments:', error)
+        ElMessage.error('加载待审核列表失败')
+      } finally {
+        this.loadingPending = false
+      }
+    },
+
+    // 加载已审核的人脸录入申请
+    async loadReviewedFaceEnrollments() {
+      this.loadingReviewed = true
+      try {
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/all`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          // 过滤出已审核的记录（状态不为0）
+          this.reviewedFaceEnrollments = (data.enrollments || []).filter(
+            item => item.status !== 0
+          )
+        } else {
+          console.error('加载已处理列表失败，状态码:', response.status)
+          ElMessage.error('加载已处理列表失败')
+        }
+      } catch (error) {
+        console.error('Failed to load reviewed face enrollments:', error)
+        ElMessage.error('加载已处理列表失败')
+      } finally {
+        this.loadingReviewed = false
+      }
+    },
+
+    // 获取人脸录入图片URL
+    getEnrollmentImageUrl(imagePath) {
+      if (imagePath && !imagePath.startsWith('http')) {
+        return `${this.apiBaseUrl}/${imagePath}`
+      }
+      return imagePath
+    },
+
+    // 审核人脸录入申请
+    async reviewFaceEnrollment(enrollmentId, approve) {
+      try {
+        const comment = approve ? '审核通过' : '图片不清晰或不符合要求'
+
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/${enrollmentId}/review`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            approve: approve,
+            comment: comment
+          })
+        })
+
+        const data = await response.json()
+        if (response.ok) {
+          ElMessage.success(data.msg)
+          // 重新加载列表
+          if (this.faceReviewTab === 'pending') {
+            this.loadPendingFaceEnrollments()
+          } else {
+            this.loadReviewedFaceEnrollments()
+          }
+        } else {
+          ElMessage.error(data.msg || '审核失败')
+        }
+      } catch (error) {
+        console.error('Review face enrollment failed:', error)
+        ElMessage.error('网络错误，请重试')
+      }
+    },
+
+    // 显示图片预览
+    showImagePreview(imagePath) {
+      this.previewImageUrl = this.getEnrollmentImageUrl(imagePath)
+      this.showPreview = true
+    },
+
+    // 关闭图片预览
+    closeImagePreview() {
+      this.showPreview = false
+      this.previewImageUrl = ''
+    },
+
+    // 获取人脸审核状态文本
+    getFaceEnrollmentStatusText(status) {
+      const statusMap = {
+        0: '待审核',
+        1: '已通过',
+        2: '已拒绝'
+      }
+      return statusMap[status] || '未知状态'
+    },
+
+    // 获取人脸审核状态样式类
+    getFaceEnrollmentStatusClass(status) {
+      const classMap = {
+        0: 'status-pending',
+        1: 'status-approved',
+        2: 'status-rejected'
+      }
+      return classMap[status] || 'status-pending'
+    },
+
+    // 切换人脸审核标签页
+    switchFaceReviewTab(tab) {
+      this.faceReviewTab = tab
+      this.faceNameFilter = ''
+      this.faceStatusFilter = -1
+      if (tab === 'pending') {
+        this.loadPendingFaceEnrollments()
+      } else {
+        this.loadReviewedFaceEnrollments()
+      }
+    },
+
+    // 处理筛选条件变化
+    handleFaceFilterChange() {
+      // 筛选逻辑已经在计算属性中处理，这里只需要确保数据已加载
+      if (this.faceReviewTab === 'pending' && this.pendingFaceEnrollments.length === 0) {
+        this.loadPendingFaceEnrollments()
+      } else if (this.faceReviewTab === 'processed' && this.reviewedFaceEnrollments.length === 0) {
+        this.loadReviewedFaceEnrollments()
+      }
+    },
+
+    // 加载待审核的人脸录入申请
+    async loadPendingFaceEnrollments() {
+      this.loadingPending = true
+      try {
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/pending`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          this.pendingFaceEnrollments = data.enrollments || []
+        } else {
+          console.error('加载待审核列表失败，状态码:', response.status)
+          ElMessage.error('加载待审核列表失败')
+        }
+      } catch (error) {
+        console.error('Failed to load pending face enrollments:', error)
+        ElMessage.error('加载待审核列表失败')
+      } finally {
+        this.loadingPending = false
+      }
+    },
+
+    // 加载已审核的人脸录入申请
+    async loadReviewedFaceEnrollments() {
+      this.loadingReviewed = true
+      try {
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/all`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          // 过滤出已审核的记录（状态不为0）
+          this.reviewedFaceEnrollments = (data.enrollments || []).filter(
+            item => item.status !== 0
+          )
+        } else {
+          console.error('加载已处理列表失败，状态码:', response.status)
+          ElMessage.error('加载已处理列表失败')
+        }
+      } catch (error) {
+        console.error('Failed to load reviewed face enrollments:', error)
+        ElMessage.error('加载已处理列表失败')
+      } finally {
+        this.loadingReviewed = false
+      }
+    },
+
+    // 获取人脸录入图片URL
+    getEnrollmentImageUrl(imagePath) {
+      if (imagePath && !imagePath.startsWith('http')) {
+        return `${this.apiBaseUrl}/${imagePath}`
+      }
+      return imagePath
+    },
+
+    // 审核人脸录入申请
+    async reviewFaceEnrollment(enrollmentId, approve) {
+      try {
+        const comment = approve ? '审核通过' : '图片不清晰或不符合要求'
+
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/${enrollmentId}/review`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            approve: approve,
+            comment: comment
+          })
+        })
+
+        const data = await response.json()
+        if (response.ok) {
+          ElMessage.success(data.msg)
+          // 重新加载列表
+          if (this.faceReviewTab === 'pending') {
+            this.loadPendingFaceEnrollments()
+          } else {
+            this.loadReviewedFaceEnrollments()
+          }
+        } else {
+          ElMessage.error(data.msg || '审核失败')
+        }
+      } catch (error) {
+        console.error('Review face enrollment failed:', error)
+        ElMessage.error('网络错误，请重试')
+      }
+    },
+
+    // 显示图片预览
+    showImagePreview(imagePath) {
+      this.previewImageUrl = this.getEnrollmentImageUrl(imagePath)
+      this.showPreview = true
+    },
+
+    // 关闭图片预览
+    closeImagePreview() {
+      this.showPreview = false
+      this.previewImageUrl = ''
+    },
+
+    // 获取人脸审核状态文本
+    getFaceEnrollmentStatusText(status) {
+      const statusMap = {
+        0: '待审核',
+        1: '已通过',
+        2: '已拒绝'
+      }
+      return statusMap[status] || '未知状态'
+    },
+
+    // 获取人脸审核状态样式类
+    getFaceEnrollmentStatusClass(status) {
+      const classMap = {
+        0: 'status-pending',
+        1: 'status-approved',
+        2: 'status-rejected'
+      }
+      return classMap[status] || 'status-pending'
     },
 
     // 切换人脸审核标签页
@@ -957,40 +1515,116 @@ export default {
       }
     },
 
-    async loadMyLeaves() {
+    async loadMyLeaves(page = 1) {
       try {
         const token = localStorage.getItem('access_token')
-        const res = await fetch(`${this.apiBaseUrl}/absence/personal`, {
+        // 根据当前页签确定状态参数
+        let statusParam = '';
+        if (this.myLeavesTab === 'pending') {
+          statusParam = '&status=0'; // 未读
+        } else if (this.myLeavesTab === 'approved') {
+          statusParam = '&status=2'; // 已通过
+        } else if (this.myLeavesTab === 'rejected') {
+          statusParam = '&status=1'; // 已拒绝
+        }
+
+        // 添加排序参数
+        const sortParam = `&sort_by=${this.myLeavesSortBy}&order=${this.myLeavesSortOrder}`;
+
+        const res = await fetch(`${this.apiBaseUrl}/absence/personal?page=${page}${statusParam}${sortParam}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
         const data = await res.json()
         if (res.ok) {
           this.myLeaves = data.absences || []
+          // 更新分页信息
+          this.pagination.myLeaves.currentPage = data.current_page || 1
+          this.pagination.myLeaves.total = data.total || 0
+          this.pagination.myLeaves.pages = data.pages || 0
+          this.pagination.myLeaves.perPage = data.per_page || 5
         }
       } catch (e) {
         console.error(e)
       }
     },
 
-    async loadAdminLeaves(processed) {
+    async loadAdminLeaves(processed, page = 1, status = null) {
       try {
         const token = localStorage.getItem('access_token')
-        const res = await fetch(`${this.apiBaseUrl}/admin/absence?processed=${processed ? 'true' : 'false'}`, {
+        // 构建查询参数
+        let queryParams = `page=${page}`
+
+        // 根据status参数决定查询条件
+        if (status !== null) {
+          // 按具体状态查询（已通过/已拒绝）
+          queryParams += `&status=${status}`
+        } else {
+          // 兼容旧的processed参数
+          queryParams += `&processed=${processed ? 'true' : 'false'}`
+        }
+
+        // 添加过滤参数
+        if (this.nameFilter) {
+          queryParams += `&name=${encodeURIComponent(this.nameFilter)}`
+        }
+        if (this.typeFilter !== -1 && this.typeFilter !== '-1') {
+          queryParams += `&absence_type=${this.typeFilter}`
+        }
+
+        // 使用后端分页和过滤，每页5条记录
+        const res = await fetch(`${this.apiBaseUrl}/admin/absence?${queryParams}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
         const data = await res.json()
         if (res.ok) {
-          if (processed) this.adminLeavesProcessed = data.absences || []
-          else this.adminLeavesUnprocessed = data.absences || []
+          if (status === 2) {
+            // 已通过的请假申请
+            this.adminLeavesApproved = data.absences || []
+            // 使用后端返回的分页信息
+            this.pagination.adminLeaves.approved.currentPage = data.current_page || 1
+            this.pagination.adminLeaves.approved.total = data.total || 0
+            this.pagination.adminLeaves.approved.pages = data.pages || 0
+            this.pagination.adminLeaves.approved.perPage = data.per_page || 5
+          } else if (status === 1) {
+            // 已拒绝的请假申请
+            this.adminLeavesRejected = data.absences || []
+            // 使用后端返回的分页信息
+            this.pagination.adminLeaves.rejected.currentPage = data.current_page || 1
+            this.pagination.adminLeaves.rejected.total = data.total || 0
+            this.pagination.adminLeaves.rejected.pages = data.pages || 0
+            this.pagination.adminLeaves.rejected.perPage = data.per_page || 5
+          } else if (processed) {
+            // 旧的已处理逻辑（兼容）
+            this.adminLeavesProcessed = data.absences || []
+            // 使用后端返回的分页信息
+            this.pagination.adminLeaves.processed.currentPage = data.current_page || 1
+            this.pagination.adminLeaves.processed.total = data.total || 0
+            this.pagination.adminLeaves.processed.pages = data.pages || 0
+            this.pagination.adminLeaves.processed.perPage = data.per_page || 5
+          } else {
+            this.adminLeavesUnprocessed = data.absences || []
+            // 使用后端返回的分页信息
+            this.pagination.adminLeaves.unprocessed.currentPage = data.current_page || 1
+            this.pagination.adminLeaves.unprocessed.total = data.total || 0
+            this.pagination.adminLeaves.unprocessed.pages = data.pages || 0
+            this.pagination.adminLeaves.unprocessed.perPage = data.per_page || 5
+          }
         }
-      } catch (e) {
-        console.error(e)
-      }
+      } catch (e) { console.error(e) }
     },
 
     async reviewLeave(id, decision) {
       try {
-        const token = localStorage.getItem('access_token')
+        // 添加按钮点击反馈
+        console.log('审核按钮被点击，ID:', id, '决定:', decision);
+
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+          alert('登录已过期，请重新登录');
+          this.$router.push('/');
+          return;
+        }
+
         const res = await fetch(`${this.apiBaseUrl}/admin/absence/${id}`, {
           method: 'PATCH',
           headers: {
@@ -998,19 +1632,216 @@ export default {
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({ decision })
-        })
-        const data = await res.json()
+        });
+
+        const data = await res.json();
+
         if (res.ok) {
-          // 审核后刷新列表
-          this.loadAdminLeaves(this.leaveAdminTab === 'processed')
-          this.selectedLeave = null
+          // 审核后刷新列表，保持当前页码
+          const isProcessed = this.leaveAdminTab === 'processed';
+          const currentPage = isProcessed ?
+            this.pagination.adminLeaves.processed.currentPage :
+            this.pagination.adminLeaves.unprocessed.currentPage;
+
+          // 重新加载未处理列表（因为当前记录会被移到已处理列表）
+          this.loadAdminLeaves(false, currentPage);
+
+          // 如果当前在已处理标签页，也刷新已处理列表
+          if (this.leaveAdminTab === 'processed') {
+            this.loadAdminLeaves(true, this.pagination.adminLeaves.processed.currentPage);
+          }
+
+          this.selectedLeave = null;
           // 同步刷新个人考勤（如果涉及到本人）
-          this.loadPersonalData()
+          this.loadPersonalData();
         } else {
-          alert(data.message || '操作失败')
+          // 服务器返回错误
+          alert(data.message || '操作失败：服务器返回错误');
+          console.error('审核失败:', data);
         }
       } catch (e) {
-        console.error(e)
+        // 网络或其他错误
+        alert('操作失败：网络错误或服务器异常');
+        console.error('审核请假时发生错误:', e);
+      }
+    },
+
+    // 切换批量模式
+    toggleBatchMode() {
+      this.isBatchMode = !this.isBatchMode;
+      this.selectedLeaves = []; // 清空选中列表
+
+      if (this.isBatchMode) {
+        this.loadAllUnprocessedLeaves();
+      } else {
+        this.loadAdminLeaves(false, 1); // 恢复正常分页
+      }
+    },
+
+    // 加载所有未处理的请假申请（不分页）
+    async loadAllUnprocessedLeaves() {
+      try {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+          alert('登录已过期，请重新登录');
+          this.$router.push('/');
+          return;
+        }
+
+        // 获取所有未处理的请假申请（不分页，显示全部）
+        const res = await fetch(`${this.apiBaseUrl}/admin/absence?processed=false&page=1&page_size=10000`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const absences = data.absences || [];
+
+          if (absences.length === 0) {
+            alert('没有未处理的请假申请');
+            this.isBatchMode = false;
+            return;
+          }
+
+          // 在批量模式下显示所有记录到一页中
+          this.adminLeavesUnprocessed = absences;
+          this.pagination.adminLeaves.unprocessed.currentPage = 1;
+          this.pagination.adminLeaves.unprocessed.total = absences.length;
+          this.pagination.adminLeaves.unprocessed.pages = 1;
+          this.pagination.adminLeaves.unprocessed.perPage = absences.length;
+
+        } else {
+          const errorData = await res.json();
+          alert(errorData.message || '获取未处理申请失败');
+          this.isBatchMode = false;
+        }
+      } catch (error) {
+        console.error('获取未处理申请失败:', error);
+        alert('网络错误，请稍后重试');
+        this.isBatchMode = false;
+      }
+    },
+
+    // 批量审核请假申请
+    async batchReview(decision) {
+      if (this.isBatchProcessing || this.selectedLeaves.length === 0) return;
+
+      this.isBatchProcessing = true;
+
+      try {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+          alert('登录已过期，请重新登录');
+          this.$router.push('/');
+          return;
+        }
+
+        // 确认批量处理
+        const confirmMessage = `确定要批量${decision === 'approve' ? '通过' : '拒绝'} ${this.selectedLeaves.length} 条请假申请吗？`;
+        if (!confirm(confirmMessage)) {
+          this.isBatchProcessing = false;
+          return;
+        }
+
+        // 使用批量API处理选中的请假申请
+        const batchRes = await fetch(`${this.apiBaseUrl}/admin/absence/batch`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            decision: decision,
+            absence_ids: this.selectedLeaves
+          })
+        });
+
+        if (batchRes.ok) {
+          const result = await batchRes.json();
+          alert(result.message);
+
+          // 处理成功后重新加载数据
+          this.selectedLeaves = [];
+          this.loadAllUnprocessedLeaves();
+
+        } else {
+          const errorData = await batchRes.json();
+          alert(errorData.message || '批量处理失败');
+        }
+      } catch (error) {
+        console.error('批量处理请假申请失败:', error);
+        alert('网络错误，请稍后重试');
+      } finally {
+        this.isBatchProcessing = false;
+      }
+    },
+
+    // 分页相关方法
+    changeMyLeavesPage(page) {
+      if (page >= 1 && page <= this.pagination.myLeaves.pages) {
+        this.loadMyLeaves(page)
+      }
+    },
+
+    changeAdminLeavesPage(processed, page) {
+      let paginationKey, status;
+
+      // 根据标签页确定分页键和状态参数
+      if (this.leaveAdminTab === 'approved') {
+        paginationKey = 'approved';
+        status = 2; // 已通过
+      } else if (this.leaveAdminTab === 'rejected') {
+        paginationKey = 'rejected';
+        status = 1; // 已拒绝
+      } else {
+        paginationKey = processed ? 'processed' : 'unprocessed';
+        status = null; // 使用processed参数
+      }
+
+      if (page >= 1 && page <= this.pagination.adminLeaves[paginationKey].pages) {
+        // 对于approved和rejected标签页，使用status参数
+        if (status !== null) {
+          this.loadAdminLeaves(null, page, status);
+        } else {
+          // 对于其他标签页，保持原有逻辑
+          this.loadAdminLeaves(processed, page);
+        }
+      }
+    },
+
+    // 生成页码数组
+    generatePageNumbers(totalPages, currentPage, maxVisible = 5) {
+      const pages = []
+      let start = Math.max(1, currentPage - Math.floor(maxVisible / 2))
+      let end = Math.min(totalPages, start + maxVisible - 1)
+
+      if (end - start + 1 < maxVisible) {
+        start = Math.max(1, end - maxVisible + 1)
+      }
+
+      for (let i = start; i <= end; i++) {
+        pages.push(i)
+      }
+      return pages
+    },
+
+    // 重置分页到第一页
+    resetAndRecalculatePagination() {
+      if (this.leaveAdminTab === 'unprocessed') {
+        this.pagination.adminLeaves.unprocessed.currentPage = 1;
+        this.loadAdminLeaves(false, 1);
+      } else if (this.leaveAdminTab === 'approved') {
+        this.pagination.adminLeaves.approved.currentPage = 1;
+        this.loadAdminLeaves(null, 1, 2); // 已通过
+      } else if (this.leaveAdminTab === 'rejected') {
+        this.pagination.adminLeaves.rejected.currentPage = 1;
+        this.loadAdminLeaves(null, 1, 1); // 已拒绝
+      } else {
+        this.pagination.adminLeaves.processed.currentPage = 1;
+        this.loadAdminLeaves(true, 1);
       }
     },
 
@@ -1088,11 +1919,174 @@ export default {
     },
 
     getLeaveTypeLabel(type) {
-      const leaveType = this.leaveTypes.find(t => t.value === type)
-      return leaveType ? leaveType.label : '未知类型'
+      const leaveType = this.leaveTypes.find(t => t.value === type);
+      return leaveType ? leaveType.label : '未知类型';
     },
+    handlePageChange(newPage) {
+      this.currentPage = newPage; // 更新当前页码
+      this.loadEmployeesData(); // 重新加载数据
+    },
+
+    handlePageJump() {
+      // 确保跳转的页码在有效范围内
+      if (this.jumpToPage >= 1 && this.jumpToPage <= Math.ceil(this.totalEmployees / this.pageSize)) {
+        this.currentPage = this.jumpToPage;
+        this.loadEmployeesData();
+      } else {
+        alert("请输入有效的页码！");
+      }
+    },
+
+    renderAttendanceChart() {
+      const chartDom = document.getElementById('attendance-chart');
+      const myChart = echarts.init(chartDom);
+      const option = {
+        title: {
+          text: '本月考勤统计',
+          left: 'center'
+        },
+        tooltip: {
+          trigger: 'item'
+        },
+        legend: {
+          bottom: '0%',
+          left: 'center'
+        },
+        series: [
+          {
+            name: '考勤情况',
+            type: 'pie',
+            radius: '50%',
+            data: [
+              { value: this.dailyStats.actual_attendance, name: '实到人数' },
+              { value: this.dailyStats.late_count, name: '迟到人数' },
+              { value: this.dailyStats.early_leave_count, name: '早退人数' },
+              { value: this.dailyStats.normal_count, name: '正常人数' },
+              { value: this.dailyStats.should_attend - this.dailyStats.actual_attendance, name: '未到人数' }
+            ],
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.5)'
+              }
+            }
+          }
+        ]
+      };
+      option && myChart.setOption(option);
+    },
+
+    renderAttendanceCharts() {
+      // 检查数据是否加载完成
+      if (!this.dailyStats) {
+        console.error('dailyStats 数据未加载完成');
+        return;
+      }
+
+      // 图表 1: 实到人数和未到人数
+      const chartDom1 = document.getElementById('attendance-chart-1');
+      if (!chartDom1) {
+        console.error('attendance-chart-1 容器未找到');
+        return;
+      }
+      const chart1 = echarts.init(chartDom1);
+      const option1 = {
+        title: {
+          text: '实到人数与未到人数',
+          left: 'center'
+        },
+        tooltip: {
+          trigger: 'item'
+        },
+        legend: {
+          bottom: '0%',
+          left: 'center'
+        },
+        series: [
+          {
+            name: '考勤情况',
+            type: 'pie',
+            radius: '50%',
+            data: [
+              { value: this.dailyStats.actual_attendance, name: '实到人数' },
+              { value: this.dailyStats.should_attend - this.dailyStats.actual_attendance, name: '未到人数' }
+            ],
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.5)'
+              }
+            }
+          }
+        ]
+      };
+      chart1.setOption(option1);
+
+      // 图表 2: 正常、迟到、早退、请假人数
+      const chartDom2 = document.getElementById('attendance-chart-2');
+      if (!chartDom2) {
+        console.error('attendance-chart-2 容器未找到');
+        return;
+      }
+      const chart2 = echarts.init(chartDom2);
+      const option2 = {
+        title: {
+          text: '考勤详细统计',
+          left: 'center'
+        },
+        tooltip: {
+          trigger: 'item'
+        },
+        legend: {
+          bottom: '0%',
+          left: 'center'
+        },
+        series: [
+          {
+            name: '考勤情况',
+            type: 'pie',
+            radius: '50%',
+            data: [
+              { value: this.dailyStats.normal_count, name: '正常人数' },
+              { value: this.dailyStats.late_count, name: '迟到人数' },
+              { value: this.dailyStats.early_leave_count, name: '早退人数' },
+              { value: this.dailyStats.leave_count, name: '请假人数' }
+            ],
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.5)'
+              }
+            }
+          }
+        ]
+      };
+      chart2.setOption(option2);
+    }
+  },
+  computed: {
+    // 未处理的请假申请（直接返回后端返回的数据）
+    filteredUnprocessedLeaves() {
+      return this.adminLeavesUnprocessed;
+    },
+    // 已处理的请假申请（直接返回后端返回的数据）
+    filteredProcessedLeaves() {
+      return this.adminLeavesProcessed;
+    },
+    // 已通过的请假申请
+    filteredApprovedLeaves() {
+      return this.adminLeavesApproved;
+    },
+    // 已拒绝的请假申请
+    filteredRejectedLeaves() {
+      return this.adminLeavesRejected;
+    }
   }
 }
+
 </script>
 
 <style scoped>
@@ -1147,6 +2141,73 @@ export default {
   border: none;
   border-radius: 4px;
   cursor: pointer;
+}
+
+/* 分页样式 */
+.pagination {
+  margin-top: 12px;
+  /* 15px * 0.8 */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  /* 10px * 0.8 */
+}
+
+.pagination-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  /* 20px * 0.8 */
+  margin: 24px 0;
+  /* 30px * 0.8 */
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  /* 15px * 0.8 */
+}
+
+.pagination-btn {
+  padding: 4.8px 9.6px;
+  /* 6px * 0.8, 12px * 0.8 */
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.pagination-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.pagination-item {
+  padding: 4.8px 9.6px;
+  /* 6px * 0.8, 12px * 0.8 */
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.pagination-item:hover {
+  background: #f0f0f0;
+}
+
+.pagination-item.active {
+  background: #3498db;
+  color: white;
+}
+
+.pagination-info {
+  margin-left: 8px;
+  /* 10px * 0.8 */
+  color: #666;
 }
 
 .logout-btn:hover {
@@ -1382,10 +2443,13 @@ export default {
 }
 
 .leave-submit {
-  padding: 10px 20px;
+  padding: 8px 16px;
+  /* 10px * 0.8, 20px * 0.8 */
   font-size: 14px;
   background: #3498DB;
   color: #fff;
+  margin-top: 8px;
+  /* 10px * 0.8 */
 }
 
 .section-actions {
@@ -1436,6 +2500,28 @@ export default {
   background: #2980b9;
 }
 
+/* 批量处理按钮样式 */
+.batch-process-btn {
+  background: #3498db;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.3s;
+}
+
+.batch-process-btn:hover:not(:disabled) {
+  background: #2980b9;
+}
+
+.batch-process-btn:disabled {
+  background: #bdc3c7;
+  cursor: not-allowed;
+}
+
 .records-table .clock-btn,
 .detail-actions .clock-btn {
   padding: 10px 18px;
@@ -1469,12 +2555,15 @@ export default {
 
 .tab-switch {
   display: flex;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 9.6px;
+  /* 12px * 0.8 */
+  margin-bottom: 9.6px;
+  /* 12px * 0.8 */
 }
 
 .tab-switch button {
-  padding: 8px 12px;
+  padding: 6.4px 9.6px;
+  /* 8px * 0.8, 12px * 0.8 */
   border: 1px solid #ddd;
   border-radius: 4px;
   background: #fff;
@@ -1484,6 +2573,42 @@ export default {
 .tab-switch button.active {
   background: #3498db;
   color: #fff;
+}
+
+.batch-confirm-area {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 16px 0;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.batch-confirm-btn {
+  padding: 8px 16px;
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.batch-confirm-btn:hover:not(:disabled) {
+  background: #2980b9;
+}
+
+.batch-confirm-btn:disabled {
+  background: #bdc3c7;
+  cursor: not-allowed;
+}
+
+.batch-selected-info {
+  color: #666;
+  font-size: 14px;
 }
 
 .detail-actions {
@@ -1519,6 +2644,55 @@ export default {
 
 .records-table td .clock-btn+.clock-btn {
   margin-left: 16px;
+}
+
+/* 批量处理按钮样式 */
+.batch-btn {
+  padding: 6.4px 12.8px;
+  /* 8px * 0.8, 16px * 0.8 */
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  margin-left: 8px;
+  /* 10px * 0.8 */
+}
+
+.batch-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.batch-approve {
+  background: #28a745;
+  color: white;
+}
+
+.batch-approve:hover:not(:disabled) {
+  background: #218838;
+}
+
+.batch-reject {
+  background: #dc3545;
+  color: white;
+}
+
+.batch-reject:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.batch-processing {
+  background: #6c757d;
+  color: white;
+}
+
+.batch-exit {
+  background: #6c757d;
+  color: white;
+}
+
+.batch-exit:hover:not(:disabled) {
+  background: #5a6268;
 }
 
 /* 人脸录入样式 */
@@ -1597,96 +2771,63 @@ export default {
   font-size: 14px;
 }
 
-/* 人脸审核特定样式 */
-.face-image-preview {
-  width: 60px;
-  height: 60px;
+/* 请假事由列样式 */
+.reason-cell {
+  cursor: pointer;
+  color: #007bff;
+}
+
+.reason-cell:hover {
+  text-decoration: underline;
+}
+
+/* 请假表单控件样式 */
+.leave-form input[type="datetime-local"],
+.leave-form textarea,
+.leave-form select {
+  width: 100%;
+  padding: 4px;
+  margin:4px 0 8px 0;
+  border: 1px solid #ddd;
   border-radius: 4px;
-  overflow: hidden;
-  cursor: pointer;
-  border: 1px solid #e1e8ed;
+  font-size: 14px;
+  box-sizing: border-box;
+  background-color: #fff;
 }
 
-.preview-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.2s;
+.leave-form input[type="datetime-local"]:focus,
+.leave-form textarea:focus,
+.leave-form select:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 1.92px rgba(52, 152, 219, 0.2);
+  /* 2.4px * 0.8 */
 }
 
-.preview-image:hover {
-  transform: scale(1.1);
-}
-
-/* 图片预览模态框 */
-.image-preview-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  position: relative;
-  max-width: 90%;
-  max-height: 90%;
-}
-
-.modal-content img {
-  max-width: 100%;
-  max-height: 90vh;
-  border-radius: 8px;
-}
-
-.close-btn {
-  position: absolute;
-  top: -40px;
-  right: 0;
-  background: none;
-  border: none;
-  color: white;
-  font-size: 30px;
-  cursor: pointer;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* 人脸审核状态样式 */
-.status-pending {
-  color: #f39c12;
+.leave-form label {
+  display: block;
+  margin-top: 7.68px;
+  /* 9.6px * 0.8 */
   font-weight: 500;
+  color: #333;
 }
 
-.status-approved {
-  color: #27ae60;
-  font-weight: 500;
+/* 管理员页面筛选控件样式 */
+.filter-controls select {
+  width: 150%;
+  /* 增加为原本的1.5倍 */
+  padding: 6.4px;
+  /* 8px * 0.8 */
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
 }
 
-.status-rejected {
-  color: #e74c3c;
-  font-weight: 500;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 40px;
-  color: #7f8c8d;
-  font-style: italic;
-}
-
-.loading-state {
-  text-align: center;
-  padding: 40px;
-  color: #3498db;
-  font-style: italic;
+.filter-controls input[type="text"] {
+  padding: 6.4px;
+  /* 8px * 0.8 */
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
 }
 </style>

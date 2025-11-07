@@ -28,6 +28,7 @@ CREATE TABLE `absence`  (
   `end_time` datetime NOT NULL,
   `status` tinyint NOT NULL COMMENT '0未读 1拒绝 2通过',
   `reason` text NOT NULL,
+  `absence_type` tinyint NOT NULL DEFAULT 0 COMMENT '0:病假, 1:私事请假, 2:公事请假',
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `absence_user`(`user_id` ASC) USING BTREE,
   CONSTRAINT `absence_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
