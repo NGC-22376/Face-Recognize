@@ -15,3 +15,5 @@ vue:
 npm create vite@latest face-checkin --template vue
 cd face-checkin
 npm i element-plus axios @element-plus/icons-vue
+
+#为了pr
