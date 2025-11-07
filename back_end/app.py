@@ -20,9 +20,9 @@ app.config["SQLALCHEMY_DATABASE_URI"] = (
 )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-app.config["SECRET_KEY"] = "test"  # 可以自定义，建议复杂一点
-app.config["JWT_SECRET_KEY"] = "testtest"  # 可以自定义，建议复杂一点
-app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False  # 设置token不过期（开发环境）
+app.config['SECRET_KEY'] = 'test' 
+app.config['JWT_SECRET_KEY'] = 'testtest' 
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  
 
 # 创建中国时区对象（UTC+8）
 SHANGHAI_TZ = pytz.timezone("Asia/Shanghai")
@@ -34,6 +34,7 @@ db = SQLAlchemy(app)
 
 # 导入路由模块（在应用配置完成后导入，确保路由正确注册）
 from routes import *
+from face import *
 
 if __name__ == "__main__":
     # 测试数据库连接

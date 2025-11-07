@@ -17,7 +17,7 @@ DB_USER = os.getenv('DB_USER', 'root')
 DB_PASSWORD = os.getenv('DB_PASS', '456729') # 请确保替换为你的密码
 DB_NAME = 'face_rec'
 
-bcrypt = Bcrypt()
+# 稍后在应用上下文中初始化bcrypt
 
 def create_database():
     """创建数据库 (如果不存在)"""
@@ -34,6 +34,7 @@ def create_database():
 
 def create_tables_with_sqlalchemy():
     """使用 SQLAlchemy 创建所有表"""
+    """使用 SQLAlchemy 创建所有表"""
     try:
         with app.app_context():
             print("正在删除旧表并创建新表...")
@@ -43,6 +44,7 @@ def create_tables_with_sqlalchemy():
             return True
     except Exception as e:
         print(f"使用 SQLAlchemy 创建表失败: {e}")
+        print(f"使用 SQLAlchemy 创建表失败: {e}")
         return False
 
 def insert_test_data():
@@ -51,6 +53,11 @@ def insert_test_data():
         with app.app_context():
             print("正在预计算哈希值...")
             admin_password = bcrypt.generate_password_hash('admin123').decode('utf-8')
+            common_password = bcrypt.generate_password_hash('123456').decode('utf-8')
+            employee_answer_1_hashed = bcrypt.generate_password_hash('000000').decode('utf-8')
+            employee_answer_2_hashed = bcrypt.generate_password_hash('技术部').decode('utf-8')
+            employee_answer_3_hashed = bcrypt.generate_password_hash('软件工程').decode('utf-8')
+            
             common_password = bcrypt.generate_password_hash('123456').decode('utf-8')
             employee_answer_1_hashed = bcrypt.generate_password_hash('000000').decode('utf-8')
             employee_answer_2_hashed = bcrypt.generate_password_hash('技术部').decode('utf-8')

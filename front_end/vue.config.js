@@ -1,19 +1,20 @@
-const { defineConfig } = require('@vue/cli-service')
+
+const { defineConfig } = require('@vue/cli-service');
+
 module.exports = defineConfig({
   devServer: {
     proxy: {
-      '/login': {
+      '/api': {
         target: 'http://127.0.0.1:5000',
-        changeOrigin: true
-      },
-      '/register': {
-        target: 'http://127.0.0.1:5000',
-        changeOrigin: true
+        changeOrigin: true, 
+        ws: true, 
+        pathRewrite: {
+          '^/api': '' 
+        }
       }
     }
   },
   publicPath: '/',
-  // 使用重命名后的模板文件
   pages: {
     index: {
       entry: 'src/main.js',
@@ -22,4 +23,4 @@ module.exports = defineConfig({
       title: 'Face Recognition System'
     }
   }
-})
+});
