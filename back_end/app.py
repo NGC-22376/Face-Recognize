@@ -6,8 +6,8 @@ import pytz
 from sqlalchemy import create_engine  # 用于数据库连接测
 
 app = Flask(__name__)
-# 配置CORS，允许所有来源的请求和所有方法
-CORS(app, resources={"/*": {"origins": "*", "allow_headers": "*", "methods": ["GET", "POST", "OPTIONS", "PUT", "DELETE"]}})
+# 配置CORS，允许所有来源的请求和所有方法，包括PATCH
+CORS(app, resources={"/*": {"origins": "*", "allow_headers": "*", "methods": ["GET", "POST", "OPTIONS", "PUT", "DELETE", "PATCH"]}})
 
 db_user = os.getenv("DB_USER","root")
 db_pass = os.getenv("DB_PASS","456729")
