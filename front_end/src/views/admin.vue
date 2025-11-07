@@ -545,6 +545,10 @@ export default {
       // 筛选相关字段
       nameFilter: '',
       typeFilter: -1, // -1表示全部类型
+      currentPage: 1,
+      pageSize: 10,
+      totalEmployees: 0,
+      jumpToPage:1,
       // 分页相关数据
       pagination: {
         myLeaves: {
