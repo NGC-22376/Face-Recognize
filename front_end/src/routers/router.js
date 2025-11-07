@@ -24,7 +24,7 @@ const routes = [
   },
   {
     path: '/face-register',
-    name: 'FaceRegisterPage',
+    name: 'FaceRegister',
     component: FaceRegister,
     meta: { requiresAuth: false }
   },

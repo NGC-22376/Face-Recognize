@@ -34,6 +34,7 @@ db = SQLAlchemy(app)
 
 # 导入路由模块（在应用配置完成后导入，确保路由正确注册）
 from routes import *
+from face import *
 
 if __name__ == "__main__":
     # 测试数据库连接

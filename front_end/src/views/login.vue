@@ -122,16 +122,14 @@ export default {
         });
         const data = await res.json();
         if (res.ok) {
-          this.message = '注册成功，下一步将跳转录入人脸信息...';
-          await new Promise(resolve => setTimeout(resolve, 500));
-          console.log("注册返回的用户信息:", JSON.stringify(data.user));
-          this.$router.push({
-            path: '/face-register',
-            query: {
-              userInfo: JSON.stringify(data.user),
-              register: 'true'
-            }
-          });
+          this.message = '注册成功，请登录';
+          // 清空注册表单
+          this.registerForm = {
+            name: '',
+            account: '',
+            password: '',
+            role: '员工'
+          };
           this.isLogin = true;
         } else {
           this.message = data.message || '注册失败';
