@@ -9,8 +9,8 @@ app = Flask(__name__)
 # 配置CORS，允许所有来源的请求和所有方法
 CORS(app, resources={"/*": {"origins": "*", "allow_headers": "*", "methods": ["GET", "POST", "OPTIONS", "PUT", "DELETE"]}})
 
-db_user = os.getenv("DB_USER")
-db_pass = os.getenv("DB_PASS")
+db_user = os.getenv("DB_USER","root")
+db_pass = os.getenv("DB_PASS","456729")
 db_host = os.getenv("DB_HOST", "localhost")
 
 
@@ -35,6 +35,7 @@ db = SQLAlchemy(app)
 # 导入路由模块（在应用配置完成后导入，确保路由正确注册）
 from routes import *
 from face import *
+from face_verification import *
 
 if __name__ == "__main__":
     # 测试数据库连接
