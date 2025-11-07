@@ -7,7 +7,7 @@
 """
 
 from app import app, db
-from models import User, Attendance
+from models import User, Attendance, Absence
 from flask_bcrypt import Bcrypt
 from datetime import datetime, timedelta
 import random
@@ -35,6 +35,9 @@ def init_database():
 
         # 创建测试考勤数据
         create_test_attendance()
+        
+        # 创建测试请假数据
+        create_test_absences()
 
         print("测试数据插入完成！")
 
@@ -131,6 +134,49 @@ def create_test_attendance():
 
     db.session.commit()
     print("测试考勤数据创建完成")
+
+
+def create_test_absences():
+    """创建测试请假数据"""
+    users = User.query.filter_by(role="员工").all()
+    
+    # 为部分员工创建测试请假记录
+    for user in users:
+        # 50%的概率创建请假记录
+        if random.random() < 0.5:
+            # 创建1-3条请假记录
+            for _ in range(random.randint(1, 3)):
+                # 随机选择请假时间（过去30天内）
+                days_ago = random.randint(1, 30)
+                start_date = datetime.now(SHANGHAI_TZ) - timedelta(days=days_ago)
+                
+                # 随机请假时长（1-3天）
+                duration = random.randint(1, 3)
+                end_date = start_date + timedelta(days=duration)
+                
+                # 随机请假类型和状态
+                absence_type = random.randint(0, 2)  # 0病假 1私事请假 2公事请假
+                status = random.randint(0, 2)  # 0未审批 1已拒绝 2已通过
+                
+                # 根据请假类型设置不同的请假原因
+                reasons = {
+                    0: "身体不适，需要休息",
+                    1: "家里有事需要处理",
+                    2: "参加公司安排的培训"
+                }
+                
+                absence = Absence(
+                    user_id=user.user_id,
+                    start_time=start_date,
+                    end_time=end_date,
+                    reason=reasons[absence_type],
+                    status=status,
+                    absence_type=absence_type
+                )
+                db.session.add(absence)
+    
+    db.session.commit()
+    print("测试请假数据创建完成")
 
 
 if __name__ == "__main__":

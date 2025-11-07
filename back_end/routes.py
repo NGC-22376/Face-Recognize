@@ -1,17 +1,13 @@
 from flask import request, jsonify
 from app import app, db, SHANGHAI_TZ
-from models import User, Attendance, Face
+from models import User, Attendance, Face, Absence
 from flask_bcrypt import Bcrypt
-from flask_jwt_extended import (JWTManager,create_access_token,jwt_required,get_jwt_identity, get_jwt)
-from datetime import datetime, date,timedelta
+from flask_jwt_extended import (JWTManager, create_access_token, jwt_required, get_jwt_identity, get_jwt)
+from datetime import datetime, date, timedelta
 from sqlalchemy import func, and_, extract
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
 import face_recognition as fr
 import numpy as np
 import os
-from models import Absence
-from datetime import timedelta
 import uuid
 import re
 

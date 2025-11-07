@@ -21,7 +21,7 @@ DB_USER = os.getenv('DB_USER', 'root')
 DB_PASSWORD = os.getenv('DB_PASS', '456729') # 请确保替换为你的密码
 DB_NAME = 'face_rec'
 
-bcrypt = Bcrypt()
+# 稍后在应用上下文中初始化bcrypt
 
 def create_database():
     """创建数据库 (如果不存在)"""
@@ -53,6 +53,8 @@ def insert_test_data():
     """插入用户测试数据"""
     try:
         with app.app_context():
+            # 在应用上下文中初始化bcrypt
+            bcrypt = Bcrypt(app)
             print("正在预计算哈希值...")
             admin_password = bcrypt.generate_password_hash('admin123').decode('utf-8')
             common_password = bcrypt.generate_password_hash('123456').decode('utf-8')
@@ -213,11 +215,13 @@ def main():
     if not create_database():
         return
     
-    if create_tables_with_sqlalchemy():
-        if insert_test_data():
-            insert_attendance_data()
-    else:
-        print("因为表创建失败，所以无法插入测试数据。")
+    # 确保所有数据库操作都在应用上下文中执行
+    with app.app_context():
+        if create_tables_with_sqlalchemy():
+            if insert_test_data():
+                insert_attendance_data()
+        else:
+            print("因为表创建失败，所以无法插入测试数据。")
 
     print("\n" + "="*40)
     print("数据库设置完成！")
