@@ -27,13 +27,16 @@
             @click="setActiveTab('employees')">
             <span>👥</span> 员工考勤
           </div>
-          <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'personal' }" @click="setActiveTab('personal')">
+          <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'personal' }"
+            @click="setActiveTab('personal')">
             <span>👤</span> 个人考勤
           </div>
-          <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'clock' }" @click="setActiveTab('clock')">
+          <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'clock' }"
+            @click="setActiveTab('clock')">
             <span>⏰</span> 打卡
           </div>
-          <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'face_register' }" @click="setActiveTab('face_register')">
+          <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'face_register' }"
+            @click="setActiveTab('face_register')">
             <span>📷</span> 人脸录入
           </div>
           <div class="nav-item" :class="{ active: activeTab === 'leave' }" @click="setActiveTab('leave')">
@@ -144,19 +147,14 @@
           <div class="pagination-controls" v-if="totalEmployees > 0">
             <button :disabled="currentPage === 1" @click="handlePageChange(currentPage - 1)">上一页</button>
             <span>第 {{ currentPage }} 页 / 共 {{ Math.ceil(totalEmployees / pageSize) }} 页</span>
-            <button :disabled="currentPage === Math.ceil(totalEmployees / pageSize)" @click="handlePageChange(currentPage + 1)">下一页</button>
-            
+            <button :disabled="currentPage === Math.ceil(totalEmployees / pageSize)"
+              @click="handlePageChange(currentPage + 1)">下一页</button>
+
           </div>
           <div class="pagination-controls" v-if="totalEmployees > 0">
             <span>跳转到第</span>
-            <input
-              type="number"
-              v-model.number="jumpToPage"
-              placeholder="跳转页码"
-              min="1"
-              :max="Math.ceil(totalEmployees / pageSize)"
-              style="width: 60px; text-align: center; margin: 0 8px;"
-            />
+            <input type="number" v-model.number="jumpToPage" placeholder="跳转页码" min="1"
+              :max="Math.ceil(totalEmployees / pageSize)" style="width: 60px; text-align: center; margin: 0 8px;" />
             <span>页</span>
             <button @click="handlePageJump">跳转</button>
           </div>
@@ -301,36 +299,28 @@
                   </tr>
                 </tbody>
               </table>
-              
+
               <!-- 分页控件 -->
               <div class="pagination" v-if="pagination.myLeaves.total > 0">
-                <button 
-                  @click="changeMyLeavesPage(pagination.myLeaves.currentPage - 1)" 
-                  :disabled="pagination.myLeaves.currentPage === 1"
-                  class="pagination-btn"
-                >
+                <button @click="changeMyLeavesPage(pagination.myLeaves.currentPage - 1)"
+                  :disabled="pagination.myLeaves.currentPage === 1" class="pagination-btn">
                   上一页
                 </button>
-                
-                <span 
-                  v-for="page in generatePageNumbers(pagination.myLeaves.pages, pagination.myLeaves.currentPage)" 
-                  :key="page"
-                  @click="changeMyLeavesPage(page)"
-                  :class="['pagination-item', { active: page === pagination.myLeaves.currentPage }]"
-                >
+
+                <span v-for="page in generatePageNumbers(pagination.myLeaves.pages, pagination.myLeaves.currentPage)"
+                  :key="page" @click="changeMyLeavesPage(page)"
+                  :class="['pagination-item', { active: page === pagination.myLeaves.currentPage }]">
                   {{ page }}
                 </span>
-                
-                <button 
-                  @click="changeMyLeavesPage(pagination.myLeaves.currentPage + 1)" 
-                  :disabled="pagination.myLeaves.currentPage === pagination.myLeaves.pages"
-                  class="pagination-btn"
-                >
+
+                <button @click="changeMyLeavesPage(pagination.myLeaves.currentPage + 1)"
+                  :disabled="pagination.myLeaves.currentPage === pagination.myLeaves.pages" class="pagination-btn">
                   下一页
                 </button>
-                
+
                 <span class="pagination-info">
-                  共 {{ pagination.myLeaves.total }} 条记录，第 {{ pagination.myLeaves.currentPage }} / {{ pagination.myLeaves.pages }} 页
+                  共 {{ pagination.myLeaves.total }} 条记录，第 {{ pagination.myLeaves.currentPage }} / {{
+                    pagination.myLeaves.pages }} 页
                 </span>
               </div>
             </div>
@@ -340,82 +330,107 @@
             <div class="tab-switch">
               <button :class="{ active: leaveAdminTab === 'unprocessed' }"
                 @click="leaveAdminTab = 'unprocessed'; loadAdminLeaves(false)">未处理</button>
-              <button :class="{ active: leaveAdminTab === 'processed' }"
-                @click="leaveAdminTab = 'processed'; loadAdminLeaves(true, 1)">已处理</button>
+              <button :class="{ active: leaveAdminTab === 'approved' }"
+                @click="leaveAdminTab = 'approved'; loadAdminLeaves(null, 1, 2)">已通过</button>
+              <button :class="{ active: leaveAdminTab === 'rejected' }"
+                @click="leaveAdminTab = 'rejected'; loadAdminLeaves(null, 1, 1)">已拒绝</button>
             </div>
 
             <!-- 筛选控件 -->
-            <div class="filter-controls" style="margin: 15px 0;">
-              <input type="text" v-model="nameFilter" placeholder="搜索姓名" style="margin-right: 10px; padding: 5px;" />
-              <select v-model="typeFilter" style="padding: 5px;">
-                <option value="-1">全部类型</option>
-                <option v-for="type in leaveTypes" :key="type.value" :value="type.value">{{ type.label }}</option>
-              </select>
+            <div class="filter-controls"
+              style="margin: 15px 0; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <input type="text" v-model="nameFilter" placeholder="搜索姓名" style="margin-right: 10px; padding: 5px;" />
+                <select v-model="typeFilter" style="padding: 5px;">
+                  <option value="-1">全部类型</option>
+                  <option v-for="type in leaveTypes" :key="type.value" :value="type.value">{{ type.label }}</option>
+                </select>
+              </div>
+              <div v-if="leaveAdminTab === 'unprocessed'">
+                <button class="batch-process-btn" @click="toggleBatchMode" v-if="!isBatchMode">
+                  批量处理
+                </button>
+                <div v-else style="display: flex; gap: 10px;">
+                  <button class="batch-btn batch-approve" @click="batchReview('approve')"
+                    :disabled="isBatchProcessing || selectedLeaves.length === 0">
+                    {{ isBatchProcessing ? '处理中' : '批量通过' }}
+                  </button>
+                  <button class="batch-btn batch-reject" @click="batchReview('reject')"
+                    :disabled="isBatchProcessing || selectedLeaves.length === 0">
+                    {{ isBatchProcessing ? '处理中' : '批量拒绝' }}
+                  </button>
+                  <button class="batch-btn batch-exit" @click="toggleBatchMode">
+                    退出
+                  </button>
+                </div>
+              </div>
             </div>
 
+            <!-- 未处理标签页内容 -->
             <div class="records-table" v-if="leaveAdminTab === 'unprocessed'">
               <table>
                 <thead>
                   <tr>
+                    <th v-if="!isBatchMode">操作</th>
+                    <th v-else>选择</th>
                     <th>姓名</th>
                     <th>工号</th>
                     <th>起始时间</th>
                     <th>结束时间</th>
                     <th>事由</th>
                     <th>请假类型</th>
-                    <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in filteredUnprocessedLeaves" :key="item.id" @click="selectedLeave = item">
+                  <tr v-for="item in filteredUnprocessedLeaves" :key="item.id">
                     <td>{{ item.name }}</td>
                     <td>{{ item.account }}</td>
                     <td>{{ formatDateTime(item.start_time) }}</td>
                     <td>{{ formatDateTime(item.end_time) }}</td>
-                    <td>{{ item.reason }}</td>
+                    <td @click="selectedLeave = item" class="reason-cell">{{ item.reason }}</td>
                     <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
-                    <td>
+                    <td v-if="!isBatchMode">
                       <button class="clock-btn clock-in" @click.stop="reviewLeave(item.id, 'approve')">通过</button>
                       <button class="clock-btn clock-out" @click.stop="reviewLeave(item.id, 'reject')">拒绝</button>
+                    </td>
+                    <td v-else>
+                      <input type="checkbox" v-model="selectedLeaves" :value="item.id" class="batch-checkbox">
                     </td>
                   </tr>
                 </tbody>
               </table>
-              
-              <!-- 分页控件 -->
-              <div class="pagination" v-if="pagination.adminLeaves.unprocessed.total > 0">
-                <button 
-                  @click="changeAdminLeavesPage(false, Math.max(1, pagination.adminLeaves.unprocessed.currentPage - 1))" 
-                  :disabled="pagination.adminLeaves.unprocessed.currentPage === 1"
-                  class="pagination-btn"
-                >
+
+              <!-- 未处理分页控件 -->
+              <div class="pagination" v-if="pagination.adminLeaves.unprocessed.total > 0 && !isBatchMode">
+                <button
+                  @click="changeAdminLeavesPage(false, Math.max(1, pagination.adminLeaves.unprocessed.currentPage - 1))"
+                  :disabled="pagination.adminLeaves.unprocessed.currentPage === 1" class="pagination-btn">
                   上一页
                 </button>
-                
-                <span 
-                  v-for="page in generatePageNumbers(pagination.adminLeaves.unprocessed.pages, pagination.adminLeaves.unprocessed.currentPage)" 
-                  :key="page"
-                  @click="changeAdminLeavesPage(false, page)"
-                  :class="['pagination-item', { active: page === pagination.adminLeaves.unprocessed.currentPage }]"
-                >
+
+                <span
+                  v-for="page in generatePageNumbers(pagination.adminLeaves.unprocessed.pages, pagination.adminLeaves.unprocessed.currentPage)"
+                  :key="page" @click="changeAdminLeavesPage(false, page)"
+                  :class="['pagination-item', { active: page === pagination.adminLeaves.unprocessed.currentPage }]">
                   {{ page }}
                 </span>
-                
-                <button 
-                  @click="changeAdminLeavesPage(false, Math.min(pagination.adminLeaves.unprocessed.pages, pagination.adminLeaves.unprocessed.currentPage + 1))" 
+
+                <button
+                  @click="changeAdminLeavesPage(false, Math.min(pagination.adminLeaves.unprocessed.pages, pagination.adminLeaves.unprocessed.currentPage + 1))"
                   :disabled="pagination.adminLeaves.unprocessed.currentPage === pagination.adminLeaves.unprocessed.pages"
-                  class="pagination-btn"
-                >
+                  class="pagination-btn">
                   下一页
                 </button>
-                
+
                 <span class="pagination-info">
-                  共筛选到 {{ pagination.adminLeaves.unprocessed.total }} 条记录，第 {{ pagination.adminLeaves.unprocessed.currentPage }} / {{ pagination.adminLeaves.unprocessed.pages }} 页
+                  共筛选到 {{ pagination.adminLeaves.unprocessed.total }} 条记录，第 {{
+                    pagination.adminLeaves.unprocessed.currentPage }} / {{ pagination.adminLeaves.unprocessed.pages }} 页
                 </span>
               </div>
             </div>
 
-            <div class="records-table" v-else>
+            <!-- 已通过标签页内容 -->
+            <div class="records-table" v-else-if="leaveAdminTab === 'approved'">
               <table>
                 <thead>
                   <tr>
@@ -429,7 +444,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in filteredProcessedLeaves" :key="item.id">
+                  <tr v-for="item in filteredApprovedLeaves" :key="item.id">
                     <td>{{ item.name }}</td>
                     <td>{{ item.account }}</td>
                     <td>{{ formatDateTime(item.start_time) }}</td>
@@ -440,36 +455,88 @@
                   </tr>
                 </tbody>
               </table>
-              
-              <!-- 分页控件 -->
-              <div class="pagination" v-if="pagination.adminLeaves.processed.total > 0">
-                <button 
-                  @click="changeAdminLeavesPage(true, Math.max(1, pagination.adminLeaves.processed.currentPage - 1))" 
-                  :disabled="pagination.adminLeaves.processed.currentPage === 1"
-                  class="pagination-btn"
-                >
+
+              <!-- 已通过分页控件 -->
+              <div class="pagination" v-if="pagination.adminLeaves.approved.total > 0 && !isBatchMode">
+                <button
+                  @click="changeAdminLeavesPage('approved', Math.max(1, pagination.adminLeaves.approved.currentPage - 1))"
+                  :disabled="pagination.adminLeaves.approved.currentPage === 1" class="pagination-btn">
                   上一页
                 </button>
-                
-                <span 
-                  v-for="page in generatePageNumbers(pagination.adminLeaves.processed.pages, pagination.adminLeaves.processed.currentPage)" 
-                  :key="page"
-                  @click="changeAdminLeavesPage(true, page)"
-                  :class="['pagination-item', { active: page === pagination.adminLeaves.processed.currentPage }]"
-                >
+
+                <span
+                  v-for="page in generatePageNumbers(pagination.adminLeaves.approved.pages, pagination.adminLeaves.approved.currentPage)"
+                  :key="page" @click="changeAdminLeavesPage('approved', page)"
+                  :class="['pagination-item', { active: page === pagination.adminLeaves.approved.currentPage }]">
                   {{ page }}
                 </span>
-                
-                <button 
-                  @click="changeAdminLeavesPage(true, Math.min(pagination.adminLeaves.processed.pages, pagination.adminLeaves.processed.currentPage + 1))" 
-                  :disabled="pagination.adminLeaves.processed.currentPage === pagination.adminLeaves.processed.pages"
-                  class="pagination-btn"
-                >
+
+                <button
+                  @click="changeAdminLeavesPage('approved', Math.min(pagination.adminLeaves.approved.pages, pagination.adminLeaves.approved.currentPage + 1))"
+                  :disabled="pagination.adminLeaves.approved.currentPage === pagination.adminLeaves.approved.pages"
+                  class="pagination-btn">
                   下一页
                 </button>
-                
+
                 <span class="pagination-info">
-                  共筛选到 {{ pagination.adminLeaves.processed.total }} 条记录，第 {{ pagination.adminLeaves.processed.currentPage }} / {{ pagination.adminLeaves.processed.pages }} 页
+                  共筛选到 {{ pagination.adminLeaves.approved.total }} 条记录，第 {{
+                    pagination.adminLeaves.approved.currentPage }} / {{ pagination.adminLeaves.approved.pages }} 页
+                </span>
+              </div>
+            </div>
+
+            <!-- 已拒绝标签页内容 -->
+            <div class="records-table" v-else-if="leaveAdminTab === 'rejected'">
+              <table>
+                <thead>
+                  <tr>
+                    <th>姓名</th>
+                    <th>工号</th>
+                    <th>起始时间</th>
+                    <th>结束时间</th>
+                    <th>事由</th>
+                    <th>请假类型</th>
+                    <th>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in filteredRejectedLeaves" :key="item.id">
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.account }}</td>
+                    <td>{{ formatDateTime(item.start_time) }}</td>
+                    <td>{{ formatDateTime(item.end_time) }}</td>
+                    <td>{{ item.reason }}</td>
+                    <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
+                    <td>{{ statusMap[item.status] || item.status }}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <!-- 已拒绝分页控件 -->
+              <div class="pagination" v-if="pagination.adminLeaves.rejected.total > 0 && !isBatchMode">
+                <button
+                  @click="changeAdminLeavesPage('rejected', Math.max(1, pagination.adminLeaves.rejected.currentPage - 1))"
+                  :disabled="pagination.adminLeaves.rejected.currentPage === 1" class="pagination-btn">
+                  上一页
+                </button>
+
+                <span
+                  v-for="page in generatePageNumbers(pagination.adminLeaves.rejected.pages, pagination.adminLeaves.rejected.currentPage)"
+                  :key="page" @click="changeAdminLeavesPage('rejected', page)"
+                  :class="['pagination-item', { active: page === pagination.adminLeaves.rejected.currentPage }]">
+                  {{ page }}
+                </span>
+
+                <button
+                  @click="changeAdminLeavesPage('rejected', Math.min(pagination.adminLeaves.rejected.pages, pagination.adminLeaves.rejected.currentPage + 1))"
+                  :disabled="pagination.adminLeaves.rejected.currentPage === pagination.adminLeaves.rejected.pages"
+                  class="pagination-btn">
+                  下一页
+                </button>
+
+                <span class="pagination-info">
+                  共筛选到 {{ pagination.adminLeaves.rejected.total }} 条记录，第 {{
+                    pagination.adminLeaves.rejected.currentPage }} / {{ pagination.adminLeaves.rejected.pages }} 页
                 </span>
               </div>
             </div>
@@ -541,6 +608,8 @@ export default {
       leaveAdminTab: 'unprocessed',
       adminLeavesUnprocessed: [],
       adminLeavesProcessed: [],
+      adminLeavesApproved: [],  // 已通过的请假申请
+      adminLeavesRejected: [],  // 已拒绝的请假申请
       selectedLeave: null,
       // 筛选相关字段
       nameFilter: '',
@@ -548,7 +617,7 @@ export default {
       currentPage: 1,
       pageSize: 10,
       totalEmployees: 0,
-      jumpToPage:1,
+      jumpToPage: 1,
       // 分页相关数据
       pagination: {
         myLeaves: {
@@ -569,9 +638,25 @@ export default {
             total: 0,
             pages: 0,
             perPage: 10
+          },
+          approved: {
+            currentPage: 1,
+            total: 0,
+            pages: 0,
+            perPage: 10
+          },
+          rejected: {
+            currentPage: 1,
+            total: 0,
+            pages: 0,
+            perPage: 10
           }
         }
-      }
+      },
+      // 批量处理相关状态
+      isBatchProcessing: false,
+      isBatchMode: false,
+      selectedLeaves: [] // 选中的请假申请ID数组
     }
   },
   watch: {
@@ -623,6 +708,10 @@ export default {
     resetPagination() {
       if (this.leaveAdminTab === 'unprocessed') {
         this.pagination.adminLeaves.unprocessed.currentPage = 1;
+      } else if (this.leaveAdminTab === 'approved') {
+        this.pagination.adminLeaves.approved.currentPage = 1;
+      } else if (this.leaveAdminTab === 'rejected') {
+        this.pagination.adminLeaves.rejected.currentPage = 1;
       } else {
         this.pagination.adminLeaves.processed.currentPage = 1;
       }
@@ -694,7 +783,7 @@ export default {
 
     async loadEmployeesData() {
       // 增加加载状态
-      this.isLoading = true; 
+      this.isLoading = true;
       try {
         const token = localStorage.getItem('access_token');
         const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}&page=${this.currentPage}&page_size=${this.pageSize}`, {
@@ -826,12 +915,21 @@ export default {
       } catch (e) { console.error(e) }
     },
 
-    async loadAdminLeaves(processed, page = 1) {
+    async loadAdminLeaves(processed, page = 1, status = null) {
       try {
         const token = localStorage.getItem('access_token')
         // 构建查询参数
-        let queryParams = `processed=${processed ? 'true' : 'false'}&page=${page}`
-        
+        let queryParams = `page=${page}`
+
+        // 根据status参数决定查询条件
+        if (status !== null) {
+          // 按具体状态查询（已通过/已拒绝）
+          queryParams += `&status=${status}`
+        } else {
+          // 兼容旧的processed参数
+          queryParams += `&processed=${processed ? 'true' : 'false'}`
+        }
+
         // 添加过滤参数
         if (this.nameFilter) {
           queryParams += `&name=${encodeURIComponent(this.nameFilter)}`
@@ -839,14 +937,31 @@ export default {
         if (this.typeFilter !== -1 && this.typeFilter !== '-1') {
           queryParams += `&absence_type=${this.typeFilter}`
         }
-        
+
         // 使用后端分页和过滤，每页5条记录
         const res = await fetch(`${this.apiBaseUrl}/admin/absence?${queryParams}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
         const data = await res.json()
         if (res.ok) {
-          if (processed) {
+          if (status === 2) {
+            // 已通过的请假申请
+            this.adminLeavesApproved = data.absences || []
+            // 使用后端返回的分页信息
+            this.pagination.adminLeaves.approved.currentPage = data.current_page || 1
+            this.pagination.adminLeaves.approved.total = data.total || 0
+            this.pagination.adminLeaves.approved.pages = data.pages || 0
+            this.pagination.adminLeaves.approved.perPage = data.per_page || 5
+          } else if (status === 1) {
+            // 已拒绝的请假申请
+            this.adminLeavesRejected = data.absences || []
+            // 使用后端返回的分页信息
+            this.pagination.adminLeaves.rejected.currentPage = data.current_page || 1
+            this.pagination.adminLeaves.rejected.total = data.total || 0
+            this.pagination.adminLeaves.rejected.pages = data.pages || 0
+            this.pagination.adminLeaves.rejected.perPage = data.per_page || 5
+          } else if (processed) {
+            // 旧的已处理逻辑（兼容）
             this.adminLeavesProcessed = data.absences || []
             // 使用后端返回的分页信息
             this.pagination.adminLeaves.processed.currentPage = data.current_page || 1
@@ -869,14 +984,14 @@ export default {
       try {
         // 添加按钮点击反馈
         console.log('审核按钮被点击，ID:', id, '决定:', decision);
-        
+
         const token = localStorage.getItem('access_token');
         if (!token) {
           alert('登录已过期，请重新登录');
           this.$router.push('/');
           return;
         }
-        
+
         const res = await fetch(`${this.apiBaseUrl}/admin/absence/${id}`, {
           method: 'PATCH',
           headers: {
@@ -885,24 +1000,24 @@ export default {
           },
           body: JSON.stringify({ decision })
         });
-        
+
         const data = await res.json();
-        
+
         if (res.ok) {
           // 审核后刷新列表，保持当前页码
           const isProcessed = this.leaveAdminTab === 'processed';
-          const currentPage = isProcessed ? 
-            this.pagination.adminLeaves.processed.currentPage : 
+          const currentPage = isProcessed ?
+            this.pagination.adminLeaves.processed.currentPage :
             this.pagination.adminLeaves.unprocessed.currentPage;
-          
+
           // 重新加载未处理列表（因为当前记录会被移到已处理列表）
           this.loadAdminLeaves(false, currentPage);
-          
+
           // 如果当前在已处理标签页，也刷新已处理列表
           if (this.leaveAdminTab === 'processed') {
             this.loadAdminLeaves(true, this.pagination.adminLeaves.processed.currentPage);
           }
-          
+
           this.selectedLeave = null;
           // 同步刷新个人考勤（如果涉及到本人）
           this.loadPersonalData();
@@ -917,42 +1032,180 @@ export default {
         console.error('审核请假时发生错误:', e);
       }
     },
-    
+
+    // 切换批量模式
+    toggleBatchMode() {
+      this.isBatchMode = !this.isBatchMode;
+      this.selectedLeaves = []; // 清空选中列表
+
+      if (this.isBatchMode) {
+        this.loadAllUnprocessedLeaves();
+      } else {
+        this.loadAdminLeaves(false, 1); // 恢复正常分页
+      }
+    },
+
+    // 加载所有未处理的请假申请（不分页）
+    async loadAllUnprocessedLeaves() {
+      try {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+          alert('登录已过期，请重新登录');
+          this.$router.push('/');
+          return;
+        }
+
+        // 获取所有未处理的请假申请（不分页，显示全部）
+        const res = await fetch(`${this.apiBaseUrl}/admin/absence?processed=false&page=1&page_size=10000`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const absences = data.absences || [];
+
+          if (absences.length === 0) {
+            alert('没有未处理的请假申请');
+            this.isBatchMode = false;
+            return;
+          }
+
+          // 在批量模式下显示所有记录到一页中
+          this.adminLeavesUnprocessed = absences;
+          this.pagination.adminLeaves.unprocessed.currentPage = 1;
+          this.pagination.adminLeaves.unprocessed.total = absences.length;
+          this.pagination.adminLeaves.unprocessed.pages = 1;
+          this.pagination.adminLeaves.unprocessed.perPage = absences.length;
+
+        } else {
+          const errorData = await res.json();
+          alert(errorData.message || '获取未处理申请失败');
+          this.isBatchMode = false;
+        }
+      } catch (error) {
+        console.error('获取未处理申请失败:', error);
+        alert('网络错误，请稍后重试');
+        this.isBatchMode = false;
+      }
+    },
+
+    // 批量审核请假申请
+    async batchReview(decision) {
+      if (this.isBatchProcessing || this.selectedLeaves.length === 0) return;
+
+      this.isBatchProcessing = true;
+
+      try {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+          alert('登录已过期，请重新登录');
+          this.$router.push('/');
+          return;
+        }
+
+        // 确认批量处理
+        const confirmMessage = `确定要批量${decision === 'approve' ? '通过' : '拒绝'} ${this.selectedLeaves.length} 条请假申请吗？`;
+        if (!confirm(confirmMessage)) {
+          this.isBatchProcessing = false;
+          return;
+        }
+
+        // 使用批量API处理选中的请假申请
+        const batchRes = await fetch(`${this.apiBaseUrl}/admin/absence/batch`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            decision: decision,
+            absence_ids: this.selectedLeaves
+          })
+        });
+
+        if (batchRes.ok) {
+          const result = await batchRes.json();
+          alert(result.message);
+
+          // 处理成功后重新加载数据
+          this.selectedLeaves = [];
+          this.loadAllUnprocessedLeaves();
+
+        } else {
+          const errorData = await batchRes.json();
+          alert(errorData.message || '批量处理失败');
+        }
+      } catch (error) {
+        console.error('批量处理请假申请失败:', error);
+        alert('网络错误，请稍后重试');
+      } finally {
+        this.isBatchProcessing = false;
+      }
+    },
+
     // 分页相关方法
     changeMyLeavesPage(page) {
       if (page >= 1 && page <= this.pagination.myLeaves.pages) {
         this.loadMyLeaves(page)
       }
     },
-    
+
     changeAdminLeavesPage(processed, page) {
-      const paginationKey = processed ? 'processed' : 'unprocessed'
+      let paginationKey, status;
+
+      // 根据标签页确定分页键和状态参数
+      if (this.leaveAdminTab === 'approved') {
+        paginationKey = 'approved';
+        status = 2; // 已通过
+      } else if (this.leaveAdminTab === 'rejected') {
+        paginationKey = 'rejected';
+        status = 1; // 已拒绝
+      } else {
+        paginationKey = processed ? 'processed' : 'unprocessed';
+        status = null; // 使用processed参数
+      }
+
       if (page >= 1 && page <= this.pagination.adminLeaves[paginationKey].pages) {
-        this.loadAdminLeaves(processed, page)
+        // 对于approved和rejected标签页，使用status参数
+        if (status !== null) {
+          this.loadAdminLeaves(null, page, status);
+        } else {
+          // 对于其他标签页，保持原有逻辑
+          this.loadAdminLeaves(processed, page);
+        }
       }
     },
-    
+
     // 生成页码数组
     generatePageNumbers(totalPages, currentPage, maxVisible = 5) {
       const pages = []
       let start = Math.max(1, currentPage - Math.floor(maxVisible / 2))
       let end = Math.min(totalPages, start + maxVisible - 1)
-      
+
       if (end - start + 1 < maxVisible) {
         start = Math.max(1, end - maxVisible + 1)
       }
-      
+
       for (let i = start; i <= end; i++) {
         pages.push(i)
       }
       return pages
     },
-    
+
     // 重置分页到第一页
     resetAndRecalculatePagination() {
       if (this.leaveAdminTab === 'unprocessed') {
         this.pagination.adminLeaves.unprocessed.currentPage = 1;
         this.loadAdminLeaves(false, 1);
+      } else if (this.leaveAdminTab === 'approved') {
+        this.pagination.adminLeaves.approved.currentPage = 1;
+        this.loadAdminLeaves(null, 1, 2); // 已通过
+      } else if (this.leaveAdminTab === 'rejected') {
+        this.pagination.adminLeaves.rejected.currentPage = 1;
+        this.loadAdminLeaves(null, 1, 1); // 已拒绝
       } else {
         this.pagination.adminLeaves.processed.currentPage = 1;
         this.loadAdminLeaves(true, 1);
@@ -1037,158 +1290,158 @@ export default {
     },
 
     logout() {
-        localStorage.removeItem('access_token')
-        this.$router.push('/')
-      },
-      // 获取请假类型标签
-      getLeaveTypeLabel(type) {
-        const leaveType = this.leaveTypes.find(t => t.value === type);
-        return leaveType ? leaveType.label : '未知类型';
-      },
-      handlePageChange(newPage) {
-        this.currentPage = newPage; // 更新当前页码
-        this.loadEmployeesData(); // 重新加载数据
-      },
+      localStorage.removeItem('access_token')
+      this.$router.push('/')
+    },
+    // 获取请假类型标签
+    getLeaveTypeLabel(type) {
+      const leaveType = this.leaveTypes.find(t => t.value === type);
+      return leaveType ? leaveType.label : '未知类型';
+    },
+    handlePageChange(newPage) {
+      this.currentPage = newPage; // 更新当前页码
+      this.loadEmployeesData(); // 重新加载数据
+    },
 
-      handlePageJump() {
-        // 确保跳转的页码在有效范围内
-        if (this.jumpToPage >= 1 && this.jumpToPage <= Math.ceil(this.totalEmployees / this.pageSize)) {
-          this.currentPage = this.jumpToPage;
-          this.loadEmployeesData();
-        } else {
-          alert("请输入有效的页码！");
-        }
-      },
-
-      renderAttendanceChart() {
-        const chartDom = document.getElementById('attendance-chart');
-        const myChart = echarts.init(chartDom);
-        const option = {
-          title: {
-            text: '本月考勤统计',
-            left: 'center'
-          },
-          tooltip: {
-            trigger: 'item'
-          },
-          legend: {
-            bottom: '0%',
-            left: 'center'
-          },
-          series: [
-            {
-              name: '考勤情况',
-              type: 'pie',
-              radius: '50%',
-              data: [
-                { value: this.dailyStats.actual_attendance, name: '实到人数' },
-                { value: this.dailyStats.late_count, name: '迟到人数' },
-                { value: this.dailyStats.early_leave_count, name: '早退人数' },
-                { value: this.dailyStats.normal_count, name: '正常人数' },
-                { value: this.dailyStats.should_attend - this.dailyStats.actual_attendance, name: '未到人数' }
-              ],
-              emphasis: {
-                itemStyle: {
-                  shadowBlur: 10,
-                  shadowOffsetX: 0,
-                  shadowColor: 'rgba(0, 0, 0, 0.5)'
-                }
-              }
-            }
-          ]
-        };
-        option && myChart.setOption(option);
-      },
-
-      renderAttendanceCharts() {
-        // 检查数据是否加载完成
-        if (!this.dailyStats) {
-          console.error('dailyStats 数据未加载完成');
-          return;
-        }
-
-        // 图表 1: 实到人数和未到人数
-        const chartDom1 = document.getElementById('attendance-chart-1');
-        if (!chartDom1) {
-          console.error('attendance-chart-1 容器未找到');
-          return;
-        }
-        const chart1 = echarts.init(chartDom1);
-        const option1 = {
-          title: {
-            text: '实到人数与未到人数',
-            left: 'center'
-          },
-          tooltip: {
-            trigger: 'item'
-          },
-          legend: {
-            bottom: '0%',
-            left: 'center'
-          },
-          series: [
-            {
-              name: '考勤情况',
-              type: 'pie',
-              radius: '50%',
-              data: [
-                { value: this.dailyStats.actual_attendance, name: '实到人数' },
-                { value: this.dailyStats.should_attend - this.dailyStats.actual_attendance, name: '未到人数' }
-              ],
-              emphasis: {
-                itemStyle: {
-                  shadowBlur: 10,
-                  shadowOffsetX: 0,
-                  shadowColor: 'rgba(0, 0, 0, 0.5)'
-                }
-              }
-            }
-          ]
-        };
-        chart1.setOption(option1);
-
-        // 图表 2: 正常、迟到、早退、请假人数
-        const chartDom2 = document.getElementById('attendance-chart-2');
-        if (!chartDom2) {
-          console.error('attendance-chart-2 容器未找到');
-          return;
-        }
-        const chart2 = echarts.init(chartDom2);
-        const option2 = {
-          title: {
-            text: '考勤详细统计',
-            left: 'center'
-          },
-          tooltip: {
-            trigger: 'item'
-          },
-          legend: {
-            bottom: '0%',
-            left: 'center'
-          },
-          series: [
-            {
-              name: '考勤情况',
-              type: 'pie',
-              radius: '50%',
-              data: [
-                { value: this.dailyStats.normal_count, name: '正常人数' },
-                { value: this.dailyStats.late_count, name: '迟到人数' },
-                { value: this.dailyStats.early_leave_count, name: '早退人数' },
-                { value: this.dailyStats.leave_count, name: '请假人数' }
-              ],
-              emphasis: {
-                itemStyle: {
-                  shadowBlur: 10,
-                  shadowOffsetX: 0,
-                  shadowColor: 'rgba(0, 0, 0, 0.5)'
-                }
-              }
-            }
-          ]
-        };
-        chart2.setOption(option2);
+    handlePageJump() {
+      // 确保跳转的页码在有效范围内
+      if (this.jumpToPage >= 1 && this.jumpToPage <= Math.ceil(this.totalEmployees / this.pageSize)) {
+        this.currentPage = this.jumpToPage;
+        this.loadEmployeesData();
+      } else {
+        alert("请输入有效的页码！");
       }
+    },
+
+    renderAttendanceChart() {
+      const chartDom = document.getElementById('attendance-chart');
+      const myChart = echarts.init(chartDom);
+      const option = {
+        title: {
+          text: '本月考勤统计',
+          left: 'center'
+        },
+        tooltip: {
+          trigger: 'item'
+        },
+        legend: {
+          bottom: '0%',
+          left: 'center'
+        },
+        series: [
+          {
+            name: '考勤情况',
+            type: 'pie',
+            radius: '50%',
+            data: [
+              { value: this.dailyStats.actual_attendance, name: '实到人数' },
+              { value: this.dailyStats.late_count, name: '迟到人数' },
+              { value: this.dailyStats.early_leave_count, name: '早退人数' },
+              { value: this.dailyStats.normal_count, name: '正常人数' },
+              { value: this.dailyStats.should_attend - this.dailyStats.actual_attendance, name: '未到人数' }
+            ],
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.5)'
+              }
+            }
+          }
+        ]
+      };
+      option && myChart.setOption(option);
+    },
+
+    renderAttendanceCharts() {
+      // 检查数据是否加载完成
+      if (!this.dailyStats) {
+        console.error('dailyStats 数据未加载完成');
+        return;
+      }
+
+      // 图表 1: 实到人数和未到人数
+      const chartDom1 = document.getElementById('attendance-chart-1');
+      if (!chartDom1) {
+        console.error('attendance-chart-1 容器未找到');
+        return;
+      }
+      const chart1 = echarts.init(chartDom1);
+      const option1 = {
+        title: {
+          text: '实到人数与未到人数',
+          left: 'center'
+        },
+        tooltip: {
+          trigger: 'item'
+        },
+        legend: {
+          bottom: '0%',
+          left: 'center'
+        },
+        series: [
+          {
+            name: '考勤情况',
+            type: 'pie',
+            radius: '50%',
+            data: [
+              { value: this.dailyStats.actual_attendance, name: '实到人数' },
+              { value: this.dailyStats.should_attend - this.dailyStats.actual_attendance, name: '未到人数' }
+            ],
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.5)'
+              }
+            }
+          }
+        ]
+      };
+      chart1.setOption(option1);
+
+      // 图表 2: 正常、迟到、早退、请假人数
+      const chartDom2 = document.getElementById('attendance-chart-2');
+      if (!chartDom2) {
+        console.error('attendance-chart-2 容器未找到');
+        return;
+      }
+      const chart2 = echarts.init(chartDom2);
+      const option2 = {
+        title: {
+          text: '考勤详细统计',
+          left: 'center'
+        },
+        tooltip: {
+          trigger: 'item'
+        },
+        legend: {
+          bottom: '0%',
+          left: 'center'
+        },
+        series: [
+          {
+            name: '考勤情况',
+            type: 'pie',
+            radius: '50%',
+            data: [
+              { value: this.dailyStats.normal_count, name: '正常人数' },
+              { value: this.dailyStats.late_count, name: '迟到人数' },
+              { value: this.dailyStats.early_leave_count, name: '早退人数' },
+              { value: this.dailyStats.leave_count, name: '请假人数' }
+            ],
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.5)'
+              }
+            }
+          }
+        ]
+      };
+      chart2.setOption(option2);
+    }
   },
   computed: {
     // 未处理的请假申请（直接返回后端返回的数据）
@@ -1198,6 +1451,14 @@ export default {
     // 已处理的请假申请（直接返回后端返回的数据）
     filteredProcessedLeaves() {
       return this.adminLeavesProcessed;
+    },
+    // 已通过的请假申请
+    filteredApprovedLeaves() {
+      return this.adminLeavesApproved;
+    },
+    // 已拒绝的请假申请
+    filteredRejectedLeaves() {
+      return this.adminLeavesRejected;
     }
   }
 }
@@ -1297,9 +1558,9 @@ export default {
 }
 
 .pagination-info {
-   margin-left: 10px;
-   color: #666;
- }
+  margin-left: 10px;
+  color: #666;
+}
 
 .logout-btn:hover {
   background: #c0392b;
@@ -1590,6 +1851,27 @@ export default {
   background: #2980b9;
 }
 
+/* 批量处理按钮样式 */
+.batch-process-btn {
+  background: #3498db;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.3s;
+}
+
+.batch-process-btn:hover:not(:disabled) {
+  background: #2980b9;
+}
+
+.batch-process-btn:disabled {
+  background: #bdc3c7;
+  cursor: not-allowed;
+}
 
 .records-table .clock-btn,
 .detail-actions .clock-btn {
@@ -1641,6 +1923,42 @@ export default {
   color: #fff;
 }
 
+.batch-confirm-area {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 16px 0;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.batch-confirm-btn {
+  padding: 8px 16px;
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.batch-confirm-btn:hover:not(:disabled) {
+  background: #2980b9;
+}
+
+.batch-confirm-btn:disabled {
+  background: #bdc3c7;
+  cursor: not-allowed;
+}
+
+.batch-selected-info {
+  color: #666;
+  font-size: 14px;
+}
+
 .detail-actions {
   display: flex;
   gap: 16px;
@@ -1675,6 +1993,53 @@ export default {
 
 .records-table td .clock-btn+.clock-btn {
   margin-left: 16px;
+}
+
+/* 批量处理按钮样式 */
+.batch-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  margin-left: 10px;
+}
+
+.batch-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.batch-approve {
+  background: #28a745;
+  color: white;
+}
+
+.batch-approve:hover:not(:disabled) {
+  background: #218838;
+}
+
+.batch-reject {
+  background: #dc3545;
+  color: white;
+}
+
+.batch-reject:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.batch-processing {
+  background: #6c757d;
+  color: white;
+}
+
+.batch-exit {
+  background: #6c757d;
+  color: white;
+}
+
+.batch-exit:hover:not(:disabled) {
+  background: #5a6268;
 }
 
 /* 人脸录入样式 */
@@ -1751,5 +2116,15 @@ export default {
   margin-top: 16px;
   color: #7f8c8d;
   font-size: 14px;
+}
+
+/* 请假事由列样式 */
+.reason-cell {
+  cursor: pointer;
+  color: #007bff;
+}
+
+.reason-cell:hover {
+  text-decoration: underline;
 }
 </style>

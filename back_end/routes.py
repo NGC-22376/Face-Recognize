@@ -900,7 +900,7 @@ def get_personal_absences():
     )
 
 
-# 管理员查看请假申请列表（支持分页，每页5条）
+# 管理员查看请假申请列表（支持分页）
 @app.route("/admin/absence", methods=["GET"])
 @jwt_required()
 def admin_list_absences():
@@ -910,19 +910,26 @@ def admin_list_absences():
         return jsonify(message="Access denied. Admin role required."), 403
 
     processed = request.args.get("processed", "false").lower() == "true"
+    # 获取具体状态参数（用于已通过/已拒绝分离显示）
+    specific_status = request.args.get("status", type=int)
     # 获取分页参数，默认为第1页
     page = request.args.get("page", 1, type=int)
-    # 固定每页5条记录，保持分页功能
-    per_page = 5
+    # 获取每页记录数，默认为5条，最大不超过1000条
+    per_page = min(request.args.get("page_size", 5, type=int), 1000)
     
     # 获取过滤参数
     name_filter = request.args.get("name")
     absence_type_filter = request.args.get("absence_type", type=int)
 
     query = Absence.query
-    if processed:
+    if specific_status is not None:
+        # 如果提供了具体状态参数，按具体状态过滤
+        query = query.filter(Absence.status == specific_status)
+    elif processed:
+        # 如果只提供了processed=true，按已处理状态过滤（兼容旧接口）
         query = query.filter(Absence.status.in_([1, 2]))
     else:
+        # 未处理状态
         query = query.filter(Absence.status == 0)
     
     # 应用姓名过滤
@@ -996,3 +1003,52 @@ def admin_review_absence(absence_id):
     absence.status = 2 if decision == "approve" else 1
     db.session.commit()
     return jsonify(message="操作成功", id=absence.id, status=absence.status), 200
+
+
+# 管理员批量审核请假申请
+@app.route("/admin/absence/batch", methods=["PATCH"])
+@jwt_required()
+def admin_batch_review_absence():
+    current_user_id = int(get_jwt_identity())
+    user = User.query.get(current_user_id)
+    if not user or user.role != "管理员":
+        return jsonify(message="Access denied. Admin role required."), 403
+    
+    data = request.get_json() or {}
+    decision = data.get("decision")
+    absence_ids = data.get("absence_ids", [])
+    
+    if decision not in ("approve", "reject"):
+        return jsonify(message="非法操作"), 400
+    
+    if not absence_ids:
+        return jsonify(message="请选择要处理的请假申请"), 400
+    
+    success_count = 0
+    failed_ids = []
+    
+    for absence_id in absence_ids:
+        try:
+            absence = Absence.query.get(absence_id)
+            if absence and absence.status == 0:  # 只处理未处理的申请
+                absence.status = 2 if decision == "approve" else 1
+                success_count += 1
+            else:
+                failed_ids.append(absence_id)
+        except Exception as e:
+            failed_ids.append(absence_id)
+            print(f"处理请假申请 {absence_id} 时出错: {e}")
+    
+    db.session.commit()
+    
+    if failed_ids:
+        return jsonify(
+            message=f"成功处理 {success_count} 条申请，失败 {len(failed_ids)} 条",
+            failed_ids=failed_ids,
+            success_count=success_count
+        ), 207  # Multi-Status
+    
+    return jsonify(
+        message=f"成功处理 {success_count} 条申请",
+        success_count=success_count
+    ), 200
