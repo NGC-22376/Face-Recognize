@@ -280,7 +280,7 @@
           </div>
 
           <!-- 筛选控件 -->
-          <div class="filter-controls" style="margin: 15px 0;">
+          <div class="filter-controls-verification" style="margin: 15px 0;">
             <input type="text" v-model="faceNameFilter" placeholder="搜索姓名"
               style="margin-right: 10px; padding: 5px; width: 200px;" />
             <select v-model.number="faceStatusFilter" style="padding: 5px; margin-right: 10px;"
@@ -2600,6 +2600,17 @@ export default {
   border: 1px solid #e1e8ed;
 }
 
+.preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s;
+}
+
+.preview-image:hover {
+  transform: scale(1.1);
+}
+
 .image-preview-modal {
   position: fixed;
   top: 0;
@@ -2623,6 +2634,22 @@ export default {
   max-width: 100%;
   max-height: 90vh;
   border-radius: 8px;
+}
+
+.close-btn {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 30px;
+  cursor: pointer;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* 人脸审核状态样式 */
