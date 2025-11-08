@@ -1205,7 +1205,6 @@
 <script>
 import * as echarts from 'echarts';
 import { ElMessage } from 'element-plus';
-import axios from 'axios';
 
 export default {
   name: 'AdminPage',
@@ -1380,7 +1379,34 @@ export default {
       leaveTrendChartInstance: null,
       // 员工管理界面相关
       attendanceDialogVisible: false,
-      currentAttendanceEmployee: null
+      currentAttendanceEmployee: null,
+
+      //个人信息
+      isUploading: false,
+      avatarBlobUrl: '',
+      isSaving: false,
+      profileMessage: '',
+      profileMessageType: '',
+      userInfo: {},
+      // 模态框状态
+      showPasswordModal: false,
+      showAnswerSecurityModal: false,
+      editingAnswerIndex: 1,
+      isUpdatingPassword: false,
+      isUpdatingAnswer: false,
+      // 表单数据
+      passwordForm: {
+        oldPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      },
+      answerForm: {
+        newAnswer: '',
+        confirmAnswer: ''
+      },
+      //人脸状态
+      faceStatus: '未录入',
+      isReEnrolling: false,
     }
   },
   watch: {
@@ -4709,7 +4735,6 @@ export default {
   border-color: #f5c6cb;
 }
 
-</style>
 /* 员工详细考勤信息弹窗样式 */
 .employee-detail-modal {
   position: fixed;
