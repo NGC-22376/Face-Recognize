@@ -1537,3 +1537,46 @@ def admin_batch_review_absence():
     return jsonify(
         message=f"成功处理 {success_count} 条申请", success_count=success_count
     ), 200
+
+@app.route("/employees", methods=["GET"])
+@jwt_required()
+def get_all_employees():
+    employees = User.query.filter_by(role="员工").all()
+    employee_list = []
+    for emp in employees:
+        # 查找 Face 表中与该员工 user_id 匹配的图片路径
+        face = Face.query.filter_by(user_id=emp.user_id).first()
+        photo_url = face.image_path if face else None
+        employee_list.append({
+            "user_id": emp.user_id,
+            "name": emp.name,
+            "account": emp.account,
+            "photo_url": photo_url,
+        })
+    return jsonify({"employees": employee_list}), 200
+
+# 管理员查看指定员工考勤记录
+@app.route("/attendance/<int:user_id>", methods=["GET"])
+@jwt_required()
+def get_employee_attendance(user_id):
+    current_user_id = int(get_jwt_identity())
+    user = User.query.get(current_user_id)
+    if not user or user.role != "管理员":
+        return jsonify({"message": "Access denied. Admin role required."}), 403
+
+    # 查询该员工最近10条考勤记录
+    records = (
+        Attendance.query.filter(Attendance.user_id == user_id)
+        .order_by(Attendance.clock_in_time.desc())
+        .limit(10)
+        .all()
+    )
+    records_list = []
+    for record in records:
+        records_list.append({
+            "attendance_id": record.attendance_id,
+            "clock_in_time": record.clock_in_time.strftime("%Y-%m-%d %H:%M:%S") if record.clock_in_time else None,
+            "clock_out_time": record.clock_out_time.strftime("%Y-%m-%d %H:%M:%S") if record.clock_out_time else None,
+            "status": record.status,
+        })
+    return jsonify({"attendance": records_list}), 200

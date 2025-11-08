@@ -10,9 +10,15 @@ from datetime import datetime
 from sqlalchemy import func
 
 # 人脸图片与特征存储目录
-os.makedirs("FaceImage", exist_ok=True)
-os.makedirs("FaceFeature", exist_ok=True)
-os.makedirs("temp_images", exist_ok=True)
+base_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(base_dir)  # 项目根目录
+face_image_dir = os.path.join(base_dir, "FaceImage")
+face_feature_dir = os.path.join(base_dir, "FaceFeature")
+temp_images_dir = os.path.join(project_root, "temp_images")  # 修改为项目根目录下的temp_images
+
+os.makedirs(face_image_dir, exist_ok=True)
+os.makedirs(face_feature_dir, exist_ok=True)
+os.makedirs(temp_images_dir, exist_ok=True)
 
 
 # 人脸识别打卡（上/下班）
@@ -167,8 +173,10 @@ def handle_checkout(user_id, current_time, today, user):
 
 def save_image(file):
     """保存上传的图片文件"""
-    # 创建临时目录（如果不存在）
-    temp_dir = "temp_images"
+    # 确保temp_images目录存在，使用项目根目录下的temp_images文件夹
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(base_dir)  # 项目根目录
+    temp_dir = os.path.join(project_root, "temp_images")
     if not os.path.exists(temp_dir):
         os.makedirs(temp_dir)
     # 生成唯一文件名
@@ -176,7 +184,8 @@ def save_image(file):
     filepath = os.path.join(temp_dir, filename)
     # 保存文件
     file.save(filepath)
-    return filepath
+    # 返回相对于项目根目录的路径，以便在数据库中正确存储
+    return os.path.join("temp_images", filename)
 
 
 def extract_feature(img_path):
@@ -292,8 +301,16 @@ def face_enroll():
 
 def save_temp_image(file):
     """保存临时图片"""
+    # 确保temp_images目录存在，使用项目根目录下的temp_images文件夹
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(base_dir)  # 项目根目录
+    temp_dir = os.path.join(project_root, "temp_images")
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
+    
     ext = file.filename.rsplit(".", 1)[-1] if "." in file.filename else "jpg"
     filename = f"enrollment_{uuid.uuid4().hex}.{ext}"
-    path = os.path.join("temp_images", filename)
+    path = os.path.join(temp_dir, filename)
     file.save(path)
-    return path
+    # 返回相对于项目根目录的路径，以便在数据库中正确存储
+    return os.path.join("temp_images", filename)
