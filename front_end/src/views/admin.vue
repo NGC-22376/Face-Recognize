@@ -78,8 +78,10 @@
           </div>
           <div class="charts-container">
             <h3>考勤统计图表</h3>
-            <div id="attendance-chart-1" style="width: 100%; height: 400px;"></div>
-            <div id="attendance-chart-2" style="width: 100%; height: 400px; margin-top: 20px;"></div>
+            <div class="charts-row">
+              <div id="attendance-chart-1" style="width: 100%; height: 400px;"></div>
+              <div id="attendance-chart-2" style="width: 100%; height: 400px; margin-left: 20px;"></div>
+            </div>
           </div>
           <div class="date-info">
             <p>统计日期：{{ dailyStats.date }}</p>
@@ -2054,6 +2056,16 @@ export default {
 .stat-label {
   color: #7f8c8d;
   margin-top: 8px;
+}
+
+.charts-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.charts-row>div {
+  flex: 1;
 }
 
 .section-header {
