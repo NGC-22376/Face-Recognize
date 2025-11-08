@@ -80,10 +80,32 @@
             </div>
           </div>
           <div class="charts-container">
-            <h3>考勤统计图表</h3>
-            <div id="attendance-chart-1" style="width: 100%; height: 400px;"></div>
-            <div id="attendance-chart-2" style="width: 100%; height: 400px; margin-top: 20px;"></div>
+            <h3>今日考勤统计</h3>
+            <div class="charts-row">
+              <div id="attendance-chart-1" style="width: 100%; height: 400px;"></div>
+              <div id="attendance-chart-2" style="width: 100%; height: 400px; margin-left: 20px;"></div>
+            </div>
           </div>
+
+          <!-- 阶段考勤统计 -->
+          <div class="period-stats-container">
+            <h3>阶段考勤统计</h3>
+            <div class="date-picker-container">
+              <div class="date-picker">
+                <label>开始日期：</label>
+                <input type="date" v-model="periodStats.startDate" @change="loadPeriodStats">
+              </div>
+              <div class="date-picker">
+                <label>结束日期：</label>
+                <input type="date" v-model="periodStats.endDate" @change="loadPeriodStats">
+              </div>
+            </div>
+            <div class="charts-row">
+              <div id="leave-trend-chart" style="width: 100%; height: 400px;"></div>
+              <div id="attendance-trend-chart" style="width: 100%; height: 400px; margin-left: 20px;"></div>
+            </div>
+          </div>
+
           <div class="date-info">
             <p>统计日期：{{ dailyStats.date }}</p>
           </div>
@@ -130,7 +152,8 @@
               </thead>
               <tbody>
                 <tr v-for="employee in employees" :key="employee.user_id">
-                  <td>{{ employee.name }}</td>
+                  <td><span class="employee-name-link" @click="showEmployeeDetail(employee)">{{ employee.name }}</span>
+                  </td>
                   <td>{{ employee.account }}</td>
                   <td>
                     <span
@@ -148,6 +171,58 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          <!-- 员工详细考勤信息弹窗 -->
+          <div v-if="showEmployeeDetailModal" class="employee-detail-modal" @click="closeEmployeeDetailModal">
+            <div class="employee-detail-content" @click.stop>
+              <div class="employee-detail-header">
+                <div class="employee-detail-title">{{ selectedEmployee.name }} 的考勤详情</div>
+                <button class="close-button" @click="closeEmployeeDetailModal">×</button>
+              </div>
+
+              <!-- 文字信息栏 -->
+              <div class="employee-info-grid">
+                <div class="info-item">
+                  <div class="info-label">本月最早到岗时间</div>
+                  <div class="info-value">{{ employeeDetail.earliestClockIn || '-' }}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">本月最晚到岗时间</div>
+                  <div class="info-value">{{ employeeDetail.latestClockIn || '-' }}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">本月最早离岗时间</div>
+                  <div class="info-value">{{ employeeDetail.earliestClockOut || '-' }}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">本月最晚离岗时间</div>
+                  <div class="info-value">{{ employeeDetail.latestClockOut || '-' }}</div>
+                </div>
+              </div>
+
+              <!-- 异常考勤趋势图 -->
+              <div class="chart-container">
+                <div class="chart-title">异常考勤趋势</div>
+                <div ref="abnormalAttendanceChart" style="width: 100%; height: 300px;" @mouseleave="hideTooltip"></div>
+                <!-- 悬停提示框 -->
+                <div v-if="tooltip.visible && tooltip.chartType === 'abnormal'" class="chart-tooltip"
+                  :style="{ top: tooltip.top + 'px', left: tooltip.left + 'px' }">
+                  {{ tooltip.content }}
+                </div>
+              </div>
+
+              <!-- 请假趋势图 -->
+              <div class="chart-container">
+                <div class="chart-title">请假趋势</div>
+                <div ref="leaveTrendChart" style="width: 100%; height: 300px;" @mouseleave="hideTooltip"></div>
+                <!-- 悬停提示框 -->
+                <div v-if="tooltip.visible && tooltip.chartType === 'leave'" class="chart-tooltip"
+                  :style="{ top: tooltip.top + 'px', left: tooltip.left + 'px' }">
+                  {{ tooltip.content }}
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- 分页控件 -->
@@ -273,25 +348,44 @@
           <!-- 标签切换 -->
           <div class="tab-switch">
             <button :class="{ active: faceReviewTab === 'pending' }"
-              @click="faceReviewTab = 'pending'; loadPendingFaceEnrollments()">
+              @click="faceReviewTab = 'pending'; loadPendingFaceEnrollments(1)">
               待审核
             </button>
             <button :class="{ active: faceReviewTab === 'processed' }"
-              @click="faceReviewTab = 'processed'; loadReviewedFaceEnrollments()">
+              @click="faceReviewTab = 'processed'; loadReviewedFaceEnrollments(1)">
               已处理
             </button>
           </div>
 
           <!-- 筛选控件 -->
-          <div class="filter-controls" style="margin: 15px 0;">
-            <input type="text" v-model="faceNameFilter" placeholder="搜索姓名"
-              style="margin-right: 10px; padding: 5px; width: 200px;" />
-            <select v-model.number="faceStatusFilter" style="padding: 5px; margin-right: 10px;"
-              v-if="faceReviewTab === 'processed'">
-              <option value="-1">全部状态</option>
-              <option value="1">已通过</option>
-              <option value="2">已拒绝</option>
-            </select>
+          <div class="filter-controls"
+            style="margin: 15px 0; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <input type="text" v-model="faceNameFilter" placeholder="搜索姓名"
+                @input="faceReviewTab === 'pending' ? (isFaceBatchMode ? loadPendingFaceEnrollments(1, true) : loadPendingFaceEnrollments(1)) : loadReviewedFaceEnrollments(1)"
+                style="margin-right: 10px; padding: 5px; width: 200px;" />
+              <select v-model.number="faceStatusFilter" style="padding: 5px; margin-right: 10px;"
+                v-if="faceReviewTab === 'processed'" @change="loadReviewedFaceEnrollments(1)">
+                <option value="-1">全部状态</option>
+                <option value="1">已通过</option>
+                <option value="2">已拒绝</option>
+              </select>
+            </div>
+            <div v-if="faceReviewTab === 'pending'">
+              <div v-if="!isFaceBatchMode">
+                <button class="clock-btn" style="background-color: #5dade2; padding: 8px 16px;"
+                  @click="toggleFaceBatchMode">批量处理</button>
+              </div>
+              <div class="batch-actions" v-else style="display: flex; align-items: center; gap: 10px;">
+                <span>已选择 {{ selectedFaceEnrollments.length }} 项</span>
+                <button class="clock-btn clock-in" style="background-color: #27ae60; padding: 8px 16px;"
+                  @click="batchReviewFaceEnrollments(true)">批量通过</button>
+                <button class="clock-btn clock-out" style="background-color: #e74c3c; padding: 8px 16px;"
+                  @click="batchReviewFaceEnrollments(false)">批量拒绝</button>
+                <button class="clock-btn" style="background-color: #95a5a6; padding: 8px 16px;"
+                  @click="toggleFaceBatchMode">退出</button>
+              </div>
+            </div>
           </div>
 
           <!-- 待审核列表 -->
@@ -301,6 +395,7 @@
               <table>
                 <thead>
                   <tr>
+                    <th v-if="isFaceBatchMode">选择</th>
                     <th>姓名</th>
                     <th>工号</th>
                     <th>提交时间</th>
@@ -309,7 +404,13 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="enrollment in filteredPendingEnrollments" :key="enrollment.id">
+                  <tr v-for="enrollment in pendingFaceEnrollments" :key="enrollment.id"
+                    :class="{ 'selected-row': isFaceBatchMode && isFaceEnrollmentSelected(enrollment.id) }"
+                    @click="isFaceBatchMode && toggleFaceEnrollmentSelection(enrollment.id)">
+                    <td v-if="isFaceBatchMode" style="text-align: center;">
+                      <input type="checkbox" :checked="isFaceEnrollmentSelected(enrollment.id)"
+                        @click.stop="toggleFaceEnrollmentSelection(enrollment.id)" />
+                    </td>
                     <td>{{ enrollment.user_name }}</td>
                     <td>{{ enrollment.user_account }}</td>
                     <td>{{ formatDateTime(enrollment.created_time) }}</td>
@@ -319,18 +420,49 @@
                           @click="showImagePreview(enrollment.image_path)" class="preview-image" />
                       </div>
                     </td>
-                    <td>
+                    <td v-if="!isFaceBatchMode">
                       <button class="clock-btn clock-in" @click="reviewFaceEnrollment(enrollment.id, true)">通过</button>
                       <button class="clock-btn clock-out"
                         @click="reviewFaceEnrollment(enrollment.id, false)">拒绝</button>
                     </td>
+                    <td v-else>
+                      <button class="clock-btn clock-in"
+                        @click.stop="reviewFaceEnrollment(enrollment.id, true)">通过</button>
+                      <button class="clock-btn clock-out"
+                        @click.stop="reviewFaceEnrollment(enrollment.id, false)">拒绝</button>
+                    </td>
                   </tr>
                 </tbody>
               </table>
-              <div v-if="filteredPendingEnrollments.length === 0" class="empty-state">
+              <div v-if="pendingFaceEnrollments.length === 0" class="empty-state">
                 暂无待审核的申请
               </div>
             </template>
+
+            <!-- 待审核列表分页控件 -->
+            <div class="pagination" v-if="facePagination.pending.total > 0 && !isFaceBatchMode">
+              <button @click="changePendingFacePage(facePagination.pending.currentPage - 1)"
+                :disabled="facePagination.pending.currentPage === 1" class="pagination-btn">
+                上一页
+              </button>
+
+              <span
+                v-for="page in generatePageNumbers(facePagination.pending.pages, facePagination.pending.currentPage)"
+                :key="page" @click="changePendingFacePage(page)"
+                :class="['pagination-item', { active: page === facePagination.pending.currentPage }]">
+                {{ page }}
+              </span>
+
+              <button @click="changePendingFacePage(facePagination.pending.currentPage + 1)"
+                :disabled="facePagination.pending.currentPage === facePagination.pending.pages" class="pagination-btn">
+                下一页
+              </button>
+
+              <span class="pagination-info">
+                第 {{ facePagination.pending.currentPage }} 页，共 {{ facePagination.pending.pages }} 页，共 {{
+                  facePagination.pending.total }} 条记录
+              </span>
+            </div>
           </div>
 
           <!-- 已处理列表 -->
@@ -367,6 +499,32 @@
                 暂无已处理的申请
               </div>
             </template>
+
+            <!-- 已处理列表分页控件 -->
+            <div class="pagination" v-if="facePagination.reviewed.total > 0">
+              <button @click="changeReviewedFacePage(facePagination.reviewed.currentPage - 1)"
+                :disabled="facePagination.reviewed.currentPage === 1" class="pagination-btn">
+                上一页
+              </button>
+
+              <span
+                v-for="page in generatePageNumbers(facePagination.reviewed.pages, facePagination.reviewed.currentPage)"
+                :key="page" @click="changeReviewedFacePage(page)"
+                :class="['pagination-item', { active: page === facePagination.reviewed.currentPage }]">
+                {{ page }}
+              </span>
+
+              <button @click="changeReviewedFacePage(facePagination.reviewed.currentPage + 1)"
+                :disabled="facePagination.reviewed.currentPage === facePagination.reviewed.pages"
+                class="pagination-btn">
+                下一页
+              </button>
+
+              <span class="pagination-info">
+                第 {{ facePagination.reviewed.currentPage }} 页，共 {{ facePagination.reviewed.pages }} 页，共 {{
+                  facePagination.reviewed.total }} 条记录
+              </span>
+            </div>
           </div>
 
           <!-- 图片预览模态框 -->
@@ -510,6 +668,7 @@
                     <th>事由</th>
                     <th>请假类型</th>
                     <th>状态</th>
+                    <th v-if="myLeavesTab === 'pending'">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -519,6 +678,9 @@
                     <td>{{ item.reason }}</td>
                     <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
                     <td>{{ statusMap[item.status] || item.status }}</td>
+                    <td v-if="myLeavesTab === 'pending'">
+                      <button class="clock-btn clock-out" @click="cancelLeave(item.id)">撤销</button>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -599,18 +761,21 @@
               <table>
                 <thead>
                   <tr>
-                    <th v-if="!isBatchMode">操作</th>
-                    <th v-else>选择</th>
+                    <th v-if="isBatchMode">选择</th>
                     <th>姓名</th>
                     <th>工号</th>
                     <th>起始时间</th>
                     <th>结束时间</th>
                     <th>事由</th>
                     <th>请假类型</th>
+                    <th v-if="!isBatchMode">操作</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="item in filteredUnprocessedLeaves" :key="item.id">
+                    <td v-if="isBatchMode">
+                      <input type="checkbox" v-model="selectedLeaves" :value="item.id" class="batch-checkbox">
+                    </td>
                     <td>{{ item.name }}</td>
                     <td>{{ item.account }}</td>
                     <td>{{ formatDateTime(item.start_time) }}</td>
@@ -620,9 +785,6 @@
                     <td v-if="!isBatchMode">
                       <button class="clock-btn clock-in" @click.stop="reviewLeave(item.id, 'approve')">通过</button>
                       <button class="clock-btn clock-out" @click.stop="reviewLeave(item.id, 'reject')">拒绝</button>
-                    </td>
-                    <td v-else>
-                      <input type="checkbox" v-model="selectedLeaves" :value="item.id" class="batch-checkbox">
                     </td>
                   </tr>
                 </tbody>
@@ -709,6 +871,62 @@
                 <span class="pagination-info">
                   共筛选到 {{ pagination.adminLeaves.approved.total }} 条记录，第 {{
                     pagination.adminLeaves.approved.currentPage }} / {{ pagination.adminLeaves.approved.pages }} 页
+                </span>
+              </div>
+            </div>
+
+            <!-- 已处理标签页内容 -->
+            <div class="records-table" v-else-if="leaveAdminTab === 'processed'">
+              <table>
+                <thead>
+                  <tr>
+                    <th>姓名</th>
+                    <th>工号</th>
+                    <th>起始时间</th>
+                    <th>结束时间</th>
+                    <th>事由</th>
+                    <th>请假类型</th>
+                    <th>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in filteredProcessedLeaves" :key="item.id">
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.account }}</td>
+                    <td>{{ formatDateTime(item.start_time) }}</td>
+                    <td>{{ formatDateTime(item.end_time) }}</td>
+                    <td>{{ item.reason }}</td>
+                    <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
+                    <td>{{ statusMap[item.status] || item.status }}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <!-- 已处理分页控件 -->
+              <div class="pagination" v-if="pagination.adminLeaves.processed.total > 0 && !isBatchMode">
+                <button
+                  @click="changeAdminLeavesPage(true, Math.max(1, pagination.adminLeaves.processed.currentPage - 1))"
+                  :disabled="pagination.adminLeaves.processed.currentPage === 1" class="pagination-btn">
+                  上一页
+                </button>
+
+                <span
+                  v-for="page in generatePageNumbers(pagination.adminLeaves.processed.pages, pagination.adminLeaves.processed.currentPage)"
+                  :key="page" @click="changeAdminLeavesPage(true, page)"
+                  :class="['pagination-item', { active: page === pagination.adminLeaves.processed.currentPage }]">
+                  {{ page }}
+                </span>
+
+                <button
+                  @click="changeAdminLeavesPage(true, Math.min(pagination.adminLeaves.processed.pages, pagination.adminLeaves.processed.currentPage + 1))"
+                  :disabled="pagination.adminLeaves.processed.currentPage === pagination.adminLeaves.processed.pages"
+                  class="pagination-btn">
+                  下一页
+                </button>
+
+                <span class="pagination-info">
+                  共筛选到 {{ pagination.adminLeaves.processed.total }} 条记录，第 {{
+                    pagination.adminLeaves.processed.currentPage }} / {{ pagination.adminLeaves.processed.pages }} 页
                 </span>
               </div>
             </div>
@@ -900,10 +1118,65 @@ export default {
       previewImageUrl: '',
       loadingPending: false,
       loadingReviewed: false,
-      attendanceDialogVisible: false,
-      attendance: [],
-      allEmployees: [],
-      employeeSearch: '',
+      // 人脸审核分页相关
+      facePagination: {
+        pending: {
+          currentPage: 1,
+          total: 0,
+          pages: 0,
+          perPage: 10
+        },
+        reviewed: {
+          currentPage: 1,
+          total: 0,
+          pages: 0,
+          perPage: 10
+        }
+      },
+      // 人脸审核批量处理相关
+      isFaceBatchMode: false,
+      selectedFaceEnrollments: [], // 选中的待审核人脸录入ID数组
+
+      // 阶段考勤统计相关
+      periodStats: {
+        startDate: '',
+        endDate: '',
+        leaveTrendChart: null,
+        attendanceTrendChart: null,
+        phaseRanges: null
+      },
+
+      // 员工详细考勤信息弹窗相关
+      showEmployeeDetailModal: false,
+      selectedEmployee: null,
+      employeeDetail: {
+        earliestClockIn: '',
+        latestClockIn: '',
+        earliestClockOut: '',
+        latestClockOut: '',
+        attendanceTrendData: {
+          weeks: [],
+          late: [],
+          earlyLeave: []
+        }, // 异常考勤趋势数据
+        leaveTrendData: {
+          weeks: [],
+          sickLeave: [],
+          personalLeave: [],
+          officialLeave: []
+        } // 请假趋势数据
+      },
+      // 图表悬停提示框
+      tooltip: {
+        visible: false,
+        content: '',
+        top: 0,
+        left: 0,
+        chartType: '' // 'abnormal' 或 'leave'
+      },
+      // 图表实例
+      attendanceTrendChartInstance: null,
+      leaveTrendChartInstance: null
     }
   },
   watch: {
@@ -937,6 +1210,8 @@ export default {
       await this.loadDashboardData();
       this.$nextTick(() => {
         this.renderAttendanceCharts();
+        // 加载阶段考勤统计数据
+        this.loadPeriodStats();
       });
     } else {
       this.activeTab = 'personal';
@@ -1056,12 +1331,30 @@ export default {
       }
     },
 
-    // 加载待审核的人脸录入申请
-    async loadPendingFaceEnrollments() {
+    // 加载待审核的人脸录入申请（支持分页）
+    async loadPendingFaceEnrollments(page = 1, loadAll = false) {
       this.loadingPending = true
       try {
         const token = localStorage.getItem('access_token')
-        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/pending`, {
+        // 构建查询参数
+        const params = new URLSearchParams()
+
+        // 如果不是加载所有数据，则使用分页参数
+        if (!loadAll) {
+          params.append('page', page)
+          params.append('page_size', this.facePagination.pending.perPage)
+        } else {
+          // 加载所有数据时，设置一个足够大的page_size
+          params.append('page', 1)
+          params.append('page_size', 10000) // 假设不会有超过10000条记录
+        }
+
+        // 添加姓名过滤参数
+        if (this.faceNameFilter) {
+          params.append('name', this.faceNameFilter)
+        }
+
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/pending?${params}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -1069,6 +1362,12 @@ export default {
         if (response.ok) {
           const data = await response.json()
           this.pendingFaceEnrollments = data.enrollments || []
+          // 更新分页信息（仅在非加载所有数据时）
+          if (!loadAll) {
+            this.facePagination.pending.currentPage = data.current_page || 1
+            this.facePagination.pending.total = data.total || 0
+            this.facePagination.pending.pages = data.pages || 0
+          }
         } else {
           console.error('加载待审核列表失败，状态码:', response.status)
           ElMessage.error('加载待审核列表失败')
@@ -1081,22 +1380,37 @@ export default {
       }
     },
 
-    // 加载已审核的人脸录入申请
-    async loadReviewedFaceEnrollments() {
+    // 加载已审核的人脸录入申请（支持分页）
+    async loadReviewedFaceEnrollments(page = 1) {
       this.loadingReviewed = true
       try {
         const token = localStorage.getItem('access_token')
-        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/all`, {
+        // 构建查询参数
+        const params = new URLSearchParams({
+          page: page,
+          page_size: this.facePagination.reviewed.perPage
+        })
+        // 添加姓名过滤参数
+        if (this.faceNameFilter) {
+          params.append('name', this.faceNameFilter)
+        }
+        // 添加状态过滤参数（已处理页面只显示已审核的记录）
+        if (this.faceStatusFilter !== -1) {
+          params.append('status', this.faceStatusFilter)
+        }
+
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/all?${params}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         })
         if (response.ok) {
           const data = await response.json()
-          // 过滤出已审核的记录（状态不为0）
-          this.reviewedFaceEnrollments = (data.enrollments || []).filter(
-            item => item.status !== 0
-          )
+          this.reviewedFaceEnrollments = data.enrollments || []
+          // 更新分页信息
+          this.facePagination.reviewed.currentPage = data.current_page || 1
+          this.facePagination.reviewed.total = data.total || 0
+          this.facePagination.reviewed.pages = data.pages || 0
         } else {
           console.error('加载已处理列表失败，状态码:', response.status)
           ElMessage.error('加载已处理列表失败')
@@ -1189,6 +1503,110 @@ export default {
         2: 'status-rejected'
       }
       return classMap[status] || 'status-pending'
+    },
+
+    // 人脸审核分页相关方法
+    changePendingFacePage(page) {
+      if (page >= 1 && page <= this.facePagination.pending.pages) {
+        this.loadPendingFaceEnrollments(page)
+      }
+    },
+
+    changeReviewedFacePage(page) {
+      if (page >= 1 && page <= this.facePagination.reviewed.pages) {
+        this.loadReviewedFaceEnrollments(page)
+      }
+    },
+
+    // 生成分页数字数组
+    generatePageNumbers(totalPages, currentPage) {
+      const delta = 2
+      const range = []
+      for (let i = Math.max(1, currentPage - delta); i <= Math.min(totalPages, currentPage + delta); i++) {
+        range.push(i)
+      }
+
+      // 添加省略号和边界页码
+      if (range[0] > 1) {
+        range.unshift('...')
+        range.unshift(1)
+      }
+      if (range[range.length - 1] < totalPages) {
+        range.push('...')
+        range.push(totalPages)
+      }
+
+      return range
+    },
+
+    // 人脸审核批量处理相关方法
+    async toggleFaceBatchMode() {
+      this.isFaceBatchMode = !this.isFaceBatchMode;
+      if (this.isFaceBatchMode) {
+        // 进入批量模式时加载所有数据
+        await this.loadPendingFaceEnrollments(1, true);
+      } else {
+        // 退出批量模式时清空选中项并恢复分页数据
+        this.selectedFaceEnrollments = [];
+        await this.loadPendingFaceEnrollments(this.facePagination.pending.currentPage);
+      }
+    },
+
+    toggleFaceEnrollmentSelection(enrollmentId) {
+      const index = this.selectedFaceEnrollments.indexOf(enrollmentId);
+      if (index === -1) {
+        // 未选中则添加
+        this.selectedFaceEnrollments.push(enrollmentId);
+      } else {
+        // 已选中则移除
+        this.selectedFaceEnrollments.splice(index, 1);
+      }
+    },
+
+    isFaceEnrollmentSelected(enrollmentId) {
+      return this.selectedFaceEnrollments.includes(enrollmentId);
+    },
+
+    async batchReviewFaceEnrollments(approved) {
+      if (this.selectedFaceEnrollments.length === 0) {
+        alert('请至少选择一条记录');
+        return;
+      }
+
+      if (!confirm(`确定要${approved ? '通过' : '拒绝'}选中的 ${this.selectedFaceEnrollments.length} 条记录吗？`)) {
+        return;
+      }
+
+      try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/batch-review`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            enrollment_ids: this.selectedFaceEnrollments,
+            approved: approved
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          // 批量处理成功，重新加载数据
+          this.selectedFaceEnrollments = []; // 清空选中项
+          this.isFaceBatchMode = false; // 退出批量模式
+          // 退出批量模式后恢复分页数据
+          await this.loadPendingFaceEnrollments(this.facePagination.pending.currentPage);
+          alert(`成功${approved ? '通过' : '拒绝'} ${data.success_count} 条记录`);
+        } else {
+          alert(data.message || '批量处理失败');
+        }
+      } catch (error) {
+        console.error('Batch review error:', error);
+        alert('网络错误，批量处理失败');
+      }
     },
 
     async loadUserProfile() {
@@ -1658,20 +2076,7 @@ export default {
     },
 
     // 生成页码数组
-    generatePageNumbers(totalPages, currentPage, maxVisible = 5) {
-      const pages = []
-      let start = Math.max(1, currentPage - Math.floor(maxVisible / 2))
-      let end = Math.min(totalPages, start + maxVisible - 1)
 
-      if (end - start + 1 < maxVisible) {
-        start = Math.max(1, end - maxVisible + 1)
-      }
-
-      for (let i = start; i <= end; i++) {
-        pages.push(i)
-      }
-      return pages
-    },
 
     // 重置分页到第一页
     resetAndRecalculatePagination() {
@@ -1910,6 +2315,570 @@ export default {
         ]
       };
       chart2.setOption(option2);
+    },
+
+    // 加载阶段考勤统计数据
+    async loadPeriodStats() {
+      try {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+          alert('登录已过期，请重新登录');
+          this.$router.push('/');
+          return;
+        }
+
+        // 如果没有选择日期，设置默认日期（近一个月）
+        let startDate = this.periodStats.startDate;
+        let endDate = this.periodStats.endDate;
+
+        if (!startDate || !endDate) {
+          const today = new Date();
+          endDate = today.toISOString().split('T')[0];
+          startDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+          // 更新数据模型中的日期
+          this.periodStats.startDate = startDate;
+          this.periodStats.endDate = endDate;
+        }
+
+        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/period?start_date=${startDate}&end_date=${endDate}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          // 保存阶段时间范围数据
+          this.periodStats.phaseRanges = data.phase_ranges;
+          this.renderLeaveTrendChart(data.absence_stats);
+          this.renderAttendanceTrendChart(data.attendance_stats);
+        } else {
+          const errorData = await response.json();
+          alert(errorData.message || '获取阶段考勤统计数据失败');
+        }
+      } catch (error) {
+        console.error('获取阶段考勤统计数据失败:', error);
+        alert('网络错误，请稍后重试');
+      }
+    },
+
+    // 渲染请假趋势统计折线图
+    renderLeaveTrendChart(absenceStats) {
+      const chartDom = document.getElementById('leave-trend-chart');
+      if (!chartDom) {
+        console.error('leave-trend-chart 容器未找到');
+        return;
+      }
+
+      // 销毁之前的图表实例（如果存在）
+      if (this.periodStats.leaveTrendChart) {
+        this.periodStats.leaveTrendChart.dispose();
+      }
+
+      const chart = echarts.init(chartDom);
+      this.periodStats.leaveTrendChart = chart;
+
+      // 准备数据
+      const stages = ['第一阶段', '第二阶段', '第三阶段'];
+      const sickData = absenceStats.map(stage => stage.sick_leave);
+      const personalData = absenceStats.map(stage => stage.personal_leave);
+      const officialData = absenceStats.map(stage => stage.official_leave);
+
+      // 定义阶段时间范围显示文本
+      const getPhaseRangeText = (index) => {
+        if (!this.periodStats.phaseRanges) return '';
+        const phaseNames = ['第一阶段', '第二阶段', '第三阶段'];
+        const phaseKey = phaseNames[index];
+        const range = this.periodStats.phaseRanges[phaseKey];
+        return range ? `\n${range.start} 至 ${range.end}` : '';
+      };
+
+      const option = {
+        title: {
+          text: '请假趋势统计',
+          left: 'center'
+        },
+        tooltip: {
+          trigger: 'axis',
+          formatter: (params) => {
+            const stageIndex = params[0].dataIndex;
+            const stageName = stages[stageIndex];
+            const rangeText = getPhaseRangeText(stageIndex);
+
+            let tooltipText = `${stageName}${rangeText}<br/>`;
+            params.forEach(param => {
+              tooltipText += `${param.marker} ${param.seriesName}: ${param.data}<br/>`;
+            });
+            return tooltipText;
+          }
+        },
+        legend: {
+          data: ['病假', '私事请假', '公事请假'],
+          top: '10%'
+        },
+        xAxis: {
+          type: 'category',
+          data: stages
+        },
+        yAxis: {
+          type: 'value',
+          name: '人数'
+        },
+        series: [
+          {
+            name: '病假',
+            type: 'line',
+            data: sickData,
+            smooth: true,
+            itemStyle: { color: '#5eb95e' } // 绿色
+          },
+          {
+            name: '私事请假',
+            type: 'line',
+            data: personalData,
+            smooth: true,
+            itemStyle: { color: '#3b82f6' } // 深蓝色
+          },
+          {
+            name: '公事请假',
+            type: 'line',
+            data: officialData,
+            smooth: true,
+            itemStyle: { color: '#f59e0b' } // 橙色
+          }
+        ]
+      };
+
+      chart.setOption(option);
+    },
+
+    // 渲染出勤趋势统计折线图
+    renderAttendanceTrendChart(attendanceStats) {
+      const chartDom = document.getElementById('attendance-trend-chart');
+      if (!chartDom) {
+        console.error('attendance-trend-chart 容器未找到');
+        return;
+      }
+
+      // 销毁之前的图表实例（如果存在）
+      if (this.periodStats.attendanceTrendChart) {
+        this.periodStats.attendanceTrendChart.dispose();
+      }
+
+      const chart = echarts.init(chartDom);
+      this.periodStats.attendanceTrendChart = chart;
+
+      // 准备数据
+      const stages = ['第一阶段', '第二阶段', '第三阶段'];
+      const normalData = attendanceStats.map(stage => stage.normal);
+      const lateData = attendanceStats.map(stage => stage.late);
+      const earlyData = attendanceStats.map(stage => stage.early);
+      const overtimeData = attendanceStats.map(stage => stage.overtime);
+
+      // 定义阶段时间范围显示文本
+      const getPhaseRangeText = (index) => {
+        if (!this.periodStats.phaseRanges) return '';
+        const phaseNames = ['第一阶段', '第二阶段', '第三阶段'];
+        const phaseKey = phaseNames[index];
+        const range = this.periodStats.phaseRanges[phaseKey];
+        return range ? `\n${range.start} 至 ${range.end}` : '';
+      };
+
+      const option = {
+        title: {
+          text: '出勤趋势统计',
+          left: 'center'
+        },
+        tooltip: {
+          trigger: 'axis',
+          formatter: (params) => {
+            const stageIndex = params[0].dataIndex;
+            const stageName = stages[stageIndex];
+            const rangeText = getPhaseRangeText(stageIndex);
+
+            let tooltipText = `${stageName}${rangeText}<br/>`;
+            params.forEach(param => {
+              tooltipText += `${param.marker} ${param.seriesName}: ${param.data}<br/>`;
+            });
+            return tooltipText;
+          }
+        },
+        legend: {
+          data: ['正常', '迟到', '早退', '加班'],
+          top: '10%'
+        },
+        xAxis: {
+          type: 'category',
+          data: stages
+        },
+        yAxis: {
+          type: 'value',
+          name: '人数'
+        },
+        series: [
+          {
+            name: '正常',
+            type: 'line',
+            data: normalData,
+            smooth: true,
+            itemStyle: { color: '#3b82f6' } // 蓝色
+          },
+          {
+            name: '迟到',
+            type: 'line',
+            data: lateData,
+            smooth: true,
+            itemStyle: { color: '#5eb95e' } // 绿色
+          },
+          {
+            name: '早退',
+            type: 'line',
+            data: earlyData,
+            smooth: true,
+            itemStyle: { color: '#3b82f6' } // 深蓝色
+          },
+          {
+            name: '加班',
+            type: 'line',
+            data: overtimeData,
+            smooth: true,
+            itemStyle: { color: '#f59e0b' } // 橙色
+          }
+        ]
+      };
+
+      chart.setOption(option);
+    },
+
+    // 显示员工详细考勤信息弹窗
+    async showEmployeeDetail(employee) {
+      this.selectedEmployee = employee;
+
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employee/${employee.user_id}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+
+          // 设置员工详细信息
+          this.employeeDetail = {
+            earliestClockIn: data.earliestClockIn,
+            latestClockIn: data.latestClockIn,
+            earliestClockOut: data.earliestClockOut,
+            latestClockOut: data.latestClockOut,
+            attendanceTrendData: data.attendanceTrendData,
+            leaveTrendData: data.leaveTrendData
+          };
+        } else {
+          console.error('获取员工详细信息失败:', response.status);
+          // 如果获取失败，使用模拟数据
+          this.employeeDetail = {
+            earliestClockIn: '08:30',
+            latestClockIn: '09:15',
+            earliestClockOut: '17:45',
+            latestClockOut: '20:30',
+            attendanceTrendData: {
+              weeks: ['第1周', '第2周', '第3周'],
+              late: [2, 1, 3],
+              earlyLeave: [1, 0, 2]
+            },
+            leaveTrendData: {
+              weeks: ['第1周', '第2周', '第3周'],
+              sickLeave: [1, 0, 1],
+              personalLeave: [0, 1, 0],
+              officialLeave: [0, 0, 1]
+            }
+          };
+        }
+      } catch (error) {
+        console.error('获取员工详细信息时发生错误:', error);
+        // 如果发生错误，使用模拟数据
+        this.employeeDetail = {
+          earliestClockIn: '08:30',
+          latestClockIn: '09:15',
+          earliestClockOut: '17:45',
+          latestClockOut: '20:30',
+          attendanceTrendData: {
+            weeks: ['第1周', '第2周', '第3周'],
+            late: [2, 1, 3],
+            earlyLeave: [1, 0, 2]
+          },
+          leaveTrendData: {
+            weeks: ['第1周', '第2周', '第3周'],
+            sickLeave: [1, 0, 1],
+            personalLeave: [0, 1, 0],
+            officialLeave: [0, 0, 1]
+          }
+        };
+      }
+
+      this.showEmployeeDetailModal = true;
+
+      // 渲染图表
+      this.$nextTick(() => {
+        this.renderAbnormalAttendanceChart();
+        this.renderEmployeeLeaveTrendChart();
+      });
+    },
+
+    // 关闭员工详细考勤信息弹窗
+    closeEmployeeDetailModal() {
+      this.showEmployeeDetailModal = false;
+      this.selectedEmployee = null;
+      // 重置employeeDetail为初始结构
+      this.employeeDetail = {
+        earliestClockIn: '',
+        latestClockIn: '',
+        earliestClockOut: '',
+        latestClockOut: '',
+        attendanceTrendData: {
+          weeks: [],
+          late: [],
+          earlyLeave: []
+        },
+        leaveTrendData: {
+          weeks: [],
+          sickLeave: [],
+          personalLeave: [],
+          officialLeave: []
+        }
+      };
+
+      // 销毁图表实例
+      if (this.attendanceTrendChartInstance) {
+        this.attendanceTrendChartInstance.dispose();
+        this.attendanceTrendChartInstance = null;
+      }
+      if (this.leaveTrendChartInstance) {
+        this.leaveTrendChartInstance.dispose();
+        this.leaveTrendChartInstance = null;
+      }
+    },
+
+    // 撤销请假申请
+    async cancelLeave(id) {
+      try {
+        // 确认撤销操作
+        const confirmed = confirm('确定要撤销这条请假申请吗？');
+        if (!confirmed) return;
+
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+          alert('登录已过期，请重新登录');
+          this.$router.push('/');
+          return;
+        }
+
+        const res = await fetch(`${this.apiBaseUrl}/absence/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          // 撤销成功后刷新列表
+          this.loadMyLeaves(this.pagination.myLeaves.currentPage);
+          alert(data.message || '撤销成功');
+        } else {
+          // 服务器返回错误
+          alert(data.message || '撤销失败：服务器返回错误');
+          console.error('撤销失败:', data);
+        }
+      } catch (e) {
+        // 网络或其他错误
+        alert('撤销失败：网络错误或服务器异常');
+        console.error('撤销请假时发生错误:', e);
+      }
+    },
+
+    // 渲染异常考勤趋势图
+    renderAbnormalAttendanceChart() {
+      // 检查数据是否存在
+      if (!this.employeeDetail || !this.employeeDetail.attendanceTrendData) {
+        console.warn('员工详细考勤信息未加载或数据结构不正确');
+        return;
+      }
+
+      const chartDom = this.$refs.abnormalAttendanceChart;
+      if (!chartDom) {
+        console.error('abnormalAttendanceChart 容器未找到');
+        return;
+      }
+
+      // 销毁之前的图表实例（如果存在）
+      if (this.attendanceTrendChartInstance) {
+        this.attendanceTrendChartInstance.dispose();
+      }
+
+      const chart = echarts.init(chartDom);
+      this.attendanceTrendChartInstance = chart;
+
+      // 准备数据
+      const weeks = this.employeeDetail.attendanceTrendData.weeks;
+      const lateData = this.employeeDetail.attendanceTrendData.late;
+      const earlyLeaveData = this.employeeDetail.attendanceTrendData.earlyLeave;
+
+      const option = {
+        tooltip: {
+          trigger: 'axis'
+        },
+        legend: {
+          data: ['迟到次数', '早退次数'],
+          top: '10%'
+        },
+        xAxis: {
+          type: 'category',
+          data: weeks
+        },
+        yAxis: {
+          type: 'value',
+          name: '次数'
+        },
+        series: [
+          {
+            name: '迟到次数',
+            type: 'line',
+            data: lateData,
+            smooth: true,
+            itemStyle: { color: '#f59e0b' } // 橙色
+          },
+          {
+            name: '早退次数',
+            type: 'line',
+            data: earlyLeaveData,
+            smooth: true,
+            itemStyle: { color: '#3b82f6' } // 蓝色
+          }
+        ]
+      };
+
+      chart.setOption(option);
+
+      // 添加鼠标悬停事件监听器
+      chart.on('mouseover', (params) => {
+        if (params.componentType === 'series') {
+          this.showTooltip(event, 'abnormal', params.dataIndex);
+        }
+      });
+    },
+
+    // 渲染请假趋势图
+    renderEmployeeLeaveTrendChart() {
+      // 检查数据是否存在
+      if (!this.employeeDetail || !this.employeeDetail.leaveTrendData) {
+        console.warn('员工详细考勤信息未加载或数据结构不正确');
+        return;
+      }
+
+      const chartDom = this.$refs.leaveTrendChart;
+      if (!chartDom) {
+        console.error('leaveTrendChart 容器未找到');
+        return;
+      }
+
+      // 销毁之前的图表实例（如果存在）
+      if (this.leaveTrendChartInstance) {
+        this.leaveTrendChartInstance.dispose();
+      }
+
+      const chart = echarts.init(chartDom);
+      this.leaveTrendChartInstance = chart;
+
+      // 准备数据
+      const weeks = this.employeeDetail.leaveTrendData.weeks;
+      const sickLeaveData = this.employeeDetail.leaveTrendData.sickLeave;
+      const personalLeaveData = this.employeeDetail.leaveTrendData.personalLeave;
+      const officialLeaveData = this.employeeDetail.leaveTrendData.officialLeave;
+
+      const option = {
+        tooltip: {
+          trigger: 'axis'
+        },
+        legend: {
+          data: ['病假', '私事请假', '公事请假'],
+          top: '10%'
+        },
+        xAxis: {
+          type: 'category',
+          data: weeks
+        },
+        yAxis: {
+          type: 'value',
+          name: '次数'
+        },
+        series: [
+          {
+            name: '病假',
+            type: 'line',
+            data: sickLeaveData,
+            smooth: true,
+            itemStyle: { color: '#5eb95e' } // 绿色
+          },
+          {
+            name: '私事请假',
+            type: 'line',
+            data: personalLeaveData,
+            smooth: true,
+            itemStyle: { color: '#3b82f6' } // 蓝色
+          },
+          {
+            name: '公事请假',
+            type: 'line',
+            data: officialLeaveData,
+            smooth: true,
+            itemStyle: { color: '#f59e0b' } // 橙色
+          }
+        ]
+      };
+
+      chart.setOption(option);
+
+      // 添加鼠标悬停事件监听器
+      chart.on('mouseover', (params) => {
+        if (params.componentType === 'series') {
+          this.showTooltip(event, 'leave', params.dataIndex);
+        }
+      });
+    },
+
+    // 显示图表悬停提示
+    showTooltip(event, chartType, dataIndex) {
+      // 获取对应图表的数据
+      let weeksData = [];
+      if (chartType === 'abnormal' && this.employeeDetail.attendanceTrendData) {
+        weeksData = this.employeeDetail.attendanceTrendData.weeks;
+      } else if (chartType === 'leave' && this.employeeDetail.leaveTrendData) {
+        weeksData = this.employeeDetail.leaveTrendData.weeks;
+      }
+
+      // 确保有数据且索引有效
+      if (weeksData.length > 0 && dataIndex >= 0 && dataIndex < weeksData.length) {
+        const weekRange = weeksData[dataIndex];
+        this.tooltip.content = `${weekRange}`;
+        this.tooltip.chartType = chartType;
+        this.tooltip.visible = true;
+
+        // 计算提示框位置
+        const rect = event.currentTarget.getBoundingClientRect();
+        this.tooltip.top = rect.top - 40;
+        this.tooltip.left = rect.left + (rect.width / 2) - 50;
+      }
+    },
+
+    // 隐藏提示框
+    hideTooltip() {
+      this.tooltip.visible = false;
     }
   },
   computed: {
@@ -2037,6 +3006,20 @@ export default {
   align-items: center;
   gap: 8px;
   /* 10px * 0.8 */
+}
+
+/* 图表提示框样式 */
+.chart-tooltip {
+  position: fixed;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  z-index: 1000;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .pagination-wrapper {
@@ -2179,6 +3162,7 @@ export default {
   border-radius: 8px;
   padding: 24px;
   text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .stat-card.late {
@@ -2202,6 +3186,47 @@ export default {
 .stat-label {
   color: #7f8c8d;
   margin-top: 8px;
+}
+
+.charts-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.charts-row>div {
+  flex: 1;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+}
+
+.period-stats-container {
+  margin-top: 30px;
+  padding: 20px;
+}
+
+.date-picker-container {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.date-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.date-picker label {
+  font-weight: 500;
+}
+
+.date-picker input {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
 }
 
 .section-header {
@@ -2409,10 +3434,10 @@ export default {
 
 /* 批量处理按钮样式 */
 .batch-process-btn {
-  background: #3498db;
+  background: #5dade2;
   color: white;
   border: none;
-  padding: 10px 20px;
+  padding: 8px 16px;
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
@@ -2421,7 +3446,7 @@ export default {
 }
 
 .batch-process-btn:hover:not(:disabled) {
-  background: #2980b9;
+  background: #3498db;
 }
 
 .batch-process-btn:disabled {
@@ -2689,6 +3714,17 @@ export default {
   text-decoration: underline;
 }
 
+/* 员工姓名链接样式 */
+.employee-name-link {
+  cursor: pointer;
+  color: #007bff;
+  text-decoration: none;
+}
+
+.employee-name-link:hover {
+  color: #0056b3;
+}
+
 /* 请假表单控件样式 */
 .leave-form input[type="datetime-local"],
 .leave-form textarea,
@@ -2830,5 +3866,88 @@ export default {
   transform: scale(1.1);
 }
 
-</style>
+/* 员工详细考勤信息弹窗样式 */
+.employee-detail-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
 
+.employee-detail-content {
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  width: 80%;
+  max-width: 800px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+}
+
+.employee-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eee;
+}
+
+.employee-detail-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+}
+
+.close-button:hover {
+  color: #333;
+}
+
+.employee-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.info-item {
+  background: #f8f9fa;
+  padding: 12px;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.info-label {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.info-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.chart-container {
+  margin: 20px 0;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+</style>

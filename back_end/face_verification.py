@@ -35,21 +35,39 @@ def get_image(filename):
         return {"error": "Image not found"}, 404
 
 
-# 获取待审核的人脸录入列表
+# 获取待审核的人脸录入列表（支持分页）
 @app.route("/admin/face-enrollments/pending", methods=["GET"])
 @jwt_required()
 def get_pending_face_enrollments():
-    """获取待审核的人脸录入申请列表"""
+    """获取待审核的人脸录入申请列表（支持分页）"""
     try:
         # 验证管理员权限
         current_user_id = get_jwt_identity()
         current_user = User.query.get(current_user_id)
         if not current_user or current_user.role != "管理员":
             return jsonify(ok=False, msg="权限不足"), 403
-        # 获取待审核的申请
-        pending_enrollments = FaceEnrollment.query.filter_by(
-            status=ENROLLMENT_PENDING
-        ).all()
+            
+        # 获取分页参数
+        page = request.args.get("page", 1, type=int)
+        page_size = min(request.args.get("page_size", 10, type=int), 100)
+        
+        # 获取姓名过滤参数
+        name_filter = request.args.get("name")
+        
+        # 构建查询
+        query = FaceEnrollment.query.filter_by(status=ENROLLMENT_PENDING)
+        
+        # 应用姓名过滤
+        if name_filter:
+            # 通过用户表关联过滤
+            query = query.join(User).filter(User.name.ilike(f"%{name_filter}%"))
+        
+        # 使用paginate进行分页查询
+        pagination = query.order_by(FaceEnrollment.created_time.desc()).paginate(
+            page=page, per_page=page_size, error_out=False
+        )
+        
+        pending_enrollments = pagination.items
         result = []
         for enrollment in pending_enrollments:
             user = User.query.get(enrollment.user_id)
@@ -67,27 +85,60 @@ def get_pending_face_enrollments():
                     else "",
                 }
             )
-        return jsonify(ok=True, enrollments=result)
+        return jsonify(
+            ok=True, 
+            enrollments=result,
+            total=pagination.total,
+            pages=pagination.pages,
+            current_page=pagination.page,
+            page_size=page_size
+        )
     except Exception as e:
         app.logger.error(f"获取待审核列表失败: {str(e)}")
         return jsonify(ok=False, msg="获取数据失败"), 500
 
 
-# 获取所有人脸录入记录（包括已审核的）
+# 获取所有人脸录入记录（包括已审核的，支持分页）
 @app.route("/admin/face-enrollments/all", methods=["GET"])
 @jwt_required()
 def get_all_face_enrollments():
-    """获取所有人脸录入记录"""
+    """获取所有人脸录入记录（支持分页）"""
     try:
         # 验证管理员权限
         current_user_id = get_jwt_identity()
         current_user = User.query.get(current_user_id)
         if not current_user or current_user.role != "管理员":
             return jsonify(ok=False, msg="权限不足"), 403
-        # 获取所有人脸录入记录，按创建时间倒序排列
-        enrollments = FaceEnrollment.query.order_by(
-            FaceEnrollment.created_time.desc()
-        ).all()
+            
+        # 获取分页参数
+        page = request.args.get("page", 1, type=int)
+        page_size = min(request.args.get("page_size", 10, type=int), 100)
+        
+        # 获取过滤参数
+        name_filter = request.args.get("name")
+        status_filter = request.args.get("status", type=int)
+        
+        # 构建查询
+        query = FaceEnrollment.query
+        
+        # 应用状态过滤
+        if status_filter is not None:
+            query = query.filter(FaceEnrollment.status == status_filter)
+        else:
+            # 默认只显示已处理的记录（排除待审核）
+            query = query.filter(FaceEnrollment.status != ENROLLMENT_PENDING)
+            
+        # 应用姓名过滤
+        if name_filter:
+            # 通过用户表关联过滤
+            query = query.join(User).filter(User.name.ilike(f"%{name_filter}%"))
+        
+        # 使用paginate进行分页查询
+        pagination = query.order_by(FaceEnrollment.created_time.desc()).paginate(
+            page=page, per_page=page_size, error_out=False
+        )
+        
+        enrollments = pagination.items
         result = []
         for enrollment in enrollments:
             user = User.query.get(enrollment.user_id)
@@ -118,7 +169,14 @@ def get_all_face_enrollments():
                     "review_comment": enrollment.review_comment or "",
                 }
             )
-        return jsonify(ok=True, enrollments=result)
+        return jsonify(
+            ok=True, 
+            enrollments=result,
+            total=pagination.total,
+            pages=pagination.pages,
+            current_page=pagination.page,
+            page_size=page_size
+        )
     except Exception as e:
         app.logger.error(f"获取人脸录入记录失败: {str(e)}")
         return jsonify(ok=False, msg="获取数据失败"), 500
