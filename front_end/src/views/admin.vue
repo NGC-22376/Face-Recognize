@@ -53,7 +53,7 @@
       </div>
 
       <!-- 右侧内容区域 -->
-      <div class="content-area">
+      <div v-if="activeTab !== 'leave'" class="content-area">
         <!-- 考勤概览 -->
         <div v-if="activeTab === 'dashboard' && userProfile.role === '管理员'" class="tab-content">
           <h2>今日考勤概览</h2>
@@ -139,12 +139,12 @@
                         > 0 ? '已出勤' : '未出勤')) }}
                     </span>
                   </td>
-                  <td>{{ employee.monthly_stats.total_days }}</td>
-                  <td class="late-count">{{ employee.monthly_stats.late_count }}</td>
-                  <td class="early-count">{{ employee.monthly_stats.early_leave_count }}</td>
-                  <td class="normal-count">{{ employee.monthly_stats.normal_count }}</td>
-                  <td class="leave-count">{{ employee.monthly_stats.leave_count }}</td>
-                  <td>{{ employee.monthly_stats.should_attend }}</td>
+                  <td>{{ employee.monthly_stats?.total_days ?? 0 }}</td>
+                  <td class="late-count">{{ employee.monthly_stats?.late_count ?? 0 }}</td>
+                  <td class="early-count">{{ employee.monthly_stats?.early_leave_count ?? 0 }}</td>
+                  <td class="normal-count">{{ employee.monthly_stats?.normal_count ?? 0 }}</td>
+                  <td class="leave-count">{{ employee.monthly_stats?.leave_count ?? 0 }}</td>
+                  <td>{{ employee.monthly_stats?.should_attend ?? 0 }}</td>
                 </tr>
               </tbody>
             </table>
@@ -378,40 +378,76 @@
           </div>
         </div>
 
-        <div v-if="activeTab === 'employee_management' && userProfile.role === '管理员'" class="employee-management">
-          <h2>员工管理</h2>
-          <!-- 员工列表 -->
-          <el-table :data="employees" style="width: 100%">
-            <el-table-column prop="name" label="姓名" width="150"></el-table-column>
-            <el-table-column prop="account" label="工号" width="150"></el-table-column>
-            <el-table-column label="人脸照片" width="200">
-              <template #default="scope">
-                <img :src="scope.row.photo_url" alt="人脸照片" style="width: 100px; height: 100px; object-fit: cover;" />
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="200">
-              <template #default="scope">
-                <el-button type="primary" @click="viewAttendance(scope.row)">查看出勤</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
 
-          <!-- 分页控件 -->
-          <el-pagination
-            @current-change="fetchEmployees"
-            :current-page="currentPage"
-            :page-size="pageSize"
-            layout="prev, pager, next"
-            :total="totalEmployees"
-          ></el-pagination>
+        <div v-if="activeTab === 'employee_management' && userProfile.role === '管理员'" class="tab-content">
+          <div class="section-header">
+            <h2>员工管理</h2>
+            <input
+              type="text"
+              v-model="employeeSearch"
+              placeholder="搜索姓名或工号"
+              style="margin-bottom: 12px; padding: 5px; width: 220px;"
+            />
+          </div>
+          <div class="employees-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>姓名</th>
+                  <th>工号</th>
+                  <th>人脸照片</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="employee in filteredEmployees" :key="employee.user_id">
+                  <td>{{ employee.name }}</td>
+                  <td>{{ employee.account }}</td>
+                  <td>
+                    <img :src="employee.photo_url" alt="人脸照片" style="width: 100px; height: 100px; object-fit: cover;" />
+                  </td>
+                  <td>
+                    <el-button type="primary" @click="viewAttendance(employee)">查看出勤</el-button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pagination-wrapper" v-if="filteredEmployeesTotal > 0">
+            <div class="pagination-controls">
+              <button :disabled="currentPage === 1" @click="() => handlePageChange(currentPage - 1)">上一页</button>
+              <span>第 {{ currentPage }} 页 / 共 {{ Math.ceil(filteredEmployeesTotal / pageSize) }} 页</span>
+              <button :disabled="currentPage === Math.ceil(filteredEmployeesTotal / pageSize)" @click="() => handlePageChange(currentPage + 1)">下一页</button>
+            </div>
+            <div class="pagination-controls">
+              <span>跳转到第</span>
+              <input type="number" v-model.number="jumpToPage" placeholder="跳转页码" min="1" :max="Math.ceil(filteredEmployeesTotal / pageSize)" style="width: 60px; text-align: center; margin: 0 8px;" />
+              <span>页</span>
+              <button @click="handlePageJump">跳转</button>
+            </div>
+          </div>
+        </div>
 
-          <!-- 出勤情况弹窗 -->
-          <el-dialog title="出勤情况" v-model="attendanceDialogVisible">
-            <el-table :data="attendance" style="width: 100%">
-              <el-table-column prop="clock_in_time" label="签到时间" width="180"></el-table-column>
-              <el-table-column prop="clock_out_time" label="签退时间" width="180"></el-table-column>
-              <el-table-column prop="status" label="状态" width="100"></el-table-column>
-            </el-table>
+          <!-- 出勤情况弹窗（含员工信息） -->
+          <el-dialog title="出勤情况" v-model="attendanceDialogVisible" width="700px">
+            <div style="display: flex; gap: 32px; align-items: flex-start;">
+              <!-- 左侧员工信息 -->
+              <div style="min-width: 180px; text-align: center;">
+                <img v-if="currentAttendanceEmployee && currentAttendanceEmployee.photo_url" :src="currentAttendanceEmployee.photo_url" alt="人脸照片" style="width: 100px; height: 100px; object-fit: cover; border-radius: 8px; margin-bottom: 12px;" />
+                <div v-if="currentAttendanceEmployee">
+                  <div style="font-weight: bold; font-size: 18px; margin-bottom: 4px;">{{ currentAttendanceEmployee.name }}</div>
+                  <div style="color: #888; font-size: 15px;">工号：{{ currentAttendanceEmployee.account }}</div>
+                </div>
+              </div>
+              <!-- 右侧出勤表格 -->
+              <div style="flex: 1;">
+                <el-table :data="attendance" style="width: 100%">
+                  <el-table-column prop="clock_in_time" label="签到时间" width="180"></el-table-column>
+                  <el-table-column prop="clock_out_time" label="签退时间" width="180"></el-table-column>
+                  <el-table-column prop="status" label="状态" width="100"></el-table-column>
+                </el-table>
+              </div>
+            </div>
             <template #footer>
               <el-button @click="attendanceDialogVisible = false">关闭</el-button>
             </template>
@@ -733,7 +769,7 @@
               </div>
             </div>
 
-            <div v-if="selectedLeave" class="leave-detail">
+            <div v-if="selectedLeave" class="leave-detail leave-detail-center">
               <h3>申请详情</h3>
               <p>姓名：{{ selectedLeave.name }}（工号：{{ selectedLeave.account }}）</p>
               <p>起止：{{ formatDateTime(selectedLeave.start_time) }} - {{ formatDateTime(selectedLeave.end_time) }}</p>
@@ -745,12 +781,8 @@
             </div>
           </template>
         </div>
-        <div v-if="activeTab === 'employee_management'" class="tab-content">
-          <EmployeeManagement />
-        </div>
       </div>
     </div>
-  </div>
 </template>
 
 <script>
@@ -870,6 +902,8 @@ export default {
       loadingReviewed: false,
       attendanceDialogVisible: false,
       attendance: [],
+      allEmployees: [],
+      employeeSearch: '',
     }
   },
   watch: {
@@ -918,22 +952,6 @@ export default {
   },
 
   methods: {
-    async fetchEmployees(page) {
-      this.currentPage = page;
-      try {
-        const token = localStorage.getItem('access_token');
-        const response = await axios.get(`${this.apiBaseUrl}/employees?page=${page}&pageSize=${this.pageSize}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        console.log(response.data);
-        this.employees = response.data.employees;
-        this.totalEmployees = response.data.total;
-      } catch (error) {
-        console.error('Failed to fetch employees:', error.response?.data || error);
-      }
-    },
     async viewAttendance(employee) {
       try {
         const token = localStorage.getItem('access_token');
@@ -943,6 +961,7 @@ export default {
           },
         });
         this.attendance = response.data.attendance;
+        this.currentAttendanceEmployee = employee;
         this.attendanceDialogVisible = true;
       } catch (error) {
         console.error('Failed to fetch attendance:', error.response?.data || error);
@@ -997,7 +1016,7 @@ export default {
       } else if (tab === 'employees') {
         this.loadEmployeesData()
       } else if (tab === 'employee_management') {
-        this.fetchEmployees(1)
+        this.loadEmployeesData_c(1)
       } else if (tab === 'personal') {
         this.loadPersonalData()
       } else if (tab === 'face_review') {
@@ -1226,6 +1245,25 @@ export default {
         console.error('Failed to load employees data:', error)
       } finally {
         this.isLoading = false
+      }
+    },
+    async loadEmployeesData_c() {
+      this.isLoading = true;
+      try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}&page=1&page_size=10000`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          this.allEmployees = data.employees || [];
+        } else {
+          alert('加载员工数据失败！');
+        }
+      } catch (error) {
+        console.error('Failed to load employees data:', error);
+      } finally {
+        this.isLoading = false;
       }
     },
 
@@ -1875,6 +1913,31 @@ export default {
     }
   },
   computed: {
+    filteredEmployees() {
+      let list = this.allEmployees || [];
+      if (this.employeeSearch && this.employeeSearch.trim()) {
+        const keyword = this.employeeSearch.trim().toLowerCase();
+        list = list.filter(emp =>
+          (emp.name && emp.name.toLowerCase().includes(keyword)) ||
+          (emp.account && emp.account.toLowerCase().includes(keyword))
+        );
+      }
+      // 分页
+      const start = (this.currentPage - 1) * this.pageSize;
+      const end = start + this.pageSize;
+      return list.slice(start, end);
+    },
+    filteredEmployeesTotal() {
+      let list = this.allEmployees || [];
+      if (this.employeeSearch && this.employeeSearch.trim()) {
+        const keyword = this.employeeSearch.trim().toLowerCase();
+        list = list.filter(emp =>
+          (emp.name && emp.name.toLowerCase().includes(keyword)) ||
+          (emp.account && emp.account.toLowerCase().includes(keyword))
+        );
+      }
+      return list.length;
+    },
     // 过滤后的待审核申请
     filteredPendingEnrollments() {
       return this.pendingFaceEnrollments.filter(enrollment => {
@@ -2072,6 +2135,23 @@ export default {
 .content-area {
   flex: 1;
   padding: 24px;
+  display: block;
+  position: relative;
+}
+
+/* 让请假审核详情在content-area下全宽居中显示，避免与tab-content并排 */
+.leave-detail-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  max-width: 400px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  padding: 24px 32px;
+  z-index: 10;
 }
 
 .tab-content {
@@ -2079,6 +2159,11 @@ export default {
   border-radius: 8px;
   padding: 24px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  flex: 1 1 0%;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  align-self: stretch;
 }
 
 .stats-cards {
@@ -2744,4 +2829,6 @@ export default {
 .preview-image:hover {
   transform: scale(1.1);
 }
+
 </style>
+
