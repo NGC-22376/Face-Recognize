@@ -35,6 +35,10 @@ class User(db.Model):
     face_enrollment = db.relationship(
         "FaceEnrollment", backref="user", cascade="all, delete-orphan"
     )
+    # 月度考勤统计
+    monthly_stats = db.relationship(
+        "MonthlyAttendanceStats", backref="user", cascade="all, delete-orphan"
+    )
 
 
 class Face(db.Model):
@@ -70,6 +74,23 @@ class Absence(db.Model):
     absence_type = db.Column(
         db.Integer, nullable=False, default=0
     )  # 0病假 1私事请假 2公事请假
+
+
+class MonthlyAttendanceStats(db.Model):
+    __tablename__ = "monthly_attendance_stats"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("user.user_id", ondelete="CASCADE"), nullable=False
+    )
+    year = db.Column(db.Integer, nullable=False)
+    month = db.Column(db.Integer, nullable=False)
+    earliest_clock_in = db.Column(db.Time, nullable=True)
+    latest_clock_in = db.Column(db.Time, nullable=True)
+    earliest_clock_out = db.Column(db.Time, nullable=True)
+    latest_clock_out = db.Column(db.Time, nullable=True)
+    
+    # 确保每个用户每月只有一条记录
+    __table_args__ = (db.UniqueConstraint('user_id', 'year', 'month', name='unique_user_month'),)
 
 
 # 人脸录入审核表
