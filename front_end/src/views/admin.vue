@@ -1035,9 +1035,15 @@ export default {
     // 获取人脸录入图片URL
     getEnrollmentImageUrl(imagePath) {
       if (imagePath && !imagePath.startsWith('http')) {
-        return `${this.apiBaseUrl}/${imagePath}`
+        // 如果imagePath包含temp_images路径，则构造正确的URL
+        if (imagePath.includes('temp_images')) {
+          // 后端返回的路径格式为 "temp_images/filename.jpg"
+          // 我们需要构造 "/temp_images/filename.jpg" 格式的URL
+          return `${this.apiBaseUrl}/${imagePath}`;
+        }
+        return `${this.apiBaseUrl}/${imagePath}`;
       }
-      return imagePath
+      return imagePath;
     },
 
     // 审核人脸录入申请
