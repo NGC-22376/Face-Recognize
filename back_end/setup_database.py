@@ -6,7 +6,14 @@ import pytz
 from app import app, db
 from flask_bcrypt import Bcrypt
 from sqlalchemy import text
-from models import User, Attendance, Absence, Face, FaceEnrollment, MonthlyAttendanceStats
+from models import (
+    User,
+    Attendance,
+    Absence,
+    Face,
+    FaceEnrollment,
+    MonthlyAttendanceStats,
+)
 
 # 创建中国时区对象（UTC+8）
 SHANGHAI_TZ = pytz.timezone("Asia/Shanghai")
@@ -259,15 +266,15 @@ def initialize_monthly_attendance_stats():
     with app.app_context():
         try:
             print("\n正在初始化月度考勤统计数据...")
-            
+
             # 获取当前年月
             now = datetime.now(SHANGHAI_TZ)
             current_year = now.year
             current_month = now.month
-            
+
             # 获取所有员工
             employees = User.query.filter(User.role == "员工").all()
-            
+
             # 为每个员工生成当前月的统计记录
             stats_records = []
             for employee in employees:
@@ -275,39 +282,48 @@ def initialize_monthly_attendance_stats():
                 existing_stats = MonthlyAttendanceStats.query.filter(
                     MonthlyAttendanceStats.user_id == employee.user_id,
                     MonthlyAttendanceStats.year == current_year,
-                    MonthlyAttendanceStats.month == current_month
+                    MonthlyAttendanceStats.month == current_month,
                 ).first()
-                
+
                 # 如果不存在，则创建新的统计记录
                 if not existing_stats:
                     # 获取该员工本月的所有考勤记录
                     attendance_records = Attendance.query.filter(
                         Attendance.user_id == employee.user_id,
-                        db.extract('year', Attendance.clock_in_time) == current_year,
-                        db.extract('month', Attendance.clock_in_time) == current_month
+                        db.extract("year", Attendance.clock_in_time) == current_year,
+                        db.extract("month", Attendance.clock_in_time) == current_month,
                     ).all()
-                    
+
                     # 计算最早和最晚打卡时间
                     earliest_clock_in = None
                     latest_clock_in = None
                     earliest_clock_out = None
                     latest_clock_out = None
-                    
+
                     for record in attendance_records:
                         if record.clock_in_time:
                             clock_in_time = record.clock_in_time.time()
-                            if not earliest_clock_in or clock_in_time < earliest_clock_in:
+                            if (
+                                not earliest_clock_in
+                                or clock_in_time < earliest_clock_in
+                            ):
                                 earliest_clock_in = clock_in_time
                             if not latest_clock_in or clock_in_time > latest_clock_in:
                                 latest_clock_in = clock_in_time
-                        
+
                         if record.clock_out_time:
                             clock_out_time = record.clock_out_time.time()
-                            if not earliest_clock_out or clock_out_time < earliest_clock_out:
+                            if (
+                                not earliest_clock_out
+                                or clock_out_time < earliest_clock_out
+                            ):
                                 earliest_clock_out = clock_out_time
-                            if not latest_clock_out or clock_out_time > latest_clock_out:
+                            if (
+                                not latest_clock_out
+                                or clock_out_time > latest_clock_out
+                            ):
                                 latest_clock_out = clock_out_time
-                    
+
                     # 创建月度统计记录
                     monthly_stats = MonthlyAttendanceStats(
                         user_id=employee.user_id,
@@ -316,10 +332,10 @@ def initialize_monthly_attendance_stats():
                         earliest_clock_in=earliest_clock_in,
                         latest_clock_in=latest_clock_in,
                         earliest_clock_out=earliest_clock_out,
-                        latest_clock_out=latest_clock_out
+                        latest_clock_out=latest_clock_out,
                     )
                     stats_records.append(monthly_stats)
-            
+
             # 批量插入统计记录
             if stats_records:
                 db.session.add_all(stats_records)
@@ -327,12 +343,103 @@ def initialize_monthly_attendance_stats():
                 print(f"成功初始化 {len(stats_records)} 条月度考勤统计记录。")
             else:
                 print("没有需要初始化的月度考勤统计记录。")
-                
+
             return True
-            
+
         except Exception as e:
             db.session.rollback()
             print(f"初始化月度考勤统计数据时发生错误: {e}")
+            return False
+
+
+def generate_historical_monthly_stats():
+    """为员工生成过去几个月的模拟月度考勤统计数据"""
+    with app.app_context():
+        try:
+            print("\n正在生成历史月度考勤统计数据...")
+
+            # 获取当前年月
+            now = datetime.now(SHANGHAI_TZ)
+            current_year = now.year
+            current_month = now.month
+
+            # 获取所有员工
+            employees = User.query.filter(User.role == "员工").all()
+
+            # 生成过去6个月的数据
+            stats_records = []
+            for i in range(1, 7):  # 生成过去6个月的数据
+                # 计算目标年月
+                if current_month - i <= 0:
+                    target_year = current_year - 1
+                    target_month = 12 + (current_month - i)
+                else:
+                    target_year = current_year
+                    target_month = current_month - i
+
+                for employee in employees:
+                    # 检查是否已存在该员工该月的统计记录
+                    existing_stats = MonthlyAttendanceStats.query.filter(
+                        MonthlyAttendanceStats.user_id == employee.user_id,
+                        MonthlyAttendanceStats.year == target_year,
+                        MonthlyAttendanceStats.month == target_month,
+                    ).first()
+
+                    # 如果不存在，则创建新的统计记录
+                    if not existing_stats:
+                        # 模拟生成该月的统计数据
+                        # 生成随机的时间数据来模拟最早和最晚打卡时间
+                        # 上班时间通常在8:00-10:00之间
+                        earliest_clock_in_hour = random.randint(8, 9)
+                        earliest_clock_in_minute = random.randint(0, 59)
+                        earliest_clock_in = time(
+                            earliest_clock_in_hour, earliest_clock_in_minute
+                        )
+
+                        latest_clock_in_hour = random.randint(9, 10)
+                        latest_clock_in_minute = random.randint(0, 59)
+                        latest_clock_in = time(
+                            latest_clock_in_hour, latest_clock_in_minute
+                        )
+
+                        # 下班时间通常在17:00-19:00之间
+                        earliest_clock_out_hour = random.randint(17, 18)
+                        earliest_clock_out_minute = random.randint(0, 59)
+                        earliest_clock_out = time(
+                            earliest_clock_out_hour, earliest_clock_out_minute
+                        )
+
+                        latest_clock_out_hour = random.randint(18, 19)
+                        latest_clock_out_minute = random.randint(0, 59)
+                        latest_clock_out = time(
+                            latest_clock_out_hour, latest_clock_out_minute
+                        )
+
+                        # 创建月度统计记录
+                        monthly_stats = MonthlyAttendanceStats(
+                            user_id=employee.user_id,
+                            year=target_year,
+                            month=target_month,
+                            earliest_clock_in=earliest_clock_in,
+                            latest_clock_in=latest_clock_in,
+                            earliest_clock_out=earliest_clock_out,
+                            latest_clock_out=latest_clock_out,
+                        )
+                        stats_records.append(monthly_stats)
+
+            # 批量插入统计记录
+            if stats_records:
+                db.session.add_all(stats_records)
+                db.session.commit()
+                print(f"成功生成并插入了 {len(stats_records)} 条历史月度考勤统计记录。")
+            else:
+                print("没有生成任何历史月度考勤统计记录。")
+
+            return True
+
+        except Exception as e:
+            db.session.rollback()
+            print(f"生成历史月度考勤统计数据时发生错误: {e}")
             return False
 
 
@@ -341,47 +448,53 @@ def insert_absence_data():
     with app.app_context():
         try:
             print("\n正在生成模拟请假数据...")
-            
+
             # 获取当前日期
             now = datetime.now(SHANGHAI_TZ)
             today = now.date()
-            
+
             # 获取所有员工
             employees = User.query.filter(User.role == "员工").all()
-            
-            # 为约10%的员工生成请假记录
+
+            # 生成40条请假记录
             absence_records = []
-            for employee in employees:
-                # 10%概率生成请假记录
-                if random.random() < 0.1:
-                    # 随机选择请假类型 (0:病假, 1:私事请假, 2:公事请假)
-                    absence_type = random.randint(0, 2)
-                    
-                    # 随机生成请假日期 (在未来一周内)
-                    start_date = today + timedelta(days=random.randint(1, 7))
-                    end_date = start_date + timedelta(days=random.randint(1, 5))
-                    
-                    # 生成请假原因
-                    reasons = [
-                        "身体不适，需要休息",
-                        "家中有事，需要处理",
-                        "参加重要会议",
-                        "外出培训学习",
-                        "处理紧急工作事务"
-                    ]
-                    reason = random.choice(reasons)
-                    
-                    # 创建请假记录 (状态设为未审批: 0)
-                    absence = Absence(
-                        user_id=employee.user_id,
-                        start_time=datetime.combine(start_date, time(9, 0)),
-                        end_time=datetime.combine(end_date, time(18, 0)),
-                        reason=reason,
-                        status=0,  # 未审批
-                        absence_type=absence_type
-                    )
-                    absence_records.append(absence)
-            
+            for _ in range(40):
+                # 随机选择一个员工
+                employee = random.choice(employees)
+
+                # 随机选择请假类型 (0:病假, 1:私事请假, 2:公事请假)
+                absence_type = random.randint(0, 2)
+
+                # 随机生成请假日期 (在未来一个月内)
+                start_date = today + timedelta(days=random.randint(1, 30))
+                end_date = start_date + timedelta(days=random.randint(1, 10))
+
+                # 生成请假原因
+                reasons = [
+                    "身体不适，需要休息",
+                    "家中有事，需要处理",
+                    "参加重要会议",
+                    "外出培训学习",
+                    "处理紧急工作事务",
+                    "家庭聚会",
+                    "个人事务处理",
+                    "医疗检查",
+                    "朋友婚礼",
+                    "其他私人事务",
+                ]
+                reason = random.choice(reasons)
+
+                # 创建请假记录 (状态设为未审批: 0)
+                absence = Absence(
+                    user_id=employee.user_id,
+                    start_time=datetime.combine(start_date, time(9, 0)),
+                    end_time=datetime.combine(end_date, time(18, 0)),
+                    reason=reason,
+                    status=0,  # 未审批
+                    absence_type=absence_type,
+                )
+                absence_records.append(absence)
+
             # 批量插入请假记录
             if absence_records:
                 db.session.add_all(absence_records)
@@ -389,9 +502,9 @@ def insert_absence_data():
                 print(f"成功生成并插入了 {len(absence_records)} 条模拟请假记录。")
             else:
                 print("没有生成任何模拟请假记录。")
-                
+
             return True
-            
+
         except Exception as e:
             db.session.rollback()
             print(f"插入模拟请假数据时发生错误: {e}")
@@ -411,6 +524,8 @@ def main():
                 if insert_attendance_data():
                     # 初始化月度考勤统计数据
                     initialize_monthly_attendance_stats()
+                    # 生成历史月度考勤统计数据
+                    generate_historical_monthly_stats()
                     # 生成模拟请假数据
                     insert_absence_data()
         else:
@@ -422,6 +537,7 @@ def main():
     print("  - 管理员账号: admin, 密码: admin123")
     print("  - 员工账号: empid001 - empid100, 密码: 123456")
     print("\n已为所有员工生成从本月第一天到今天的模拟考勤数据。")
+    print("\n已为所有员工生成过去6个月的模拟月度考勤统计数据。")
     print("=" * 40)
 
 

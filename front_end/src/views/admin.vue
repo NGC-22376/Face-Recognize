@@ -182,19 +182,19 @@
               <div class="employee-info-grid">
                 <div class="info-item">
                   <div class="info-label">本月最早到岗时间</div>
-                  <div class="info-value">{{ employeeDetail.earliestArrival || '-' }}</div>
+                  <div class="info-value">{{ employeeDetail.earliestClockIn || '-' }}</div>
                 </div>
                 <div class="info-item">
                   <div class="info-label">本月最晚到岗时间</div>
-                  <div class="info-value">{{ employeeDetail.latestArrival || '-' }}</div>
+                  <div class="info-value">{{ employeeDetail.latestClockIn || '-' }}</div>
                 </div>
                 <div class="info-item">
                   <div class="info-label">本月最早离岗时间</div>
-                  <div class="info-value">{{ employeeDetail.earliestDeparture || '-' }}</div>
+                  <div class="info-value">{{ employeeDetail.earliestClockOut || '-' }}</div>
                 </div>
                 <div class="info-item">
                   <div class="info-label">本月最晚离岗时间</div>
-                  <div class="info-value">{{ employeeDetail.latestDeparture || '-' }}</div>
+                  <div class="info-value">{{ employeeDetail.latestClockOut || '-' }}</div>
                 </div>
               </div>
 
