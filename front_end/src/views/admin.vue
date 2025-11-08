@@ -589,6 +589,7 @@
                     <th>事由</th>
                     <th>请假类型</th>
                     <th>状态</th>
+                    <th v-if="myLeavesTab === 'pending'">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -598,6 +599,9 @@
                     <td>{{ item.reason }}</td>
                     <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
                     <td>{{ statusMap[item.status] || item.status }}</td>
+                    <td v-if="myLeavesTab === 'pending'">
+                      <button class="clock-btn clock-out" @click="cancelLeave(item.id)">撤销</button>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -2558,6 +2562,45 @@ export default {
       if (this.leaveTrendChartInstance) {
         this.leaveTrendChartInstance.dispose();
         this.leaveTrendChartInstance = null;
+      }
+    },
+
+    // 撤销请假申请
+    async cancelLeave(id) {
+      try {
+        // 确认撤销操作
+        const confirmed = confirm('确定要撤销这条请假申请吗？');
+        if (!confirmed) return;
+
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+          alert('登录已过期，请重新登录');
+          this.$router.push('/');
+          return;
+        }
+
+        const res = await fetch(`${this.apiBaseUrl}/absence/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          // 撤销成功后刷新列表
+          this.loadMyLeaves(this.pagination.myLeaves.currentPage);
+          alert(data.message || '撤销成功');
+        } else {
+          // 服务器返回错误
+          alert(data.message || '撤销失败：服务器返回错误');
+          console.error('撤销失败:', data);
+        }
+      } catch (e) {
+        // 网络或其他错误
+        alert('撤销失败：网络错误或服务器异常');
+        console.error('撤销请假时发生错误:', e);
       }
     },
 

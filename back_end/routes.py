@@ -1354,6 +1354,38 @@ def get_personal_absences():
     )
 
 
+# 撤销请假申请（仅限本人且状态为未处理的申请）
+@app.route("/absence/<int:absence_id>", methods=["DELETE"])
+@jwt_required()
+def cancel_absence(absence_id):
+    try:
+        current_user_id = int(get_jwt_identity())
+        
+        # 查找请假记录
+        absence = Absence.query.get(absence_id)
+        
+        # 检查记录是否存在
+        if not absence:
+            return jsonify(message="请假申请不存在"), 404
+            
+        # 检查是否是本人的申请
+        if absence.user_id != current_user_id:
+            return jsonify(message="无权限操作此申请"), 403
+            
+        # 检查申请状态是否为未处理（status=0）
+        if absence.status != 0:
+            return jsonify(message="只能撤销未处理的请假申请"), 400
+            
+        # 删除请假记录
+        db.session.delete(absence)
+        db.session.commit()
+        
+        return jsonify(message="请假申请已撤销"), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(message=f"服务器错误: {str(e)}"), 500
+
+
 # 管理员查看请假申请列表（支持分页）
 @app.route("/admin/absence", methods=["GET"])
 @jwt_required()
