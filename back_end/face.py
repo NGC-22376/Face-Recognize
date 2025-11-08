@@ -10,9 +10,16 @@ from datetime import datetime
 from sqlalchemy import func
 
 # 人脸图片与特征存储目录
-os.makedirs("FaceImage", exist_ok=True)
-os.makedirs("FaceFeature", exist_ok=True)
-os.makedirs("temp_images", exist_ok=True)
+base_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(base_dir)  # 项目根目录
+face_image_dir = os.path.join(base_dir, "FaceImage")
+face_feature_dir = os.path.join(base_dir, "FaceFeature")
+temp_images_dir = os.path.join(project_root, "temp_images")  # 修改为项目根目录下的temp_images
+
+os.makedirs(face_image_dir, exist_ok=True)
+os.makedirs(face_feature_dir, exist_ok=True)
+os.makedirs(temp_images_dir, exist_ok=True)
+
 
 # 人脸识别打卡（上/下班）
 @app.route("/face/<action>", methods=["POST"])  # action = checkin | checkout
@@ -38,8 +45,8 @@ def face_action(action):
         # 验证JWT令牌中的用户ID与提交的用户ID是否一致
         current_user_id = get_jwt_identity()  # 从JWT中获取的用户ID
         user_id = int(request.form["user_id"])  # 从表单中获取的用户ID
-        #print(f"JWT user_id: {current_user_id}, type: {type(current_user_id)}")
-        #print(f"Form user_id: {user_id}, type: {type(user_id)}")
+        # print(f"JWT user_id: {current_user_id}, type: {type(current_user_id)}")
+        # print(f"Form user_id: {user_id}, type: {type(user_id)}")
         if int(current_user_id) != user_id:
             return jsonify(ok=False, msg="用户身份验证失败"), 403
         # 验证用户是否存在且已录入人脸
@@ -52,7 +59,7 @@ def face_action(action):
 
         # 处理上传的图片
         file = request.files["file"]
-        if file.filename == '':
+        if file.filename == "":
             return jsonify(ok=False, msg="未选择文件"), 400
         # 保存临时图片并提取特征
         img_path = save_image(file)
@@ -92,12 +99,12 @@ def face_action(action):
         app.logger.error(f"打卡处理异常: {str(e)}")
         return jsonify(ok=False, msg="系统异常，请稍后重试"), 500
 
+
 def handle_checkin(user_id, current_time, today, user):
     """处理上班打卡"""
     # 检查今日是否已打卡
     exist = Attendance.query.filter(
-        Attendance.user_id == user_id,
-        func.date(Attendance.clock_in_time) == today
+        Attendance.user_id == user_id, func.date(Attendance.clock_in_time) == today
     ).first()
     if exist:
         return jsonify(ok=False, msg="今日已签到，请勿重复打卡"), 400
@@ -112,11 +119,7 @@ def handle_checkin(user_id, current_time, today, user):
     else:
         status = "正常"
     # 创建打卡记录
-    att = Attendance(
-        user_id=user_id,
-        clock_in_time=current_time,
-        status=status
-    )
+    att = Attendance(user_id=user_id, clock_in_time=current_time, status=status)
     db.session.add(att)
     db.session.commit()
     return jsonify(
@@ -124,8 +127,9 @@ def handle_checkin(user_id, current_time, today, user):
         username=user.name,
         time=current_time.strftime("%H:%M:%S"),
         status=status,
-        message=f"{user.name}，上班打卡成功！"
+        message=f"{user.name}，上班打卡成功！",
     )
+
 
 def handle_checkout(user_id, current_time, today, user):
     """处理下班打卡"""
@@ -163,13 +167,16 @@ def handle_checkout(user_id, current_time, today, user):
         username=user.name,
         time=current_time.strftime("%H:%M:%S"),
         status=att.status,
-        message=f"{user.name}，下班打卡成功！"
+        message=f"{user.name}，下班打卡成功！",
     )
+
 
 def save_image(file):
     """保存上传的图片文件"""
-    # 创建临时目录（如果不存在）
-    temp_dir = "temp_images"
+    # 确保temp_images目录存在，使用项目根目录下的temp_images文件夹
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(base_dir)  # 项目根目录
+    temp_dir = os.path.join(project_root, "temp_images")
     if not os.path.exists(temp_dir):
         os.makedirs(temp_dir)
     # 生成唯一文件名
@@ -177,7 +184,8 @@ def save_image(file):
     filepath = os.path.join(temp_dir, filename)
     # 保存文件
     file.save(filepath)
-    return filepath
+    # 返回相对于项目根目录的路径，以便在数据库中正确存储
+    return os.path.join("temp_images", filename)
 
 
 def extract_feature(img_path):
@@ -199,6 +207,7 @@ def extract_feature(img_path):
         return face_encodings[0]
     except Exception as e:
         raise e
+
 
 # 人脸录入
 # 人脸录入审核状态
@@ -236,23 +245,16 @@ def face_enroll():
         # 检查是否已有人脸记录（无论是否审核通过）
         existing_face = Face.query.filter_by(user_id=user_id).first()
         if existing_face:
-            return jsonify(
-                ok=False,
-                msg="已录入过人脸，无法重复录入"
-            )
+            return jsonify(ok=False, msg="已录入过人脸，无法重复录入")
         # 检查是否有待审核的录入申请
         pending_enrollment = FaceEnrollment.query.filter_by(
-            user_id=user_id,
-            status=ENROLLMENT_PENDING
+            user_id=user_id, status=ENROLLMENT_PENDING
         ).first()
         if pending_enrollment:
-            return jsonify(
-                ok=False,
-                msg="您已有人脸录入申请正在审核中，请等待审核结果"
-            )
+            return jsonify(ok=False, msg="您已有人脸录入申请正在审核中，请等待审核结果")
         # 处理上传的图片
         file = request.files["file"]
-        if file.filename == '':
+        if file.filename == "":
             return jsonify(ok=False, msg="未选择文件"), 400
         # 保存临时图片
         try:
@@ -276,7 +278,7 @@ def face_enroll():
                 user_id=user_id,
                 image_path=img_path,
                 status=ENROLLMENT_PENDING,
-                created_time=datetime.now(SHANGHAI_TZ)
+                created_time=datetime.now(SHANGHAI_TZ),
             )
             db.session.add(new_enrollment)
             db.session.commit()
@@ -289,17 +291,26 @@ def face_enroll():
         return jsonify(
             ok=True,
             msg="录入信息已发送给管理员审核，请等待审核通过",
-            enrollment_id=new_enrollment.id
+            enrollment_id=new_enrollment.id,
         )
     except Exception as e:
         # 全局异常处理
         app.logger.error(f"人脸录入申请异常: {str(e)}")
         return jsonify(ok=False, msg="系统异常，请稍后重试"), 500
 
+
 def save_temp_image(file):
     """保存临时图片"""
+    # 确保temp_images目录存在，使用项目根目录下的temp_images文件夹
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(base_dir)  # 项目根目录
+    temp_dir = os.path.join(project_root, "temp_images")
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
+    
     ext = file.filename.rsplit(".", 1)[-1] if "." in file.filename else "jpg"
     filename = f"enrollment_{uuid.uuid4().hex}.{ext}"
-    path = os.path.join("temp_images", filename)
+    path = os.path.join(temp_dir, filename)
     file.save(path)
-    return path
+    # 返回相对于项目根目录的路径，以便在数据库中正确存储
+    return os.path.join("temp_images", filename)

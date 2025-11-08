@@ -7,10 +7,19 @@ from sqlalchemy import create_engine  # 用于数据库连接测
 
 app = Flask(__name__)
 # 配置CORS，允许所有来源的请求和所有方法，包括PATCH
-CORS(app, resources={"/*": {"origins": "*", "allow_headers": "*", "methods": ["GET", "POST", "OPTIONS", "PUT", "DELETE", "PATCH"]}})
+CORS(
+    app,
+    resources={
+        "/*": {
+            "origins": "*",
+            "allow_headers": "*",
+            "methods": ["GET", "POST", "OPTIONS", "PUT", "DELETE", "PATCH"],
+        }
+    },
+)
 
-db_user = os.getenv("DB_USER","root")
-db_pass = os.getenv("DB_PASS","456729")
+db_user = os.getenv("DB_USER", "root")
+db_pass = os.getenv("DB_PASS", "456729")
 db_host = os.getenv("DB_HOST", "localhost")
 
 
@@ -20,9 +29,9 @@ app.config["SQLALCHEMY_DATABASE_URI"] = (
 )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-app.config['SECRET_KEY'] = 'test' 
-app.config['JWT_SECRET_KEY'] = 'testtest' 
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  
+app.config["SECRET_KEY"] = "test"
+app.config["JWT_SECRET_KEY"] = "testtest"
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False
 
 # 创建中国时区对象（UTC+8）
 SHANGHAI_TZ = pytz.timezone("Asia/Shanghai")
