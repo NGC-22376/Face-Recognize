@@ -1,6 +1,7 @@
 from app import app, db, SHANGHAI_TZ
 from flask import send_from_directory
 from face import *
+import os
 
 # 人脸图片与特征存储目录
 os.makedirs("FaceImage", exist_ok=True)
@@ -13,10 +14,11 @@ ENROLLMENT_APPROVED = 1
 ENROLLMENT_REJECTED = 2
 
 # 图片存储目录
-IMAGE_FOLDER = os.path.join(os.path.dirname(__file__), 'temp_images')
+IMAGE_FOLDER = os.path.join(os.path.dirname(__file__), "temp_images")
+
 
 # 图片显示
-@app.route('/temp_images/<filename>')
+@app.route("/temp_images/<filename>")
 def get_image(filename):
     """提供图片静态文件服务"""
     try:
@@ -24,8 +26,9 @@ def get_image(filename):
     except FileNotFoundError:
         return {"error": "Image not found"}, 404
 
+
 # 获取待审核的人脸录入列表
-@app.route("/admin/face-enrollments/pending", methods=['GET'])
+@app.route("/admin/face-enrollments/pending", methods=["GET"])
 @jwt_required()
 def get_pending_face_enrollments():
     """获取待审核的人脸录入申请列表"""
@@ -33,7 +36,7 @@ def get_pending_face_enrollments():
         # 验证管理员权限
         current_user_id = get_jwt_identity()
         current_user = User.query.get(current_user_id)
-        if not current_user or current_user.role != '管理员':
+        if not current_user or current_user.role != "管理员":
             return jsonify(ok=False, msg="权限不足"), 403
         # 获取待审核的申请
         pending_enrollments = FaceEnrollment.query.filter_by(
@@ -42,14 +45,20 @@ def get_pending_face_enrollments():
         result = []
         for enrollment in pending_enrollments:
             user = User.query.get(enrollment.user_id)
-            result.append({
-                'id': enrollment.id,
-                'user_id': enrollment.user_id,
-                'user_name': user.name if user else "未知用户",
-                'user_account': user.account if user else "未知账号",
-                'image_path': enrollment.image_path,
-                'created_time': enrollment.created_time.strftime("%Y-%m-%d %H:%M:%S") if enrollment.created_time else ""
-            })
+            result.append(
+                {
+                    "id": enrollment.id,
+                    "user_id": enrollment.user_id,
+                    "user_name": user.name if user else "未知用户",
+                    "user_account": user.account if user else "未知账号",
+                    "image_path": enrollment.image_path,
+                    "created_time": enrollment.created_time.strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+                    if enrollment.created_time
+                    else "",
+                }
+            )
         return jsonify(ok=True, enrollments=result)
     except Exception as e:
         app.logger.error(f"获取待审核列表失败: {str(e)}")
@@ -57,7 +66,7 @@ def get_pending_face_enrollments():
 
 
 # 获取所有人脸录入记录（包括已审核的）
-@app.route("/admin/face-enrollments/all", methods=['GET'])
+@app.route("/admin/face-enrollments/all", methods=["GET"])
 @jwt_required()
 def get_all_face_enrollments():
     """获取所有人脸录入记录"""
@@ -65,32 +74,42 @@ def get_all_face_enrollments():
         # 验证管理员权限
         current_user_id = get_jwt_identity()
         current_user = User.query.get(current_user_id)
-        if not current_user or current_user.role != '管理员':
+        if not current_user or current_user.role != "管理员":
             return jsonify(ok=False, msg="权限不足"), 403
         # 获取所有人脸录入记录，按创建时间倒序排列
-        enrollments = FaceEnrollment.query.order_by(FaceEnrollment.created_time.desc()).all()
+        enrollments = FaceEnrollment.query.order_by(
+            FaceEnrollment.created_time.desc()
+        ).all()
         result = []
         for enrollment in enrollments:
             user = User.query.get(enrollment.user_id)
             status_text = {
                 ENROLLMENT_PENDING: "待审核",
                 ENROLLMENT_APPROVED: "已通过",
-                ENROLLMENT_REJECTED: "已拒绝"
+                ENROLLMENT_REJECTED: "已拒绝",
             }.get(enrollment.status, "未知")
-            result.append({
-                'id': enrollment.id,
-                'user_id': enrollment.user_id,
-                'user_name': user.name if user else "未知用户",
-                'user_account': user.account if user else "未知账号",
-                'image_path': enrollment.image_path,
-                'status': enrollment.status,
-                'status_text': status_text,
-                'created_time': enrollment.created_time.strftime(
-                    "%Y-%m-%d %H:%M:%S") if enrollment.created_time else "",
-                'reviewed_time': enrollment.reviewed_time.strftime(
-                    "%Y-%m-%d %H:%M:%S") if enrollment.reviewed_time else "",
-                'review_comment': enrollment.review_comment or ""
-            })
+            result.append(
+                {
+                    "id": enrollment.id,
+                    "user_id": enrollment.user_id,
+                    "user_name": user.name if user else "未知用户",
+                    "user_account": user.account if user else "未知账号",
+                    "image_path": enrollment.image_path,
+                    "status": enrollment.status,
+                    "status_text": status_text,
+                    "created_time": enrollment.created_time.strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+                    if enrollment.created_time
+                    else "",
+                    "reviewed_time": enrollment.reviewed_time.strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+                    if enrollment.reviewed_time
+                    else "",
+                    "review_comment": enrollment.review_comment or "",
+                }
+            )
         return jsonify(ok=True, enrollments=result)
     except Exception as e:
         app.logger.error(f"获取人脸录入记录失败: {str(e)}")
@@ -98,7 +117,7 @@ def get_all_face_enrollments():
 
 
 # 审核人脸录入申请
-@app.route("/admin/face-enrollments/<int:enrollment_id>/review", methods=['POST'])
+@app.route("/admin/face-enrollments/<int:enrollment_id>/review", methods=["POST"])
 @jwt_required()
 def review_face_enrollment(enrollment_id):
     """审核人脸录入申请"""
@@ -106,7 +125,7 @@ def review_face_enrollment(enrollment_id):
         # 验证管理员权限
         current_user_id = get_jwt_identity()
         current_user = User.query.get(current_user_id)
-        if not current_user or current_user.role != '管理员':
+        if not current_user or current_user.role != "管理员":
             return jsonify(ok=False, msg="权限不足"), 403
         # 获取审核申请
         enrollment = FaceEnrollment.query.get(enrollment_id)
@@ -116,8 +135,8 @@ def review_face_enrollment(enrollment_id):
         data = request.get_json()
         if not data:
             return jsonify(ok=False, msg="请求数据无效"), 400
-        approve = data.get('approve', False)
-        comment = data.get('comment', '')
+        approve = data.get("approve", False)
+        comment = data.get("comment", "")
 
         if approve:
             # 审核通过
@@ -125,13 +144,19 @@ def review_face_enrollment(enrollment_id):
                 # 提取人脸特征
                 feature = extract_feature(enrollment.image_path)
                 if feature is None:
-                    return jsonify(ok=False, msg="无法从图片中提取人脸特征，请确保照片清晰且包含正面人脸"), 400
+                    return jsonify(
+                        ok=False,
+                        msg="无法从图片中提取人脸特征，请确保照片清晰且包含正面人脸",
+                    ), 400
                 # 保存特征文件
                 feature_path = os.path.join("FaceFeature", f"{enrollment.user_id}.npy")
                 np.save(feature_path, feature)
                 # 保存图片文件
                 image_path = os.path.join("FaceImage", f"{enrollment.user_id}.jpg")
-                with open(enrollment.image_path, 'rb') as src, open(image_path, 'wb') as dst:
+                with (
+                    open(enrollment.image_path, "rb") as src,
+                    open(image_path, "wb") as dst,
+                ):
                     dst.write(src.read())
                 # 删除temp_images里面的文件
                 os.remove(enrollment.image_path)
@@ -159,7 +184,9 @@ def review_face_enrollment(enrollment_id):
             except Exception as e:
                 db.session.rollback()
                 app.logger.error(f"人脸特征提取失败: {str(e)}")
-                return jsonify(ok=False, msg="人脸特征提取失败，请确保照片清晰且包含正面人脸"), 400
+                return jsonify(
+                    ok=False, msg="人脸特征提取失败，请确保照片清晰且包含正面人脸"
+                ), 400
         else:
             # 审核拒绝
             enrollment.status = ENROLLMENT_REJECTED

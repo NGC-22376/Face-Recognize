@@ -810,7 +810,17 @@ export default {
       // 批量处理相关状态
       isBatchProcessing: false,
       isBatchMode: false,
-      selectedLeaves: [] // 选中的请假申请ID数组
+      selectedLeaves: [], // 选中的请假申请ID数组
+      // 人脸审核相关
+      faceReviewTab: 'pending',
+      faceNameFilter: '',
+      faceStatusFilter: -1,
+      pendingFaceEnrollments: [],
+      reviewedFaceEnrollments: [],
+      showPreview: false,
+      previewImageUrl: '',
+      loadingPending: false,
+      loadingReviewed: false,
     }
   },
   watch: {
@@ -1800,6 +1810,22 @@ export default {
     }
   },
   computed: {
+    // 过滤后的待审核申请
+    filteredPendingEnrollments() {
+      return this.pendingFaceEnrollments.filter(enrollment => {
+        return enrollment.user_name.toLowerCase().includes(this.faceNameFilter.toLowerCase()) ||
+          enrollment.user_account.toLowerCase().includes(this.faceNameFilter.toLowerCase())
+      })
+    },
+    // 过滤后的已审核申请
+    filteredReviewedEnrollments() {
+      return this.reviewedFaceEnrollments.filter(enrollment => {
+        const nameMatch = enrollment.user_name.toLowerCase().includes(this.faceNameFilter.toLowerCase()) ||
+          enrollment.user_account.toLowerCase().includes(this.faceNameFilter.toLowerCase())
+        const statusMatch = this.faceStatusFilter === -1 || enrollment.status === this.faceStatusFilter
+        return nameMatch && statusMatch
+      })
+    },
     // 未处理的请假申请（直接返回后端返回的数据）
     filteredUnprocessedLeaves() {
       return this.adminLeavesUnprocessed;
@@ -2509,6 +2535,7 @@ export default {
   color: #007bff;
 }
 
+
 .reason-cell:hover {
   text-decoration: underline;
 }
@@ -2561,5 +2588,66 @@ export default {
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 14px;
+}
+
+/* 人脸审核特定样式 */
+.face-image-preview {
+  width: 60px;
+  height: 60px;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid #e1e8ed;
+}
+
+.image-preview-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  position: relative;
+  max-width: 90%;
+  max-height: 90%;
+}
+
+.modal-content img {
+  max-width: 100%;
+  max-height: 90vh;
+  border-radius: 8px;
+}
+
+/* 人脸审核状态样式 */
+.status-pending {
+  color: #f39c12;
+  font-weight: 500;
+  color: #333;
+}
+
+.status-rejected {
+  color: #e74c3c;
+  font-weight: 500;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  color: #7f8c8d;
+  font-style: italic;
+}
+
+.loading-state {
+  text-align: center;
+  padding: 40px;
+  color: #3498db;
+  font-style: italic;
 }
 </style>
