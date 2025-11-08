@@ -46,6 +46,9 @@
           <div class="nav-item" :class="{ active: activeTab === 'leave' }" @click="setActiveTab('leave')">
             <span>📝</span> 请假
           </div>
+          <div v-if="userProfile.role === '管理员'" class="nav-item" :class="{ active: activeTab === 'employee_management' }" @click="setActiveTab('employee_management')">
+            <span>👔</span> 员工管理
+          </div>
         </nav>
       </div>
 
@@ -375,6 +378,46 @@
           </div>
         </div>
 
+        <div v-if="activeTab === 'employee_management' && userProfile.role === '管理员'" class="employee-management">
+          <h2>员工管理</h2>
+          <!-- 员工列表 -->
+          <el-table :data="employees" style="width: 100%">
+            <el-table-column prop="name" label="姓名" width="150"></el-table-column>
+            <el-table-column prop="account" label="工号" width="150"></el-table-column>
+            <el-table-column label="人脸照片" width="200">
+              <template #default="scope">
+                <img :src="scope.row.photo_url" alt="人脸照片" style="width: 100px; height: 100px; object-fit: cover;" />
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="200">
+              <template #default="scope">
+                <el-button type="primary" @click="viewAttendance(scope.row)">查看出勤</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <!-- 分页控件 -->
+          <el-pagination
+            @current-change="fetchEmployees"
+            :current-page="currentPage"
+            :page-size="pageSize"
+            layout="prev, pager, next"
+            :total="totalEmployees"
+          ></el-pagination>
+
+          <!-- 出勤情况弹窗 -->
+          <el-dialog title="出勤情况" v-model="attendanceDialogVisible">
+            <el-table :data="attendance" style="width: 100%">
+              <el-table-column prop="clock_in_time" label="签到时间" width="180"></el-table-column>
+              <el-table-column prop="clock_out_time" label="签退时间" width="180"></el-table-column>
+              <el-table-column prop="status" label="状态" width="100"></el-table-column>
+            </el-table>
+            <template #footer>
+              <el-button @click="attendanceDialogVisible = false">关闭</el-button>
+            </template>
+          </el-dialog>
+        </div>
+
         <!-- 请假（员工提交 / 管理员审核） -->
         <div v-if="activeTab === 'leave'" class="tab-content">
           <template v-if="userProfile.role === '员工'">
@@ -702,6 +745,9 @@
             </div>
           </template>
         </div>
+        <div v-if="activeTab === 'employee_management'" class="tab-content">
+          <EmployeeManagement />
+        </div>
       </div>
     </div>
   </div>
@@ -710,6 +756,7 @@
 <script>
 import * as echarts from 'echarts';
 import { ElMessage } from 'element-plus';
+import axios from 'axios';
 
 export default {
   name: 'AdminPage',
@@ -821,6 +868,8 @@ export default {
       previewImageUrl: '',
       loadingPending: false,
       loadingReviewed: false,
+      attendanceDialogVisible: false,
+      attendance: [],
     }
   },
   watch: {
@@ -869,6 +918,49 @@ export default {
   },
 
   methods: {
+    async fetchEmployees(page) {
+      this.currentPage = page;
+      try {
+        const token = localStorage.getItem('access_token');
+        const response = await axios.get(`${this.apiBaseUrl}/employees?page=${page}&pageSize=${this.pageSize}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        console.log(response.data);
+        this.employees = response.data.employees;
+        this.totalEmployees = response.data.total;
+      } catch (error) {
+        console.error('Failed to fetch employees:', error.response?.data || error);
+      }
+    },
+    async viewAttendance(employee) {
+      try {
+        const token = localStorage.getItem('access_token');
+        const response = await axios.get(`${this.apiBaseUrl}/attendance/${employee.user_id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        this.attendance = response.data.attendance;
+        this.attendanceDialogVisible = true;
+      } catch (error) {
+        console.error('Failed to fetch attendance:', error.response?.data || error);
+      }
+    },
+    async fetchAbsences() {
+      try {
+        const token = localStorage.getItem('access_token');
+        const response = await axios.get(`${this.apiBaseUrl}/admin/absence?page=${this.currentPage}&pageSize=${this.pageSize}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        console.log('Absences:', response.data);
+      } catch (error) {
+        console.error('Failed to fetch absences:', error.response?.data || error);
+      }
+    },
     // 重置分页到第一页
     resetPagination() {
       if (this.leaveAdminTab === 'unprocessed') {
@@ -889,6 +981,10 @@ export default {
       this.$router.push({ name: 'FaceRegister' })
     },
 
+    goToEmployeeManagement(){
+      this.$router.push({ name: 'EmployeeManagement' })
+    },
+
     setActiveTab(tab) {
       // 检查权限
       if ((tab === 'dashboard' || tab === 'employees') && this.userProfile.role !== '管理员') {
@@ -900,6 +996,8 @@ export default {
         this.loadDashboardData()
       } else if (tab === 'employees') {
         this.loadEmployeesData()
+      } else if (tab === 'employee_management') {
+        this.fetchEmployees(1)
       } else if (tab === 'personal') {
         this.loadPersonalData()
       } else if (tab === 'face_review') {
@@ -916,46 +1014,6 @@ export default {
         }
       }
     },
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     // 切换人脸审核标签页
     switchFaceReviewTab(tab) {
@@ -1844,7 +1902,6 @@ export default {
     }
   }
 }
-
 </script>
 
 <style scoped>
