@@ -2,10 +2,8 @@ from app import db
 from datetime import datetime
 
 
-
-
 class User(db.Model):
-    __tablename__ = 'user'
+    __tablename__ = "user"
     user_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     account = db.Column(db.String(255))
     name = db.Column(db.String(255))
@@ -14,11 +12,17 @@ class User(db.Model):
 
     # 添加安全问题和答案字段
     security_question_1 = db.Column(db.String(255), nullable=True)
-    security_answer_1 = db.Column(db.String(255), nullable=True, comment='哈希后的密保答案1')
+    security_answer_1 = db.Column(
+        db.String(255), nullable=True, comment="哈希后的密保答案1"
+    )
     security_question_2 = db.Column(db.String(255), nullable=True)
-    security_answer_2 = db.Column(db.String(255), nullable=True, comment='哈希后的密保答案2')
+    security_answer_2 = db.Column(
+        db.String(255), nullable=True, comment="哈希后的密保答案2"
+    )
     security_question_3 = db.Column(db.String(255), nullable=True)
-    security_answer_3 = db.Column(db.String(255), nullable=True, comment='哈希后的密保答案3')
+    security_answer_3 = db.Column(
+        db.String(255), nullable=True, comment="哈希后的密保答案3"
+    )
 
     # 关联关系
     faces = db.relationship("Face", backref="user", cascade="all, delete-orphan")
@@ -28,39 +32,49 @@ class User(db.Model):
     # 请假申请关联
     absences = db.relationship("Absence", backref="user", cascade="all, delete-orphan")
     # 人脸审核表
-    face_enrollment=db.relationship("FaceEnrollment", backref="user", cascade="all, delete-orphan")
+    face_enrollment = db.relationship(
+        "FaceEnrollment", backref="user", cascade="all, delete-orphan"
+    )
 
 
 class Face(db.Model):
-    __tablename__ = 'face'
+    __tablename__ = "face"
     rec_id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.user_id', ondelete='CASCADE'))
+    user_id = db.Column(db.Integer, db.ForeignKey("user.user_id", ondelete="CASCADE"))
     image_path = db.Column(db.String(255))
     rec_time = db.Column(db.DateTime, default=datetime.utcnow)
     result = db.Column(db.String(50))
 
+
 class Attendance(db.Model):
-    __tablename__ = 'attendance'
+    __tablename__ = "attendance"
     attendance_id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.user_id', ondelete='CASCADE'))
+    user_id = db.Column(db.Integer, db.ForeignKey("user.user_id", ondelete="CASCADE"))
     clock_in_time = db.Column(db.DateTime, nullable=True)
     clock_out_time = db.Column(db.DateTime, nullable=True)
     status = db.Column(db.String(50))
 
+
 class Absence(db.Model):
-    __tablename__ = 'absence'
+    __tablename__ = "absence"
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.user_id', ondelete='CASCADE'), nullable=False)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("user.user_id", ondelete="CASCADE"), nullable=False
+    )
     start_time = db.Column(db.DateTime, nullable=False)
     end_time = db.Column(db.DateTime, nullable=False)
-    status = db.Column(db.Integer, nullable=False, default=0, comment='0:未审批, 1:已拒绝, 2:已通过')
+    status = db.Column(
+        db.Integer, nullable=False, default=0, comment="0:未审批, 1:已拒绝, 2:已通过"
+    )
     reason = db.Column(db.Text, nullable=False)
-    absence_type = db.Column(db.Integer, nullable=False, default=0)  # 0病假 1私事请假 2公事请假
+    absence_type = db.Column(
+        db.Integer, nullable=False, default=0
+    )  # 0病假 1私事请假 2公事请假
 
 
-#人脸录入审核表
+# 人脸录入审核表
 class FaceEnrollment(db.Model):
-    __tablename__ = 'face_enrollment'
+    __tablename__ = "face_enrollment"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(
         db.Integer,
