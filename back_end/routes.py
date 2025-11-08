@@ -1,6 +1,6 @@
 from flask import request, jsonify
 from app import app, db, SHANGHAI_TZ
-from models import User, Attendance, Face, Absence
+from models import User, Attendance, Face, Absence, MonthlyAttendanceStats
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import (
     JWTManager,
@@ -275,6 +275,9 @@ def attendance():
         )
         db.session.add(new_attendance)
         db.session.commit()
+        
+        # 更新月度统计信息
+        update_monthly_attendance_stats(current_user_id)
 
         return jsonify({"message": "Clock-in recorded successfully"}), 201
     else:
@@ -321,6 +324,10 @@ def attendance():
             today_attendance.status = "正常"
 
         db.session.commit()
+        
+        # 更新月度统计信息
+        update_monthly_attendance_stats(current_user_id)
+        
         return jsonify({"message": "Clock-out recorded successfully"}), 200
 
 
@@ -370,6 +377,68 @@ def apply_end_of_day_rules():
         ).first()
         if att and att.clock_out_time is None and att.status != "请假":
             att.status = "未签退"
+    db.session.commit()
+
+
+# 更新员工月度统计信息
+def update_monthly_attendance_stats(user_id):
+    now = datetime.now(SHANGHAI_TZ)
+    current_year = now.year
+    current_month = now.month
+    
+    # 获取员工本月的所有考勤记录
+    attendance_records = Attendance.query.filter(
+        and_(
+            Attendance.user_id == user_id,
+            extract("year", Attendance.clock_in_time) == current_year,
+            extract("month", Attendance.clock_in_time) == current_month,
+        )
+    ).all()
+    
+    # 计算最早和最晚打卡时间
+    earliest_clock_in = None
+    latest_clock_in = None
+    earliest_clock_out = None
+    latest_clock_out = None
+    
+    for record in attendance_records:
+        if record.clock_in_time:
+            clock_in_time = record.clock_in_time.time()
+            if not earliest_clock_in or clock_in_time < earliest_clock_in:
+                earliest_clock_in = clock_in_time
+            if not latest_clock_in or clock_in_time > latest_clock_in:
+                latest_clock_in = clock_in_time
+                
+        if record.clock_out_time:
+            clock_out_time = record.clock_out_time.time()
+            if not earliest_clock_out or clock_out_time < earliest_clock_out:
+                earliest_clock_out = clock_out_time
+            if not latest_clock_out or clock_out_time > latest_clock_out:
+                latest_clock_out = clock_out_time
+    
+    # 获取或创建月度统计记录
+    monthly_stats = MonthlyAttendanceStats.query.filter(
+        and_(
+            MonthlyAttendanceStats.user_id == user_id,
+            MonthlyAttendanceStats.year == current_year,
+            MonthlyAttendanceStats.month == current_month,
+        )
+    ).first()
+    
+    if not monthly_stats:
+        monthly_stats = MonthlyAttendanceStats(
+            user_id=user_id,
+            year=current_year,
+            month=current_month
+        )
+        db.session.add(monthly_stats)
+    
+    # 更新统计信息
+    monthly_stats.earliest_clock_in = earliest_clock_in
+    monthly_stats.latest_clock_in = latest_clock_in
+    monthly_stats.earliest_clock_out = earliest_clock_out
+    monthly_stats.latest_clock_out = latest_clock_out
+    
     db.session.commit()
 
 
@@ -1014,35 +1083,26 @@ def get_employee_detail(employee_id):
     current_month = now.month
     current_year = now.year
 
-    # 获取员工本月的考勤记录
-    attendance_records = Attendance.query.filter(
+    # 从月度统计表中获取员工本月的最早和最晚打卡时间
+    monthly_stats = MonthlyAttendanceStats.query.filter(
         and_(
-            Attendance.user_id == employee_id,
-            extract("month", Attendance.clock_in_time) == current_month,
-            extract("year", Attendance.clock_in_time) == current_year,
+            MonthlyAttendanceStats.user_id == employee_id,
+            MonthlyAttendanceStats.year == current_year,
+            MonthlyAttendanceStats.month == current_month,
         )
-    ).all()
+    ).first()
 
-    # 计算最早和最晚的打卡时间
-    earliest_clock_in = None
-    latest_clock_in = None
-    earliest_clock_out = None
-    latest_clock_out = None
-
-    for record in attendance_records:
-        if record.clock_in_time:
-            clock_in_time = record.clock_in_time.time()
-            if not earliest_clock_in or clock_in_time < earliest_clock_in:
-                earliest_clock_in = clock_in_time
-            if not latest_clock_in or clock_in_time > latest_clock_in:
-                latest_clock_in = clock_in_time
-
-        if record.clock_out_time:
-            clock_out_time = record.clock_out_time.time()
-            if not earliest_clock_out or clock_out_time < earliest_clock_out:
-                earliest_clock_out = clock_out_time
-            if not latest_clock_out or clock_out_time > latest_clock_out:
-                latest_clock_out = clock_out_time
+    # 如果没有月度统计数据，则使用默认值
+    if monthly_stats:
+        earliest_clock_in = monthly_stats.earliest_clock_in
+        latest_clock_in = monthly_stats.latest_clock_in
+        earliest_clock_out = monthly_stats.earliest_clock_out
+        latest_clock_out = monthly_stats.latest_clock_out
+    else:
+        earliest_clock_in = None
+        latest_clock_in = None
+        earliest_clock_out = None
+        latest_clock_out = None
 
     # 计算最近三周的异常考勤趋势数据
     # 获取本月第一天和今天

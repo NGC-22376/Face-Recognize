@@ -156,7 +156,7 @@
                     <span
                       :class="(employee.on_leave_today ? 'status-leave' : (employee.is_absent_today ? 'status-absent' : (employee.today_attendance > 0 ? 'status-present' : 'status-absent')))">
                       {{ employee.on_leave_today ? '请假' : (employee.is_absent_today ? '未出勤' : (employee.today_attendance
-                      > 0 ? '已出勤' : '未出勤')) }}
+                        > 0 ? '已出勤' : '未出勤')) }}
                     </span>
                   </td>
                   <td>{{ employee.monthly_stats.total_days }}</td>
@@ -345,25 +345,44 @@
           <!-- 标签切换 -->
           <div class="tab-switch">
             <button :class="{ active: faceReviewTab === 'pending' }"
-              @click="faceReviewTab = 'pending'; loadPendingFaceEnrollments()">
+              @click="faceReviewTab = 'pending'; loadPendingFaceEnrollments(1)">
               待审核
             </button>
             <button :class="{ active: faceReviewTab === 'processed' }"
-              @click="faceReviewTab = 'processed'; loadReviewedFaceEnrollments()">
+              @click="faceReviewTab = 'processed'; loadReviewedFaceEnrollments(1)">
               已处理
             </button>
           </div>
 
           <!-- 筛选控件 -->
-          <div class="filter-controls" style="margin: 15px 0;">
-            <input type="text" v-model="faceNameFilter" placeholder="搜索姓名"
-              style="margin-right: 10px; padding: 5px; width: 200px;" />
-            <select v-model.number="faceStatusFilter" style="padding: 5px; margin-right: 10px;"
-              v-if="faceReviewTab === 'processed'">
-              <option value="-1">全部状态</option>
-              <option value="1">已通过</option>
-              <option value="2">已拒绝</option>
-            </select>
+          <div class="filter-controls"
+            style="margin: 15px 0; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <input type="text" v-model="faceNameFilter" placeholder="搜索姓名"
+                @input="faceReviewTab === 'pending' ? (isFaceBatchMode ? loadPendingFaceEnrollments(1, true) : loadPendingFaceEnrollments(1)) : loadReviewedFaceEnrollments(1)"
+                style="margin-right: 10px; padding: 5px; width: 200px;" />
+              <select v-model.number="faceStatusFilter" style="padding: 5px; margin-right: 10px;"
+                v-if="faceReviewTab === 'processed'" @change="loadReviewedFaceEnrollments(1)">
+                <option value="-1">全部状态</option>
+                <option value="1">已通过</option>
+                <option value="2">已拒绝</option>
+              </select>
+            </div>
+            <div v-if="faceReviewTab === 'pending'">
+              <div v-if="!isFaceBatchMode">
+                <button class="clock-btn" style="background-color: #5dade2; padding: 8px 16px;"
+                  @click="toggleFaceBatchMode">批量处理</button>
+              </div>
+              <div class="batch-actions" v-else style="display: flex; align-items: center; gap: 10px;">
+                <span>已选择 {{ selectedFaceEnrollments.length }} 项</span>
+                <button class="clock-btn clock-in" style="background-color: #27ae60; padding: 8px 16px;"
+                  @click="batchReviewFaceEnrollments(true)">批量通过</button>
+                <button class="clock-btn clock-out" style="background-color: #e74c3c; padding: 8px 16px;"
+                  @click="batchReviewFaceEnrollments(false)">批量拒绝</button>
+                <button class="clock-btn" style="background-color: #95a5a6; padding: 8px 16px;"
+                  @click="toggleFaceBatchMode">退出</button>
+              </div>
+            </div>
           </div>
 
           <!-- 待审核列表 -->
@@ -373,6 +392,7 @@
               <table>
                 <thead>
                   <tr>
+                    <th v-if="isFaceBatchMode">选择</th>
                     <th>姓名</th>
                     <th>工号</th>
                     <th>提交时间</th>
@@ -381,7 +401,13 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="enrollment in filteredPendingEnrollments" :key="enrollment.id">
+                  <tr v-for="enrollment in pendingFaceEnrollments" :key="enrollment.id"
+                    :class="{ 'selected-row': isFaceBatchMode && isFaceEnrollmentSelected(enrollment.id) }"
+                    @click="isFaceBatchMode && toggleFaceEnrollmentSelection(enrollment.id)">
+                    <td v-if="isFaceBatchMode" style="text-align: center;">
+                      <input type="checkbox" :checked="isFaceEnrollmentSelected(enrollment.id)"
+                        @click.stop="toggleFaceEnrollmentSelection(enrollment.id)" />
+                    </td>
                     <td>{{ enrollment.user_name }}</td>
                     <td>{{ enrollment.user_account }}</td>
                     <td>{{ formatDateTime(enrollment.created_time) }}</td>
@@ -391,18 +417,49 @@
                           @click="showImagePreview(enrollment.image_path)" class="preview-image" />
                       </div>
                     </td>
-                    <td>
+                    <td v-if="!isFaceBatchMode">
                       <button class="clock-btn clock-in" @click="reviewFaceEnrollment(enrollment.id, true)">通过</button>
                       <button class="clock-btn clock-out"
                         @click="reviewFaceEnrollment(enrollment.id, false)">拒绝</button>
                     </td>
+                    <td v-else>
+                      <button class="clock-btn clock-in"
+                        @click.stop="reviewFaceEnrollment(enrollment.id, true)">通过</button>
+                      <button class="clock-btn clock-out"
+                        @click.stop="reviewFaceEnrollment(enrollment.id, false)">拒绝</button>
+                    </td>
                   </tr>
                 </tbody>
               </table>
-              <div v-if="filteredPendingEnrollments.length === 0" class="empty-state">
+              <div v-if="pendingFaceEnrollments.length === 0" class="empty-state">
                 暂无待审核的申请
               </div>
             </template>
+
+            <!-- 待审核列表分页控件 -->
+            <div class="pagination" v-if="facePagination.pending.total > 0 && !isFaceBatchMode">
+              <button @click="changePendingFacePage(facePagination.pending.currentPage - 1)"
+                :disabled="facePagination.pending.currentPage === 1" class="pagination-btn">
+                上一页
+              </button>
+
+              <span
+                v-for="page in generatePageNumbers(facePagination.pending.pages, facePagination.pending.currentPage)"
+                :key="page" @click="changePendingFacePage(page)"
+                :class="['pagination-item', { active: page === facePagination.pending.currentPage }]">
+                {{ page }}
+              </span>
+
+              <button @click="changePendingFacePage(facePagination.pending.currentPage + 1)"
+                :disabled="facePagination.pending.currentPage === facePagination.pending.pages" class="pagination-btn">
+                下一页
+              </button>
+
+              <span class="pagination-info">
+                第 {{ facePagination.pending.currentPage }} 页，共 {{ facePagination.pending.pages }} 页，共 {{
+                  facePagination.pending.total }} 条记录
+              </span>
+            </div>
           </div>
 
           <!-- 已处理列表 -->
@@ -439,6 +496,32 @@
                 暂无已处理的申请
               </div>
             </template>
+
+            <!-- 已处理列表分页控件 -->
+            <div class="pagination" v-if="facePagination.reviewed.total > 0">
+              <button @click="changeReviewedFacePage(facePagination.reviewed.currentPage - 1)"
+                :disabled="facePagination.reviewed.currentPage === 1" class="pagination-btn">
+                上一页
+              </button>
+
+              <span
+                v-for="page in generatePageNumbers(facePagination.reviewed.pages, facePagination.reviewed.currentPage)"
+                :key="page" @click="changeReviewedFacePage(page)"
+                :class="['pagination-item', { active: page === facePagination.reviewed.currentPage }]">
+                {{ page }}
+              </span>
+
+              <button @click="changeReviewedFacePage(facePagination.reviewed.currentPage + 1)"
+                :disabled="facePagination.reviewed.currentPage === facePagination.reviewed.pages"
+                class="pagination-btn">
+                下一页
+              </button>
+
+              <span class="pagination-info">
+                第 {{ facePagination.reviewed.currentPage }} 页，共 {{ facePagination.reviewed.pages }} 页，共 {{
+                  facePagination.reviewed.total }} 条记录
+              </span>
+            </div>
           </div>
 
           <!-- 图片预览模态框 -->
@@ -539,7 +622,7 @@
 
                 <span class="pagination-info">
                   共 {{ pagination.myLeaves.total }} 条记录，第 {{ pagination.myLeaves.currentPage }} / {{
-                  pagination.myLeaves.pages }} 页
+                    pagination.myLeaves.pages }} 页
                 </span>
               </div>
             </div>
@@ -595,18 +678,21 @@
               <table>
                 <thead>
                   <tr>
-                    <th v-if="!isBatchMode">操作</th>
-                    <th v-else>选择</th>
+                    <th v-if="isBatchMode">选择</th>
                     <th>姓名</th>
                     <th>工号</th>
                     <th>起始时间</th>
                     <th>结束时间</th>
                     <th>事由</th>
                     <th>请假类型</th>
+                    <th v-if="!isBatchMode">操作</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="item in filteredUnprocessedLeaves" :key="item.id">
+                    <td v-if="isBatchMode">
+                      <input type="checkbox" v-model="selectedLeaves" :value="item.id" class="batch-checkbox">
+                    </td>
                     <td>{{ item.name }}</td>
                     <td>{{ item.account }}</td>
                     <td>{{ formatDateTime(item.start_time) }}</td>
@@ -616,9 +702,6 @@
                     <td v-if="!isBatchMode">
                       <button class="clock-btn clock-in" @click.stop="reviewLeave(item.id, 'approve')">通过</button>
                       <button class="clock-btn clock-out" @click.stop="reviewLeave(item.id, 'reject')">拒绝</button>
-                    </td>
-                    <td v-else>
-                      <input type="checkbox" v-model="selectedLeaves" :value="item.id" class="batch-checkbox">
                     </td>
                   </tr>
                 </tbody>
@@ -648,7 +731,7 @@
 
                 <span class="pagination-info">
                   共筛选到 {{ pagination.adminLeaves.unprocessed.total }} 条记录，第 {{
-                  pagination.adminLeaves.unprocessed.currentPage }} / {{ pagination.adminLeaves.unprocessed.pages }} 页
+                    pagination.adminLeaves.unprocessed.currentPage }} / {{ pagination.adminLeaves.unprocessed.pages }} 页
                 </span>
               </div>
             </div>
@@ -704,7 +787,63 @@
 
                 <span class="pagination-info">
                   共筛选到 {{ pagination.adminLeaves.approved.total }} 条记录，第 {{
-                  pagination.adminLeaves.approved.currentPage }} / {{ pagination.adminLeaves.approved.pages }} 页
+                    pagination.adminLeaves.approved.currentPage }} / {{ pagination.adminLeaves.approved.pages }} 页
+                </span>
+              </div>
+            </div>
+
+            <!-- 已处理标签页内容 -->
+            <div class="records-table" v-else-if="leaveAdminTab === 'processed'">
+              <table>
+                <thead>
+                  <tr>
+                    <th>姓名</th>
+                    <th>工号</th>
+                    <th>起始时间</th>
+                    <th>结束时间</th>
+                    <th>事由</th>
+                    <th>请假类型</th>
+                    <th>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in filteredProcessedLeaves" :key="item.id">
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.account }}</td>
+                    <td>{{ formatDateTime(item.start_time) }}</td>
+                    <td>{{ formatDateTime(item.end_time) }}</td>
+                    <td>{{ item.reason }}</td>
+                    <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
+                    <td>{{ statusMap[item.status] || item.status }}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <!-- 已处理分页控件 -->
+              <div class="pagination" v-if="pagination.adminLeaves.processed.total > 0 && !isBatchMode">
+                <button
+                  @click="changeAdminLeavesPage(true, Math.max(1, pagination.adminLeaves.processed.currentPage - 1))"
+                  :disabled="pagination.adminLeaves.processed.currentPage === 1" class="pagination-btn">
+                  上一页
+                </button>
+
+                <span
+                  v-for="page in generatePageNumbers(pagination.adminLeaves.processed.pages, pagination.adminLeaves.processed.currentPage)"
+                  :key="page" @click="changeAdminLeavesPage(true, page)"
+                  :class="['pagination-item', { active: page === pagination.adminLeaves.processed.currentPage }]">
+                  {{ page }}
+                </span>
+
+                <button
+                  @click="changeAdminLeavesPage(true, Math.min(pagination.adminLeaves.processed.pages, pagination.adminLeaves.processed.currentPage + 1))"
+                  :disabled="pagination.adminLeaves.processed.currentPage === pagination.adminLeaves.processed.pages"
+                  class="pagination-btn">
+                  下一页
+                </button>
+
+                <span class="pagination-info">
+                  共筛选到 {{ pagination.adminLeaves.processed.total }} 条记录，第 {{
+                    pagination.adminLeaves.processed.currentPage }} / {{ pagination.adminLeaves.processed.pages }} 页
                 </span>
               </div>
             </div>
@@ -760,7 +899,7 @@
 
                 <span class="pagination-info">
                   共筛选到 {{ pagination.adminLeaves.rejected.total }} 条记录，第 {{
-                  pagination.adminLeaves.rejected.currentPage }} / {{ pagination.adminLeaves.rejected.pages }} 页
+                    pagination.adminLeaves.rejected.currentPage }} / {{ pagination.adminLeaves.rejected.pages }} 页
                 </span>
               </div>
             </div>
@@ -896,6 +1035,24 @@ export default {
       previewImageUrl: '',
       loadingPending: false,
       loadingReviewed: false,
+      // 人脸审核分页相关
+      facePagination: {
+        pending: {
+          currentPage: 1,
+          total: 0,
+          pages: 0,
+          perPage: 10
+        },
+        reviewed: {
+          currentPage: 1,
+          total: 0,
+          pages: 0,
+          perPage: 10
+        }
+      },
+      // 人脸审核批量处理相关
+      isFaceBatchMode: false,
+      selectedFaceEnrollments: [], // 选中的待审核人脸录入ID数组
 
       // 阶段考勤统计相关
       periodStats: {
@@ -938,1259 +1095,1410 @@ export default {
       attendanceTrendChartInstance: null,
       leaveTrendChartInstance: null
     }
-},
-watch: {
-  activeTab(newTab) {
-    if (newTab === 'dashboard' && this.userProfile.role === '管理员') {
+  },
+  watch: {
+    activeTab(newTab) {
+      if (newTab === 'dashboard' && this.userProfile.role === '管理员') {
+        this.$nextTick(() => {
+          this.renderAttendanceCharts();
+        });
+      }
+    },
+    // 监听nameFilter变化
+    nameFilter(newVal, oldVal) {
+      if (newVal !== oldVal) {
+        this.resetAndRecalculatePagination();
+      }
+    },
+    // 监听typeFilter变化
+    typeFilter(newVal, oldVal) {
+      if (newVal !== oldVal) {
+        this.resetAndRecalculatePagination();
+      }
+    },
+  },
+  async mounted() {
+    this.updateTime()
+    setInterval(this.updateTime, 1000)
+
+    await this.loadUserProfile();
+    if (this.userProfile.role === '管理员') {
+      this.activeTab = 'dashboard';
+      await this.loadDashboardData();
       this.$nextTick(() => {
         this.renderAttendanceCharts();
+        // 加载阶段考勤统计数据
+        this.loadPeriodStats();
       });
-    }
-  },
-  // 监听nameFilter变化
-  nameFilter(newVal, oldVal) {
-    if (newVal !== oldVal) {
-      this.resetAndRecalculatePagination();
-    }
-  },
-  // 监听typeFilter变化
-  typeFilter(newVal, oldVal) {
-    if (newVal !== oldVal) {
-      this.resetAndRecalculatePagination();
-    }
-  },
-},
-  async mounted() {
-  this.updateTime()
-  setInterval(this.updateTime, 1000)
-
-  await this.loadUserProfile();
-  if (this.userProfile.role === '管理员') {
-    this.activeTab = 'dashboard';
-    await this.loadDashboardData();
-    this.$nextTick(() => {
-      this.renderAttendanceCharts();
-      // 加载阶段考勤统计数据
-      this.loadPeriodStats();
-    });
-  } else {
-    this.activeTab = 'personal';
-    await this.loadPersonalData();
-  }
-
-  // 如果人脸识别完跳回来，自动打卡
-  if (this.$route.query.recognized === '1') {
-    const type = this.$route.query.type // clock_in / clock_out
-    await this.performClock(type)
-    await this.$router.replace({ query: {} })
-  }
-},
-
-methods: {
-  // 重置分页到第一页
-  resetPagination() {
-    if (this.leaveAdminTab === 'unprocessed') {
-      this.pagination.adminLeaves.unprocessed.currentPage = 1;
-    } else if (this.leaveAdminTab === 'approved') {
-      this.pagination.adminLeaves.approved.currentPage = 1;
-    } else if (this.leaveAdminTab === 'rejected') {
-      this.pagination.adminLeaves.rejected.currentPage = 1;
     } else {
-      this.pagination.adminLeaves.processed.currentPage = 1;
-    }
-  },
-  goFace(type) {
-    this.$router.push({ name: 'FaceClock', params: { type } })
-  },
-
-  goToFaceRegister() {
-    this.$router.push({ name: 'FaceRegister' })
-  },
-
-  setActiveTab(tab) {
-    // 检查权限
-    if ((tab === 'dashboard' || tab === 'employees') && this.userProfile.role !== '管理员') {
-      return
+      this.activeTab = 'personal';
+      await this.loadPersonalData();
     }
 
-    this.activeTab = tab
-    if (tab === 'dashboard') {
-      this.loadDashboardData()
-    } else if (tab === 'employees') {
-      this.loadEmployeesData()
-    } else if (tab === 'personal') {
-      this.loadPersonalData()
-    } else if (tab === 'face_review') {
-      this.switchFaceReviewTab('pending')
-    } else if (tab === 'leave') {
-      if (this.userProfile.role === '员工') {
-        // 重置到第一页
-        this.pagination.myLeaves.currentPage = 1
-        this.loadMyLeaves(1)
+    // 如果人脸识别完跳回来，自动打卡
+    if (this.$route.query.recognized === '1') {
+      const type = this.$route.query.type // clock_in / clock_out
+      await this.performClock(type)
+      await this.$router.replace({ query: {} })
+    }
+  },
+
+  methods: {
+    // 重置分页到第一页
+    resetPagination() {
+      if (this.leaveAdminTab === 'unprocessed') {
+        this.pagination.adminLeaves.unprocessed.currentPage = 1;
+      } else if (this.leaveAdminTab === 'approved') {
+        this.pagination.adminLeaves.approved.currentPage = 1;
+      } else if (this.leaveAdminTab === 'rejected') {
+        this.pagination.adminLeaves.rejected.currentPage = 1;
       } else {
-        // 重置到第一页
-        this.pagination.adminLeaves.unprocessed.currentPage = 1
-        this.loadAdminLeaves(false, 1)
+        this.pagination.adminLeaves.processed.currentPage = 1;
       }
-    }
-  },
+    },
+    goFace(type) {
+      this.$router.push({ name: 'FaceClock', params: { type } })
+    },
 
+    goToFaceRegister() {
+      this.$router.push({ name: 'FaceRegister' })
+    },
 
+    setActiveTab(tab) {
+      // 检查权限
+      if ((tab === 'dashboard' || tab === 'employees') && this.userProfile.role !== '管理员') {
+        return
+      }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  // 切换人脸审核标签页
-  switchFaceReviewTab(tab) {
-    this.faceReviewTab = tab
-    this.faceNameFilter = ''
-    this.faceStatusFilter = -1
-    if (tab === 'pending') {
-      this.loadPendingFaceEnrollments()
-    } else {
-      this.loadReviewedFaceEnrollments()
-    }
-  },
-
-  // 处理筛选条件变化
-  handleFaceFilterChange() {
-    // 筛选逻辑已经在计算属性中处理，这里只需要确保数据已加载
-    if (this.faceReviewTab === 'pending' && this.pendingFaceEnrollments.length === 0) {
-      this.loadPendingFaceEnrollments()
-    } else if (this.faceReviewTab === 'processed' && this.reviewedFaceEnrollments.length === 0) {
-      this.loadReviewedFaceEnrollments()
-    }
-  },
-
-    // 加载待审核的人脸录入申请
-    async loadPendingFaceEnrollments() {
-    this.loadingPending = true
-    try {
-      const token = localStorage.getItem('access_token')
-      const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/pending`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
+      this.activeTab = tab
+      if (tab === 'dashboard') {
+        this.loadDashboardData()
+      } else if (tab === 'employees') {
+        this.loadEmployeesData()
+      } else if (tab === 'personal') {
+        this.loadPersonalData()
+      } else if (tab === 'face_review') {
+        this.switchFaceReviewTab('pending')
+      } else if (tab === 'leave') {
+        if (this.userProfile.role === '员工') {
+          // 重置到第一页
+          this.pagination.myLeaves.currentPage = 1
+          this.loadMyLeaves(1)
+        } else {
+          // 重置到第一页
+          this.pagination.adminLeaves.unprocessed.currentPage = 1
+          this.loadAdminLeaves(false, 1)
         }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        this.pendingFaceEnrollments = data.enrollments || []
+      }
+    },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // 切换人脸审核标签页
+    switchFaceReviewTab(tab) {
+      this.faceReviewTab = tab
+      this.faceNameFilter = ''
+      this.faceStatusFilter = -1
+      if (tab === 'pending') {
+        this.loadPendingFaceEnrollments()
       } else {
-        console.error('加载待审核列表失败，状态码:', response.status)
+        this.loadReviewedFaceEnrollments()
+      }
+    },
+
+    // 处理筛选条件变化
+    handleFaceFilterChange() {
+      // 筛选逻辑已经在计算属性中处理，这里只需要确保数据已加载
+      if (this.faceReviewTab === 'pending' && this.pendingFaceEnrollments.length === 0) {
+        this.loadPendingFaceEnrollments()
+      } else if (this.faceReviewTab === 'processed' && this.reviewedFaceEnrollments.length === 0) {
+        this.loadReviewedFaceEnrollments()
+      }
+    },
+
+    // 加载待审核的人脸录入申请（支持分页）
+    async loadPendingFaceEnrollments(page = 1, loadAll = false) {
+      this.loadingPending = true
+      try {
+        const token = localStorage.getItem('access_token')
+        // 构建查询参数
+        const params = new URLSearchParams()
+
+        // 如果不是加载所有数据，则使用分页参数
+        if (!loadAll) {
+          params.append('page', page)
+          params.append('page_size', this.facePagination.pending.perPage)
+        } else {
+          // 加载所有数据时，设置一个足够大的page_size
+          params.append('page', 1)
+          params.append('page_size', 10000) // 假设不会有超过10000条记录
+        }
+
+        // 添加姓名过滤参数
+        if (this.faceNameFilter) {
+          params.append('name', this.faceNameFilter)
+        }
+
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/pending?${params}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          this.pendingFaceEnrollments = data.enrollments || []
+          // 更新分页信息（仅在非加载所有数据时）
+          if (!loadAll) {
+            this.facePagination.pending.currentPage = data.current_page || 1
+            this.facePagination.pending.total = data.total || 0
+            this.facePagination.pending.pages = data.pages || 0
+          }
+        } else {
+          console.error('加载待审核列表失败，状态码:', response.status)
+          ElMessage.error('加载待审核列表失败')
+        }
+      } catch (error) {
+        console.error('Failed to load pending face enrollments:', error)
         ElMessage.error('加载待审核列表失败')
+      } finally {
+        this.loadingPending = false
       }
-    } catch (error) {
-      console.error('Failed to load pending face enrollments:', error)
-      ElMessage.error('加载待审核列表失败')
-    } finally {
-      this.loadingPending = false
-    }
-  },
+    },
 
-    // 加载已审核的人脸录入申请
-    async loadReviewedFaceEnrollments() {
-    this.loadingReviewed = true
-    try {
-      const token = localStorage.getItem('access_token')
-      const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/all`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
+    // 加载已审核的人脸录入申请（支持分页）
+    async loadReviewedFaceEnrollments(page = 1) {
+      this.loadingReviewed = true
+      try {
+        const token = localStorage.getItem('access_token')
+        // 构建查询参数
+        const params = new URLSearchParams({
+          page: page,
+          page_size: this.facePagination.reviewed.perPage
+        })
+        // 添加姓名过滤参数
+        if (this.faceNameFilter) {
+          params.append('name', this.faceNameFilter)
         }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        // 过滤出已审核的记录（状态不为0）
-        this.reviewedFaceEnrollments = (data.enrollments || []).filter(
-          item => item.status !== 0
-        )
-      } else {
-        console.error('加载已处理列表失败，状态码:', response.status)
-        ElMessage.error('加载已处理列表失败')
-      }
-    } catch (error) {
-      console.error('Failed to load reviewed face enrollments:', error)
-      ElMessage.error('加载已处理列表失败')
-    } finally {
-      this.loadingReviewed = false
-    }
-  },
+        // 添加状态过滤参数（已处理页面只显示已审核的记录）
+        if (this.faceStatusFilter !== -1) {
+          params.append('status', this.faceStatusFilter)
+        }
 
-  // 获取人脸录入图片URL
-  getEnrollmentImageUrl(imagePath) {
-    if (imagePath && !imagePath.startsWith('http')) {
-      return `${this.apiBaseUrl}/${imagePath}`
-    }
-    return imagePath
-  },
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/all?${params}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          this.reviewedFaceEnrollments = data.enrollments || []
+          // 更新分页信息
+          this.facePagination.reviewed.currentPage = data.current_page || 1
+          this.facePagination.reviewed.total = data.total || 0
+          this.facePagination.reviewed.pages = data.pages || 0
+        } else {
+          console.error('加载已处理列表失败，状态码:', response.status)
+          ElMessage.error('加载已处理列表失败')
+        }
+      } catch (error) {
+        console.error('Failed to load reviewed face enrollments:', error)
+        ElMessage.error('加载已处理列表失败')
+      } finally {
+        this.loadingReviewed = false
+      }
+    },
+
+    // 获取人脸录入图片URL
+    getEnrollmentImageUrl(imagePath) {
+      if (imagePath && !imagePath.startsWith('http')) {
+        return `${this.apiBaseUrl}/${imagePath}`
+      }
+      return imagePath
+    },
 
     // 审核人脸录入申请
     async reviewFaceEnrollment(enrollmentId, approve) {
-    try {
-      const comment = approve ? '审核通过' : '图片不清晰或不符合要求'
+      try {
+        const comment = approve ? '审核通过' : '图片不清晰或不符合要求'
 
-      const token = localStorage.getItem('access_token')
-      const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/${enrollmentId}/review`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          approve: approve,
-          comment: comment
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/${enrollmentId}/review`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            approve: approve,
+            comment: comment
+          })
         })
-      })
 
-      const data = await response.json()
-      if (response.ok) {
-        ElMessage.success(data.msg)
-        // 重新加载列表
-        if (this.faceReviewTab === 'pending') {
-          this.loadPendingFaceEnrollments()
+        const data = await response.json()
+        if (response.ok) {
+          ElMessage.success(data.msg)
+          // 重新加载列表
+          if (this.faceReviewTab === 'pending') {
+            this.loadPendingFaceEnrollments()
+          } else {
+            this.loadReviewedFaceEnrollments()
+          }
         } else {
-          this.loadReviewedFaceEnrollments()
+          ElMessage.error(data.msg || '审核失败')
         }
-      } else {
-        ElMessage.error(data.msg || '审核失败')
+      } catch (error) {
+        console.error('Review face enrollment failed:', error)
+        ElMessage.error('网络错误，请重试')
       }
-    } catch (error) {
-      console.error('Review face enrollment failed:', error)
-      ElMessage.error('网络错误，请重试')
-    }
-  },
+    },
 
-  // 显示图片预览
-  showImagePreview(imagePath) {
-    this.previewImageUrl = this.getEnrollmentImageUrl(imagePath)
-    this.showPreview = true
-  },
+    // 显示图片预览
+    showImagePreview(imagePath) {
+      this.previewImageUrl = this.getEnrollmentImageUrl(imagePath)
+      this.showPreview = true
+    },
 
-  // 关闭图片预览
-  closeImagePreview() {
-    this.showPreview = false
-    this.previewImageUrl = ''
-  },
+    // 关闭图片预览
+    closeImagePreview() {
+      this.showPreview = false
+      this.previewImageUrl = ''
+    },
 
-  // 获取人脸审核状态文本
-  getFaceEnrollmentStatusText(status) {
-    const statusMap = {
-      0: '待审核',
-      1: '已通过',
-      2: '已拒绝'
-    }
-    return statusMap[status] || '未知状态'
-  },
+    // 获取人脸审核状态文本
+    getFaceEnrollmentStatusText(status) {
+      const statusMap = {
+        0: '待审核',
+        1: '已通过',
+        2: '已拒绝'
+      }
+      return statusMap[status] || '未知状态'
+    },
 
-  // 获取人脸审核状态样式类
-  getFaceEnrollmentStatusClass(status) {
-    const classMap = {
-      0: 'status-pending',
-      1: 'status-approved',
-      2: 'status-rejected'
-    }
-    return classMap[status] || 'status-pending'
-  },
+    // 获取人脸审核状态样式类
+    getFaceEnrollmentStatusClass(status) {
+      const classMap = {
+        0: 'status-pending',
+        1: 'status-approved',
+        2: 'status-rejected'
+      }
+      return classMap[status] || 'status-pending'
+    },
+
+    // 人脸审核分页相关方法
+    changePendingFacePage(page) {
+      if (page >= 1 && page <= this.facePagination.pending.pages) {
+        this.loadPendingFaceEnrollments(page)
+      }
+    },
+
+    changeReviewedFacePage(page) {
+      if (page >= 1 && page <= this.facePagination.reviewed.pages) {
+        this.loadReviewedFaceEnrollments(page)
+      }
+    },
+
+    // 生成分页数字数组
+    generatePageNumbers(totalPages, currentPage) {
+      const delta = 2
+      const range = []
+      for (let i = Math.max(1, currentPage - delta); i <= Math.min(totalPages, currentPage + delta); i++) {
+        range.push(i)
+      }
+
+      // 添加省略号和边界页码
+      if (range[0] > 1) {
+        range.unshift('...')
+        range.unshift(1)
+      }
+      if (range[range.length - 1] < totalPages) {
+        range.push('...')
+        range.push(totalPages)
+      }
+
+      return range
+    },
+
+    // 人脸审核批量处理相关方法
+    async toggleFaceBatchMode() {
+      this.isFaceBatchMode = !this.isFaceBatchMode;
+      if (this.isFaceBatchMode) {
+        // 进入批量模式时加载所有数据
+        await this.loadPendingFaceEnrollments(1, true);
+      } else {
+        // 退出批量模式时清空选中项并恢复分页数据
+        this.selectedFaceEnrollments = [];
+        await this.loadPendingFaceEnrollments(this.facePagination.pending.currentPage);
+      }
+    },
+
+    toggleFaceEnrollmentSelection(enrollmentId) {
+      const index = this.selectedFaceEnrollments.indexOf(enrollmentId);
+      if (index === -1) {
+        // 未选中则添加
+        this.selectedFaceEnrollments.push(enrollmentId);
+      } else {
+        // 已选中则移除
+        this.selectedFaceEnrollments.splice(index, 1);
+      }
+    },
+
+    isFaceEnrollmentSelected(enrollmentId) {
+      return this.selectedFaceEnrollments.includes(enrollmentId);
+    },
+
+    async batchReviewFaceEnrollments(approved) {
+      if (this.selectedFaceEnrollments.length === 0) {
+        alert('请至少选择一条记录');
+        return;
+      }
+
+      if (!confirm(`确定要${approved ? '通过' : '拒绝'}选中的 ${this.selectedFaceEnrollments.length} 条记录吗？`)) {
+        return;
+      }
+
+      try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.apiBaseUrl}/admin/face-enrollments/batch-review`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            enrollment_ids: this.selectedFaceEnrollments,
+            approved: approved
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          // 批量处理成功，重新加载数据
+          this.selectedFaceEnrollments = []; // 清空选中项
+          this.isFaceBatchMode = false; // 退出批量模式
+          // 退出批量模式后恢复分页数据
+          await this.loadPendingFaceEnrollments(this.facePagination.pending.currentPage);
+          alert(`成功${approved ? '通过' : '拒绝'} ${data.success_count} 条记录`);
+        } else {
+          alert(data.message || '批量处理失败');
+        }
+      } catch (error) {
+        console.error('Batch review error:', error);
+        alert('网络错误，批量处理失败');
+      }
+    },
 
     async loadUserProfile() {
-    try {
-      const token = localStorage.getItem('access_token')
-      const response = await fetch(`${this.apiBaseUrl}/user/profile`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
+      try {
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/user/profile`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          this.userProfile = await response.json()
         }
-      })
-      if (response.ok) {
-        this.userProfile = await response.json()
+      } catch (error) {
+        console.error('Failed to load user profile:', error)
       }
-    } catch (error) {
-      console.error('Failed to load user profile:', error)
-    }
-  },
+    },
 
     async loadDashboardData() {
-    try {
-      const token = localStorage.getItem('access_token')
-      const response = await fetch(`${this.apiBaseUrl}/admin/attendance/daily`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
+      try {
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/daily`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          this.dailyStats = await response.json()
         }
-      })
-      if (response.ok) {
-        this.dailyStats = await response.json()
+      } catch (error) {
+        console.error('Failed to load daily stats:', error)
       }
-    } catch (error) {
-      console.error('Failed to load daily stats:', error)
-    }
-  },
+    },
 
     async loadEmployeesData() {
-    this.isLoading = true
-    try {
-      const token = localStorage.getItem('access_token')
-      const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}&page=${this.currentPage}&page_size=${this.pageSize}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
+      this.isLoading = true
+      try {
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}&page=${this.currentPage}&page_size=${this.pageSize}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
 
-      if (response.ok) {
-        const data = await response.json()
-        this.employees = data.employees
-        this.totalEmployees = data.total  // 设置总员工数用于分页
-      } else {
-        console.error('Failed to load data, status:', response.status)
-        alert('加载员工数据失败！')
+        if (response.ok) {
+          const data = await response.json()
+          this.employees = data.employees
+          this.totalEmployees = data.total  // 设置总员工数用于分页
+        } else {
+          console.error('Failed to load data, status:', response.status)
+          alert('加载员工数据失败！')
+        }
+      } catch (error) {
+        console.error('Failed to load employees data:', error)
+      } finally {
+        this.isLoading = false
       }
-    } catch (error) {
-      console.error('Failed to load employees data:', error)
-    } finally {
-      this.isLoading = false
-    }
-  },
+    },
 
     async loadPersonalData() {
-    try {
-      const token = localStorage.getItem('access_token')
-      const response = await fetch(`${this.apiBaseUrl}/attendance/personal`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
+      try {
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/attendance/personal`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          this.personalStats = data.monthly_stats
+          this.recentRecords = data.recent_records
         }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        this.personalStats = data.monthly_stats
-        this.recentRecords = data.recent_records
+      } catch (error) {
+        console.error('Failed to load personal data:', error)
       }
-    } catch (error) {
-      console.error('Failed to load personal data:', error)
-    }
-  },
+    },
 
     async clockIn() {
-    await this.performClock('clock_in')
-  },
+      await this.performClock('clock_in')
+    },
 
     async clockOut() {
-    await this.performClock('clock_out')
-  },
+      await this.performClock('clock_out')
+    },
 
     async performClock(type) {
-    this.clockLoading = true
-    this.clockMessage = ''
+      this.clockLoading = true
+      this.clockMessage = ''
 
-    try {
-      const token = localStorage.getItem('access_token')
-      const response = await fetch(`${this.apiBaseUrl}/attendance`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ type })
-      })
+      try {
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/attendance`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ type })
+        })
 
-      const data = await response.json()
+        const data = await response.json()
 
-      if (response.ok) {
-        this.clockMessage = data.message
-        this.clockMessageType = 'success'
-        // 刷新数据
-        this.loadDashboardData()
-        this.loadPersonalData()
-      } else {
-        this.clockMessage = data.message || '打卡失败'
+        if (response.ok) {
+          this.clockMessage = data.message
+          this.clockMessageType = 'success'
+          // 刷新数据
+          this.loadDashboardData()
+          this.loadPersonalData()
+        } else {
+          this.clockMessage = data.message || '打卡失败'
+          this.clockMessageType = 'error'
+        }
+      } catch (error) {
+        this.clockMessage = '网络错误'
         this.clockMessageType = 'error'
+      } finally {
+        this.clockLoading = false
+        setTimeout(() => {
+          this.clockMessage = ''
+        }, 3000)
       }
-    } catch (error) {
-      this.clockMessage = '网络错误'
-      this.clockMessageType = 'error'
-    } finally {
-      this.clockLoading = false
-      setTimeout(() => {
-        this.clockMessage = ''
-      }, 3000)
-    }
-  },
+    },
 
     // 请假相关
     async submitLeave() {
-    this.leaveMessage = ''
-    try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch(`${this.apiBaseUrl}/absence`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(this.leaveForm)
-      })
-      const data = await res.json()
-      if (res.ok) {
-        this.leaveMessage = data.message
-        this.leaveMessageType = 'success'
-        this.leaveForm = { start_time: '', end_time: '', reason: '' }
-        this.loadMyLeaves()
-      } else {
-        this.leaveMessage = data.message || '提交失败'
+      this.leaveMessage = ''
+      try {
+        const token = localStorage.getItem('access_token')
+        const res = await fetch(`${this.apiBaseUrl}/absence`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(this.leaveForm)
+        })
+        const data = await res.json()
+        if (res.ok) {
+          this.leaveMessage = data.message
+          this.leaveMessageType = 'success'
+          this.leaveForm = { start_time: '', end_time: '', reason: '' }
+          this.loadMyLeaves()
+        } else {
+          this.leaveMessage = data.message || '提交失败'
+          this.leaveMessageType = 'error'
+        }
+      } catch (e) {
+        this.leaveMessage = '网络错误'
         this.leaveMessageType = 'error'
       }
-    } catch (e) {
-      this.leaveMessage = '网络错误'
-      this.leaveMessageType = 'error'
-    }
-  },
+    },
 
     async loadMyLeaves(page = 1) {
-    try {
-      const token = localStorage.getItem('access_token')
-      // 根据当前页签确定状态参数
-      let statusParam = '';
-      if (this.myLeavesTab === 'pending') {
-        statusParam = '&status=0'; // 未读
-      } else if (this.myLeavesTab === 'approved') {
-        statusParam = '&status=2'; // 已通过
-      } else if (this.myLeavesTab === 'rejected') {
-        statusParam = '&status=1'; // 已拒绝
-      }
+      try {
+        const token = localStorage.getItem('access_token')
+        // 根据当前页签确定状态参数
+        let statusParam = '';
+        if (this.myLeavesTab === 'pending') {
+          statusParam = '&status=0'; // 未读
+        } else if (this.myLeavesTab === 'approved') {
+          statusParam = '&status=2'; // 已通过
+        } else if (this.myLeavesTab === 'rejected') {
+          statusParam = '&status=1'; // 已拒绝
+        }
 
-      // 添加排序参数
-      const sortParam = `&sort_by=${this.myLeavesSortBy}&order=${this.myLeavesSortOrder}`;
+        // 添加排序参数
+        const sortParam = `&sort_by=${this.myLeavesSortBy}&order=${this.myLeavesSortOrder}`;
 
-      const res = await fetch(`${this.apiBaseUrl}/absence/personal?page=${page}${statusParam}${sortParam}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      const data = await res.json()
-      if (res.ok) {
-        this.myLeaves = data.absences || []
-        // 更新分页信息
-        this.pagination.myLeaves.currentPage = data.current_page || 1
-        this.pagination.myLeaves.total = data.total || 0
-        this.pagination.myLeaves.pages = data.pages || 0
-        this.pagination.myLeaves.perPage = data.per_page || 5
+        const res = await fetch(`${this.apiBaseUrl}/absence/personal?page=${page}${statusParam}${sortParam}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        const data = await res.json()
+        if (res.ok) {
+          this.myLeaves = data.absences || []
+          // 更新分页信息
+          this.pagination.myLeaves.currentPage = data.current_page || 1
+          this.pagination.myLeaves.total = data.total || 0
+          this.pagination.myLeaves.pages = data.pages || 0
+          this.pagination.myLeaves.perPage = data.per_page || 5
+        }
+      } catch (e) {
+        console.error(e)
       }
-    } catch (e) {
-      console.error(e)
-    }
-  },
+    },
 
     async loadAdminLeaves(processed, page = 1, status = null) {
-    try {
-      const token = localStorage.getItem('access_token')
-      // 构建查询参数
-      let queryParams = `page=${page}`
+      try {
+        const token = localStorage.getItem('access_token')
+        // 构建查询参数
+        let queryParams = `page=${page}`
 
-      // 根据status参数决定查询条件
-      if (status !== null) {
-        // 按具体状态查询（已通过/已拒绝）
-        queryParams += `&status=${status}`
-      } else {
-        // 兼容旧的processed参数
-        queryParams += `&processed=${processed ? 'true' : 'false'}`
-      }
-
-      // 添加过滤参数
-      if (this.nameFilter) {
-        queryParams += `&name=${encodeURIComponent(this.nameFilter)}`
-      }
-      if (this.typeFilter !== -1 && this.typeFilter !== '-1') {
-        queryParams += `&absence_type=${this.typeFilter}`
-      }
-
-      // 使用后端分页和过滤，每页5条记录
-      const res = await fetch(`${this.apiBaseUrl}/admin/absence?${queryParams}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      const data = await res.json()
-      if (res.ok) {
-        if (status === 2) {
-          // 已通过的请假申请
-          this.adminLeavesApproved = data.absences || []
-          // 使用后端返回的分页信息
-          this.pagination.adminLeaves.approved.currentPage = data.current_page || 1
-          this.pagination.adminLeaves.approved.total = data.total || 0
-          this.pagination.adminLeaves.approved.pages = data.pages || 0
-          this.pagination.adminLeaves.approved.perPage = data.per_page || 5
-        } else if (status === 1) {
-          // 已拒绝的请假申请
-          this.adminLeavesRejected = data.absences || []
-          // 使用后端返回的分页信息
-          this.pagination.adminLeaves.rejected.currentPage = data.current_page || 1
-          this.pagination.adminLeaves.rejected.total = data.total || 0
-          this.pagination.adminLeaves.rejected.pages = data.pages || 0
-          this.pagination.adminLeaves.rejected.perPage = data.per_page || 5
-        } else if (processed) {
-          // 旧的已处理逻辑（兼容）
-          this.adminLeavesProcessed = data.absences || []
-          // 使用后端返回的分页信息
-          this.pagination.adminLeaves.processed.currentPage = data.current_page || 1
-          this.pagination.adminLeaves.processed.total = data.total || 0
-          this.pagination.adminLeaves.processed.pages = data.pages || 0
-          this.pagination.adminLeaves.processed.perPage = data.per_page || 5
+        // 根据status参数决定查询条件
+        if (status !== null) {
+          // 按具体状态查询（已通过/已拒绝）
+          queryParams += `&status=${status}`
         } else {
-          this.adminLeavesUnprocessed = data.absences || []
-          // 使用后端返回的分页信息
-          this.pagination.adminLeaves.unprocessed.currentPage = data.current_page || 1
-          this.pagination.adminLeaves.unprocessed.total = data.total || 0
-          this.pagination.adminLeaves.unprocessed.pages = data.pages || 0
-          this.pagination.adminLeaves.unprocessed.perPage = data.per_page || 5
+          // 兼容旧的processed参数
+          queryParams += `&processed=${processed ? 'true' : 'false'}`
         }
-      }
-    } catch (e) { console.error(e) }
-  },
+
+        // 添加过滤参数
+        if (this.nameFilter) {
+          queryParams += `&name=${encodeURIComponent(this.nameFilter)}`
+        }
+        if (this.typeFilter !== -1 && this.typeFilter !== '-1') {
+          queryParams += `&absence_type=${this.typeFilter}`
+        }
+
+        // 使用后端分页和过滤，每页5条记录
+        const res = await fetch(`${this.apiBaseUrl}/admin/absence?${queryParams}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        const data = await res.json()
+        if (res.ok) {
+          if (status === 2) {
+            // 已通过的请假申请
+            this.adminLeavesApproved = data.absences || []
+            // 使用后端返回的分页信息
+            this.pagination.adminLeaves.approved.currentPage = data.current_page || 1
+            this.pagination.adminLeaves.approved.total = data.total || 0
+            this.pagination.adminLeaves.approved.pages = data.pages || 0
+            this.pagination.adminLeaves.approved.perPage = data.per_page || 5
+          } else if (status === 1) {
+            // 已拒绝的请假申请
+            this.adminLeavesRejected = data.absences || []
+            // 使用后端返回的分页信息
+            this.pagination.adminLeaves.rejected.currentPage = data.current_page || 1
+            this.pagination.adminLeaves.rejected.total = data.total || 0
+            this.pagination.adminLeaves.rejected.pages = data.pages || 0
+            this.pagination.adminLeaves.rejected.perPage = data.per_page || 5
+          } else if (processed) {
+            // 旧的已处理逻辑（兼容）
+            this.adminLeavesProcessed = data.absences || []
+            // 使用后端返回的分页信息
+            this.pagination.adminLeaves.processed.currentPage = data.current_page || 1
+            this.pagination.adminLeaves.processed.total = data.total || 0
+            this.pagination.adminLeaves.processed.pages = data.pages || 0
+            this.pagination.adminLeaves.processed.perPage = data.per_page || 5
+          } else {
+            this.adminLeavesUnprocessed = data.absences || []
+            // 使用后端返回的分页信息
+            this.pagination.adminLeaves.unprocessed.currentPage = data.current_page || 1
+            this.pagination.adminLeaves.unprocessed.total = data.total || 0
+            this.pagination.adminLeaves.unprocessed.pages = data.pages || 0
+            this.pagination.adminLeaves.unprocessed.perPage = data.per_page || 5
+          }
+        }
+      } catch (e) { console.error(e) }
+    },
 
     async reviewLeave(id, decision) {
-    try {
-      // 添加按钮点击反馈
-      console.log('审核按钮被点击，ID:', id, '决定:', decision);
+      try {
+        // 添加按钮点击反馈
+        console.log('审核按钮被点击，ID:', id, '决定:', decision);
 
-      const token = localStorage.getItem('access_token');
-      if (!token) {
-        alert('登录已过期，请重新登录');
-        this.$router.push('/');
-        return;
-      }
-
-      const res = await fetch(`${this.apiBaseUrl}/admin/absence/${id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ decision })
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        // 审核后刷新列表，保持当前页码
-        const isProcessed = this.leaveAdminTab === 'processed';
-        const currentPage = isProcessed ?
-          this.pagination.adminLeaves.processed.currentPage :
-          this.pagination.adminLeaves.unprocessed.currentPage;
-
-        // 重新加载未处理列表（因为当前记录会被移到已处理列表）
-        this.loadAdminLeaves(false, currentPage);
-
-        // 如果当前在已处理标签页，也刷新已处理列表
-        if (this.leaveAdminTab === 'processed') {
-          this.loadAdminLeaves(true, this.pagination.adminLeaves.processed.currentPage);
-        }
-
-        this.selectedLeave = null;
-        // 同步刷新个人考勤（如果涉及到本人）
-        this.loadPersonalData();
-      } else {
-        // 服务器返回错误
-        alert(data.message || '操作失败：服务器返回错误');
-        console.error('审核失败:', data);
-      }
-    } catch (e) {
-      // 网络或其他错误
-      alert('操作失败：网络错误或服务器异常');
-      console.error('审核请假时发生错误:', e);
-    }
-  },
-
-  // 切换批量模式
-  toggleBatchMode() {
-    this.isBatchMode = !this.isBatchMode;
-    this.selectedLeaves = []; // 清空选中列表
-
-    if (this.isBatchMode) {
-      this.loadAllUnprocessedLeaves();
-    } else {
-      this.loadAdminLeaves(false, 1); // 恢复正常分页
-    }
-  },
-
-    // 加载所有未处理的请假申请（不分页）
-    async loadAllUnprocessedLeaves() {
-    try {
-      const token = localStorage.getItem('access_token');
-      if (!token) {
-        alert('登录已过期，请重新登录');
-        this.$router.push('/');
-        return;
-      }
-
-      // 获取所有未处理的请假申请（不分页，显示全部）
-      const res = await fetch(`${this.apiBaseUrl}/admin/absence?processed=false&page=1&page_size=10000`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const absences = data.absences || [];
-
-        if (absences.length === 0) {
-          alert('没有未处理的请假申请');
-          this.isBatchMode = false;
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+          alert('登录已过期，请重新登录');
+          this.$router.push('/');
           return;
         }
 
-        // 在批量模式下显示所有记录到一页中
-        this.adminLeavesUnprocessed = absences;
-        this.pagination.adminLeaves.unprocessed.currentPage = 1;
-        this.pagination.adminLeaves.unprocessed.total = absences.length;
-        this.pagination.adminLeaves.unprocessed.pages = 1;
-        this.pagination.adminLeaves.unprocessed.perPage = absences.length;
+        const res = await fetch(`${this.apiBaseUrl}/admin/absence/${id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ decision })
+        });
 
+        const data = await res.json();
+
+        if (res.ok) {
+          // 审核后刷新列表，保持当前页码
+          const isProcessed = this.leaveAdminTab === 'processed';
+          const currentPage = isProcessed ?
+            this.pagination.adminLeaves.processed.currentPage :
+            this.pagination.adminLeaves.unprocessed.currentPage;
+
+          // 重新加载未处理列表（因为当前记录会被移到已处理列表）
+          this.loadAdminLeaves(false, currentPage);
+
+          // 如果当前在已处理标签页，也刷新已处理列表
+          if (this.leaveAdminTab === 'processed') {
+            this.loadAdminLeaves(true, this.pagination.adminLeaves.processed.currentPage);
+          }
+
+          this.selectedLeave = null;
+          // 同步刷新个人考勤（如果涉及到本人）
+          this.loadPersonalData();
+        } else {
+          // 服务器返回错误
+          alert(data.message || '操作失败：服务器返回错误');
+          console.error('审核失败:', data);
+        }
+      } catch (e) {
+        // 网络或其他错误
+        alert('操作失败：网络错误或服务器异常');
+        console.error('审核请假时发生错误:', e);
+      }
+    },
+
+    // 切换批量模式
+    toggleBatchMode() {
+      this.isBatchMode = !this.isBatchMode;
+      this.selectedLeaves = []; // 清空选中列表
+
+      if (this.isBatchMode) {
+        this.loadAllUnprocessedLeaves();
       } else {
-        const errorData = await res.json();
-        alert(errorData.message || '获取未处理申请失败');
+        this.loadAdminLeaves(false, 1); // 恢复正常分页
+      }
+    },
+
+    // 加载所有未处理的请假申请（不分页）
+    async loadAllUnprocessedLeaves() {
+      try {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+          alert('登录已过期，请重新登录');
+          this.$router.push('/');
+          return;
+        }
+
+        // 获取所有未处理的请假申请（不分页，显示全部）
+        const res = await fetch(`${this.apiBaseUrl}/admin/absence?processed=false&page=1&page_size=10000`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const absences = data.absences || [];
+
+          if (absences.length === 0) {
+            alert('没有未处理的请假申请');
+            this.isBatchMode = false;
+            return;
+          }
+
+          // 在批量模式下显示所有记录到一页中
+          this.adminLeavesUnprocessed = absences;
+          this.pagination.adminLeaves.unprocessed.currentPage = 1;
+          this.pagination.adminLeaves.unprocessed.total = absences.length;
+          this.pagination.adminLeaves.unprocessed.pages = 1;
+          this.pagination.adminLeaves.unprocessed.perPage = absences.length;
+
+        } else {
+          const errorData = await res.json();
+          alert(errorData.message || '获取未处理申请失败');
+          this.isBatchMode = false;
+        }
+      } catch (error) {
+        console.error('获取未处理申请失败:', error);
+        alert('网络错误，请稍后重试');
         this.isBatchMode = false;
       }
-    } catch (error) {
-      console.error('获取未处理申请失败:', error);
-      alert('网络错误，请稍后重试');
-      this.isBatchMode = false;
-    }
-  },
+    },
 
     // 批量审核请假申请
     async batchReview(decision) {
-    if (this.isBatchProcessing || this.selectedLeaves.length === 0) return;
+      if (this.isBatchProcessing || this.selectedLeaves.length === 0) return;
 
-    this.isBatchProcessing = true;
+      this.isBatchProcessing = true;
 
-    try {
-      const token = localStorage.getItem('access_token');
-      if (!token) {
-        alert('登录已过期，请重新登录');
-        this.$router.push('/');
-        return;
-      }
+      try {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+          alert('登录已过期，请重新登录');
+          this.$router.push('/');
+          return;
+        }
 
-      // 确认批量处理
-      const confirmMessage = `确定要批量${decision === 'approve' ? '通过' : '拒绝'} ${this.selectedLeaves.length} 条请假申请吗？`;
-      if (!confirm(confirmMessage)) {
+        // 确认批量处理
+        const confirmMessage = `确定要批量${decision === 'approve' ? '通过' : '拒绝'} ${this.selectedLeaves.length} 条请假申请吗？`;
+        if (!confirm(confirmMessage)) {
+          this.isBatchProcessing = false;
+          return;
+        }
+
+        // 使用批量API处理选中的请假申请
+        const batchRes = await fetch(`${this.apiBaseUrl}/admin/absence/batch`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            decision: decision,
+            absence_ids: this.selectedLeaves
+          })
+        });
+
+        if (batchRes.ok) {
+          const result = await batchRes.json();
+          alert(result.message);
+
+          // 处理成功后重新加载数据
+          this.selectedLeaves = [];
+          this.loadAllUnprocessedLeaves();
+
+        } else {
+          const errorData = await batchRes.json();
+          alert(errorData.message || '批量处理失败');
+        }
+      } catch (error) {
+        console.error('批量处理请假申请失败:', error);
+        alert('网络错误，请稍后重试');
+      } finally {
         this.isBatchProcessing = false;
+      }
+    },
+
+    // 分页相关方法
+    changeMyLeavesPage(page) {
+      if (page >= 1 && page <= this.pagination.myLeaves.pages) {
+        this.loadMyLeaves(page)
+      }
+    },
+
+    changeAdminLeavesPage(processed, page) {
+      let paginationKey, status;
+
+      // 根据标签页确定分页键和状态参数
+      if (this.leaveAdminTab === 'approved') {
+        paginationKey = 'approved';
+        status = 2; // 已通过
+      } else if (this.leaveAdminTab === 'rejected') {
+        paginationKey = 'rejected';
+        status = 1; // 已拒绝
+      } else {
+        paginationKey = processed ? 'processed' : 'unprocessed';
+        status = null; // 使用processed参数
+      }
+
+      if (page >= 1 && page <= this.pagination.adminLeaves[paginationKey].pages) {
+        // 对于approved和rejected标签页，使用status参数
+        if (status !== null) {
+          this.loadAdminLeaves(null, page, status);
+        } else {
+          // 对于其他标签页，保持原有逻辑
+          this.loadAdminLeaves(processed, page);
+        }
+      }
+    },
+
+    // 生成页码数组
+
+
+    // 重置分页到第一页
+    resetAndRecalculatePagination() {
+      if (this.leaveAdminTab === 'unprocessed') {
+        this.pagination.adminLeaves.unprocessed.currentPage = 1;
+        this.loadAdminLeaves(false, 1);
+      } else if (this.leaveAdminTab === 'approved') {
+        this.pagination.adminLeaves.approved.currentPage = 1;
+        this.loadAdminLeaves(null, 1, 2); // 已通过
+      } else if (this.leaveAdminTab === 'rejected') {
+        this.pagination.adminLeaves.rejected.currentPage = 1;
+        this.loadAdminLeaves(null, 1, 1); // 已拒绝
+      } else {
+        this.pagination.adminLeaves.processed.currentPage = 1;
+        this.loadAdminLeaves(true, 1);
+      }
+    },
+
+    updateTime() {
+      const now = new Date()
+      this.currentTime = now.toLocaleTimeString('zh-CN')
+      this.currentDate = now.toLocaleDateString('zh-CN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        weekday: 'long'
+      })
+    },
+
+    formatDate(dateString) {
+      if (!dateString) return ''
+      return new Date(dateString).toLocaleDateString('zh-CN')
+    },
+
+    formatDateTime(dateString) {
+      if (!dateString) return ''
+      const d = new Date(dateString)
+      return d.toLocaleString('zh-CN', { hour12: false })
+    },
+
+    formatTime(dateString) {
+      if (!dateString) return ''
+      return new Date(dateString).toLocaleTimeString('zh-CN')
+    },
+
+    // 导出考勤数据为CSV
+    exportAttendanceData() {
+      let csvContent = '\uFEFF姓名,工号,迟到次数,早退次数,正常次数\n'
+
+      this.employees.forEach(employee => {
+        const row = [
+          employee.name,
+          employee.account,
+          employee.monthly_stats.late_count,
+          employee.monthly_stats.early_leave_count,
+          employee.monthly_stats.normal_count
+        ]
+        csvContent += row.join(',') + '\n'
+      })
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+
+      const now = new Date()
+      const year = now.getFullYear()
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      const fileName = `${year}年${month}月考勤统计.csv`
+
+      link.setAttribute('href', url)
+      link.setAttribute('download', fileName)
+      link.style.visibility = 'hidden'
+
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      URL.revokeObjectURL(url)
+    },
+
+    getStatusClass(status) {
+      if (status === '正常') return 'status-normal'
+      if (status === '请假') return 'status-leave'
+      return 'status-bad'
+    },
+
+    logout() {
+      localStorage.removeItem('access_token')
+      this.$router.push('/')
+    },
+
+    getLeaveTypeLabel(type) {
+      const leaveType = this.leaveTypes.find(t => t.value === type);
+      return leaveType ? leaveType.label : '未知类型';
+    },
+    handlePageChange(newPage) {
+      this.currentPage = newPage; // 更新当前页码
+      this.loadEmployeesData(); // 重新加载数据
+    },
+
+    handlePageJump() {
+      // 确保跳转的页码在有效范围内
+      if (this.jumpToPage >= 1 && this.jumpToPage <= Math.ceil(this.totalEmployees / this.pageSize)) {
+        this.currentPage = this.jumpToPage;
+        this.loadEmployeesData();
+      } else {
+        alert("请输入有效的页码！");
+      }
+    },
+
+    renderAttendanceChart() {
+      const chartDom = document.getElementById('attendance-chart');
+      const myChart = echarts.init(chartDom);
+      const option = {
+        title: {
+          text: '本月考勤统计',
+          left: 'center'
+        },
+        tooltip: {
+          trigger: 'item'
+        },
+        legend: {
+          bottom: '0%',
+          left: 'center'
+        },
+        series: [
+          {
+            name: '考勤情况',
+            type: 'pie',
+            radius: '50%',
+            data: [
+              { value: this.dailyStats.actual_attendance, name: '实到人数' },
+              { value: this.dailyStats.late_count, name: '迟到人数' },
+              { value: this.dailyStats.early_leave_count, name: '早退人数' },
+              { value: this.dailyStats.normal_count, name: '正常人数' },
+              { value: this.dailyStats.should_attend - this.dailyStats.actual_attendance, name: '未到人数' }
+            ],
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.5)'
+              }
+            }
+          }
+        ]
+      };
+      option && myChart.setOption(option);
+    },
+
+    renderAttendanceCharts() {
+      // 检查数据是否加载完成
+      if (!this.dailyStats) {
+        console.error('dailyStats 数据未加载完成');
         return;
       }
 
-      // 使用批量API处理选中的请假申请
-      const batchRes = await fetch(`${this.apiBaseUrl}/admin/absence/batch`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+      // 图表 1: 实到人数和未到人数
+      const chartDom1 = document.getElementById('attendance-chart-1');
+      if (!chartDom1) {
+        console.error('attendance-chart-1 容器未找到');
+        return;
+      }
+      const chart1 = echarts.init(chartDom1);
+      const option1 = {
+        title: {
+          text: '实到人数与未到人数',
+          left: 'center'
         },
-        body: JSON.stringify({
-          decision: decision,
-          absence_ids: this.selectedLeaves
-        })
-      });
+        tooltip: {
+          trigger: 'item'
+        },
+        legend: {
+          bottom: '0%',
+          left: 'center'
+        },
+        series: [
+          {
+            name: '考勤情况',
+            type: 'pie',
+            radius: '50%',
+            data: [
+              { value: this.dailyStats.actual_attendance, name: '实到人数' },
+              { value: this.dailyStats.should_attend - this.dailyStats.actual_attendance, name: '未到人数' }
+            ],
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.5)'
+              }
+            }
+          }
+        ]
+      };
+      chart1.setOption(option1);
 
-      if (batchRes.ok) {
-        const result = await batchRes.json();
-        alert(result.message);
-
-        // 处理成功后重新加载数据
-        this.selectedLeaves = [];
-        this.loadAllUnprocessedLeaves();
-
-      } else {
-        const errorData = await batchRes.json();
-        alert(errorData.message || '批量处理失败');
+      // 图表 2: 正常、迟到、早退、请假人数
+      const chartDom2 = document.getElementById('attendance-chart-2');
+      if (!chartDom2) {
+        console.error('attendance-chart-2 容器未找到');
+        return;
       }
-    } catch (error) {
-      console.error('批量处理请假申请失败:', error);
-      alert('网络错误，请稍后重试');
-    } finally {
-      this.isBatchProcessing = false;
-    }
-  },
-
-  // 分页相关方法
-  changeMyLeavesPage(page) {
-    if (page >= 1 && page <= this.pagination.myLeaves.pages) {
-      this.loadMyLeaves(page)
-    }
-  },
-
-  changeAdminLeavesPage(processed, page) {
-    let paginationKey, status;
-
-    // 根据标签页确定分页键和状态参数
-    if (this.leaveAdminTab === 'approved') {
-      paginationKey = 'approved';
-      status = 2; // 已通过
-    } else if (this.leaveAdminTab === 'rejected') {
-      paginationKey = 'rejected';
-      status = 1; // 已拒绝
-    } else {
-      paginationKey = processed ? 'processed' : 'unprocessed';
-      status = null; // 使用processed参数
-    }
-
-    if (page >= 1 && page <= this.pagination.adminLeaves[paginationKey].pages) {
-      // 对于approved和rejected标签页，使用status参数
-      if (status !== null) {
-        this.loadAdminLeaves(null, page, status);
-      } else {
-        // 对于其他标签页，保持原有逻辑
-        this.loadAdminLeaves(processed, page);
-      }
-    }
-  },
-
-  // 生成页码数组
-  generatePageNumbers(totalPages, currentPage, maxVisible = 5) {
-    const pages = []
-    let start = Math.max(1, currentPage - Math.floor(maxVisible / 2))
-    let end = Math.min(totalPages, start + maxVisible - 1)
-
-    if (end - start + 1 < maxVisible) {
-      start = Math.max(1, end - maxVisible + 1)
-    }
-
-    for (let i = start; i <= end; i++) {
-      pages.push(i)
-    }
-    return pages
-  },
-
-  // 重置分页到第一页
-  resetAndRecalculatePagination() {
-    if (this.leaveAdminTab === 'unprocessed') {
-      this.pagination.adminLeaves.unprocessed.currentPage = 1;
-      this.loadAdminLeaves(false, 1);
-    } else if (this.leaveAdminTab === 'approved') {
-      this.pagination.adminLeaves.approved.currentPage = 1;
-      this.loadAdminLeaves(null, 1, 2); // 已通过
-    } else if (this.leaveAdminTab === 'rejected') {
-      this.pagination.adminLeaves.rejected.currentPage = 1;
-      this.loadAdminLeaves(null, 1, 1); // 已拒绝
-    } else {
-      this.pagination.adminLeaves.processed.currentPage = 1;
-      this.loadAdminLeaves(true, 1);
-    }
-  },
-
-  updateTime() {
-    const now = new Date()
-    this.currentTime = now.toLocaleTimeString('zh-CN')
-    this.currentDate = now.toLocaleDateString('zh-CN', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      weekday: 'long'
-    })
-  },
-
-  formatDate(dateString) {
-    if (!dateString) return ''
-    return new Date(dateString).toLocaleDateString('zh-CN')
-  },
-
-  formatDateTime(dateString) {
-    if (!dateString) return ''
-    const d = new Date(dateString)
-    return d.toLocaleString('zh-CN', { hour12: false })
-  },
-
-  formatTime(dateString) {
-    if (!dateString) return ''
-    return new Date(dateString).toLocaleTimeString('zh-CN')
-  },
-
-  // 导出考勤数据为CSV
-  exportAttendanceData() {
-    let csvContent = '\uFEFF姓名,工号,迟到次数,早退次数,正常次数\n'
-
-    this.employees.forEach(employee => {
-      const row = [
-        employee.name,
-        employee.account,
-        employee.monthly_stats.late_count,
-        employee.monthly_stats.early_leave_count,
-        employee.monthly_stats.normal_count
-      ]
-      csvContent += row.join(',') + '\n'
-    })
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-
-    const now = new Date()
-    const year = now.getFullYear()
-    const month = String(now.getMonth() + 1).padStart(2, '0')
-    const fileName = `${year}年${month}月考勤统计.csv`
-
-    link.setAttribute('href', url)
-    link.setAttribute('download', fileName)
-    link.style.visibility = 'hidden'
-
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-
-    URL.revokeObjectURL(url)
-  },
-
-  getStatusClass(status) {
-    if (status === '正常') return 'status-normal'
-    if (status === '请假') return 'status-leave'
-    return 'status-bad'
-  },
-
-  logout() {
-    localStorage.removeItem('access_token')
-    this.$router.push('/')
-  },
-
-  getLeaveTypeLabel(type) {
-    const leaveType = this.leaveTypes.find(t => t.value === type);
-    return leaveType ? leaveType.label : '未知类型';
-  },
-  handlePageChange(newPage) {
-    this.currentPage = newPage; // 更新当前页码
-    this.loadEmployeesData(); // 重新加载数据
-  },
-
-  handlePageJump() {
-    // 确保跳转的页码在有效范围内
-    if (this.jumpToPage >= 1 && this.jumpToPage <= Math.ceil(this.totalEmployees / this.pageSize)) {
-      this.currentPage = this.jumpToPage;
-      this.loadEmployeesData();
-    } else {
-      alert("请输入有效的页码！");
-    }
-  },
-
-  renderAttendanceChart() {
-    const chartDom = document.getElementById('attendance-chart');
-    const myChart = echarts.init(chartDom);
-    const option = {
-      title: {
-        text: '本月考勤统计',
-        left: 'center'
-      },
-      tooltip: {
-        trigger: 'item'
-      },
-      legend: {
-        bottom: '0%',
-        left: 'center'
-      },
-      series: [
-        {
-          name: '考勤情况',
-          type: 'pie',
-          radius: '50%',
-          data: [
-            { value: this.dailyStats.actual_attendance, name: '实到人数' },
-            { value: this.dailyStats.late_count, name: '迟到人数' },
-            { value: this.dailyStats.early_leave_count, name: '早退人数' },
-            { value: this.dailyStats.normal_count, name: '正常人数' },
-            { value: this.dailyStats.should_attend - this.dailyStats.actual_attendance, name: '未到人数' }
-          ],
-          emphasis: {
-            itemStyle: {
-              shadowBlur: 10,
-              shadowOffsetX: 0,
-              shadowColor: 'rgba(0, 0, 0, 0.5)'
+      const chart2 = echarts.init(chartDom2);
+      const option2 = {
+        title: {
+          text: '考勤详细统计',
+          left: 'center'
+        },
+        tooltip: {
+          trigger: 'item'
+        },
+        legend: {
+          bottom: '0%',
+          left: 'center'
+        },
+        series: [
+          {
+            name: '考勤情况',
+            type: 'pie',
+            radius: '50%',
+            data: [
+              { value: this.dailyStats.normal_count, name: '正常人数' },
+              { value: this.dailyStats.late_count, name: '迟到人数' },
+              { value: this.dailyStats.early_leave_count, name: '早退人数' },
+              { value: this.dailyStats.leave_count, name: '请假人数' }
+            ],
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.5)'
+              }
             }
           }
-        }
-      ]
-    };
-    option && myChart.setOption(option);
-  },
-
-  renderAttendanceCharts() {
-    // 检查数据是否加载完成
-    if (!this.dailyStats) {
-      console.error('dailyStats 数据未加载完成');
-      return;
-    }
-
-    // 图表 1: 实到人数和未到人数
-    const chartDom1 = document.getElementById('attendance-chart-1');
-    if (!chartDom1) {
-      console.error('attendance-chart-1 容器未找到');
-      return;
-    }
-    const chart1 = echarts.init(chartDom1);
-    const option1 = {
-      title: {
-        text: '实到人数与未到人数',
-        left: 'center'
-      },
-      tooltip: {
-        trigger: 'item'
-      },
-      legend: {
-        bottom: '0%',
-        left: 'center'
-      },
-      series: [
-        {
-          name: '考勤情况',
-          type: 'pie',
-          radius: '50%',
-          data: [
-            { value: this.dailyStats.actual_attendance, name: '实到人数' },
-            { value: this.dailyStats.should_attend - this.dailyStats.actual_attendance, name: '未到人数' }
-          ],
-          emphasis: {
-            itemStyle: {
-              shadowBlur: 10,
-              shadowOffsetX: 0,
-              shadowColor: 'rgba(0, 0, 0, 0.5)'
-            }
-          }
-        }
-      ]
-    };
-    chart1.setOption(option1);
-
-    // 图表 2: 正常、迟到、早退、请假人数
-    const chartDom2 = document.getElementById('attendance-chart-2');
-    if (!chartDom2) {
-      console.error('attendance-chart-2 容器未找到');
-      return;
-    }
-    const chart2 = echarts.init(chartDom2);
-    const option2 = {
-      title: {
-        text: '考勤详细统计',
-        left: 'center'
-      },
-      tooltip: {
-        trigger: 'item'
-      },
-      legend: {
-        bottom: '0%',
-        left: 'center'
-      },
-      series: [
-        {
-          name: '考勤情况',
-          type: 'pie',
-          radius: '50%',
-          data: [
-            { value: this.dailyStats.normal_count, name: '正常人数' },
-            { value: this.dailyStats.late_count, name: '迟到人数' },
-            { value: this.dailyStats.early_leave_count, name: '早退人数' },
-            { value: this.dailyStats.leave_count, name: '请假人数' }
-          ],
-          emphasis: {
-            itemStyle: {
-              shadowBlur: 10,
-              shadowOffsetX: 0,
-              shadowColor: 'rgba(0, 0, 0, 0.5)'
-            }
-          }
-        }
-      ]
-    };
-    chart2.setOption(option2);
-  },
+        ]
+      };
+      chart2.setOption(option2);
+    },
 
     // 加载阶段考勤统计数据
     async loadPeriodStats() {
-    try {
-      const token = localStorage.getItem('access_token');
-      if (!token) {
-        alert('登录已过期，请重新登录');
-        this.$router.push('/');
+      try {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+          alert('登录已过期，请重新登录');
+          this.$router.push('/');
+          return;
+        }
+
+        // 如果没有选择日期，设置默认日期（近一个月）
+        let startDate = this.periodStats.startDate;
+        let endDate = this.periodStats.endDate;
+
+        if (!startDate || !endDate) {
+          const today = new Date();
+          endDate = today.toISOString().split('T')[0];
+          startDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+          // 更新数据模型中的日期
+          this.periodStats.startDate = startDate;
+          this.periodStats.endDate = endDate;
+        }
+
+        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/period?start_date=${startDate}&end_date=${endDate}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          // 保存阶段时间范围数据
+          this.periodStats.phaseRanges = data.phase_ranges;
+          this.renderLeaveTrendChart(data.absence_stats);
+          this.renderAttendanceTrendChart(data.attendance_stats);
+        } else {
+          const errorData = await response.json();
+          alert(errorData.message || '获取阶段考勤统计数据失败');
+        }
+      } catch (error) {
+        console.error('获取阶段考勤统计数据失败:', error);
+        alert('网络错误，请稍后重试');
+      }
+    },
+
+    // 渲染请假趋势统计折线图
+    renderLeaveTrendChart(absenceStats) {
+      const chartDom = document.getElementById('leave-trend-chart');
+      if (!chartDom) {
+        console.error('leave-trend-chart 容器未找到');
         return;
       }
 
-      // 如果没有选择日期，设置默认日期（近一个月）
-      let startDate = this.periodStats.startDate;
-      let endDate = this.periodStats.endDate;
-
-      if (!startDate || !endDate) {
-        const today = new Date();
-        endDate = today.toISOString().split('T')[0];
-        startDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-        // 更新数据模型中的日期
-        this.periodStats.startDate = startDate;
-        this.periodStats.endDate = endDate;
+      // 销毁之前的图表实例（如果存在）
+      if (this.periodStats.leaveTrendChart) {
+        this.periodStats.leaveTrendChart.dispose();
       }
 
-      const response = await fetch(`${this.apiBaseUrl}/admin/attendance/period?start_date=${startDate}&end_date=${endDate}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const chart = echarts.init(chartDom);
+      this.periodStats.leaveTrendChart = chart;
 
-      if (response.ok) {
-        const data = await response.json();
-        // 保存阶段时间范围数据
-        this.periodStats.phaseRanges = data.phase_ranges;
-        this.renderLeaveTrendChart(data.absence_stats);
-        this.renderAttendanceTrendChart(data.attendance_stats);
-      } else {
-        const errorData = await response.json();
-        alert(errorData.message || '获取阶段考勤统计数据失败');
+      // 准备数据
+      const stages = ['第一阶段', '第二阶段', '第三阶段'];
+      const sickData = absenceStats.map(stage => stage.sick_leave);
+      const personalData = absenceStats.map(stage => stage.personal_leave);
+      const officialData = absenceStats.map(stage => stage.official_leave);
+
+      // 定义阶段时间范围显示文本
+      const getPhaseRangeText = (index) => {
+        if (!this.periodStats.phaseRanges) return '';
+        const phaseNames = ['第一阶段', '第二阶段', '第三阶段'];
+        const phaseKey = phaseNames[index];
+        const range = this.periodStats.phaseRanges[phaseKey];
+        return range ? `\n${range.start} 至 ${range.end}` : '';
+      };
+
+      const option = {
+        title: {
+          text: '请假趋势统计',
+          left: 'center'
+        },
+        tooltip: {
+          trigger: 'axis',
+          formatter: (params) => {
+            const stageIndex = params[0].dataIndex;
+            const stageName = stages[stageIndex];
+            const rangeText = getPhaseRangeText(stageIndex);
+
+            let tooltipText = `${stageName}${rangeText}<br/>`;
+            params.forEach(param => {
+              tooltipText += `${param.marker} ${param.seriesName}: ${param.data}<br/>`;
+            });
+            return tooltipText;
+          }
+        },
+        legend: {
+          data: ['病假', '私事请假', '公事请假'],
+          top: '10%'
+        },
+        xAxis: {
+          type: 'category',
+          data: stages
+        },
+        yAxis: {
+          type: 'value',
+          name: '人数'
+        },
+        series: [
+          {
+            name: '病假',
+            type: 'line',
+            data: sickData,
+            smooth: true,
+            itemStyle: { color: '#5eb95e' } // 绿色
+          },
+          {
+            name: '私事请假',
+            type: 'line',
+            data: personalData,
+            smooth: true,
+            itemStyle: { color: '#3b82f6' } // 深蓝色
+          },
+          {
+            name: '公事请假',
+            type: 'line',
+            data: officialData,
+            smooth: true,
+            itemStyle: { color: '#f59e0b' } // 橙色
+          }
+        ]
+      };
+
+      chart.setOption(option);
+    },
+
+    // 渲染出勤趋势统计折线图
+    renderAttendanceTrendChart(attendanceStats) {
+      const chartDom = document.getElementById('attendance-trend-chart');
+      if (!chartDom) {
+        console.error('attendance-trend-chart 容器未找到');
+        return;
       }
-    } catch (error) {
-      console.error('获取阶段考勤统计数据失败:', error);
-      alert('网络错误，请稍后重试');
-    }
-  },
 
-  // 渲染请假趋势统计折线图
-  renderLeaveTrendChart(absenceStats) {
-    const chartDom = document.getElementById('leave-trend-chart');
-    if (!chartDom) {
-      console.error('leave-trend-chart 容器未找到');
-      return;
-    }
+      // 销毁之前的图表实例（如果存在）
+      if (this.periodStats.attendanceTrendChart) {
+        this.periodStats.attendanceTrendChart.dispose();
+      }
 
-    // 销毁之前的图表实例（如果存在）
-    if (this.periodStats.leaveTrendChart) {
-      this.periodStats.leaveTrendChart.dispose();
-    }
+      const chart = echarts.init(chartDom);
+      this.periodStats.attendanceTrendChart = chart;
 
-    const chart = echarts.init(chartDom);
-    this.periodStats.leaveTrendChart = chart;
+      // 准备数据
+      const stages = ['第一阶段', '第二阶段', '第三阶段'];
+      const normalData = attendanceStats.map(stage => stage.normal);
+      const lateData = attendanceStats.map(stage => stage.late);
+      const earlyData = attendanceStats.map(stage => stage.early);
+      const overtimeData = attendanceStats.map(stage => stage.overtime);
 
-    // 准备数据
-    const stages = ['第一阶段', '第二阶段', '第三阶段'];
-    const sickData = absenceStats.map(stage => stage.sick_leave);
-    const personalData = absenceStats.map(stage => stage.personal_leave);
-    const officialData = absenceStats.map(stage => stage.official_leave);
+      // 定义阶段时间范围显示文本
+      const getPhaseRangeText = (index) => {
+        if (!this.periodStats.phaseRanges) return '';
+        const phaseNames = ['第一阶段', '第二阶段', '第三阶段'];
+        const phaseKey = phaseNames[index];
+        const range = this.periodStats.phaseRanges[phaseKey];
+        return range ? `\n${range.start} 至 ${range.end}` : '';
+      };
 
-    // 定义阶段时间范围显示文本
-    const getPhaseRangeText = (index) => {
-      if (!this.periodStats.phaseRanges) return '';
-      const phaseNames = ['第一阶段', '第二阶段', '第三阶段'];
-      const phaseKey = phaseNames[index];
-      const range = this.periodStats.phaseRanges[phaseKey];
-      return range ? `\n${range.start} 至 ${range.end}` : '';
-    };
-
-    const option = {
-      title: {
-        text: '请假趋势统计',
-        left: 'center'
-      },
-      tooltip: {
-        trigger: 'axis',
-        formatter: (params) => {
-          const stageIndex = params[0].dataIndex;
-          const stageName = stages[stageIndex];
-          const rangeText = getPhaseRangeText(stageIndex);
-
-          let tooltipText = `${stageName}${rangeText}<br/>`;
-          params.forEach(param => {
-            tooltipText += `${param.marker} ${param.seriesName}: ${param.data}<br/>`;
-          });
-          return tooltipText;
-        }
-      },
-      legend: {
-        data: ['病假', '私事请假', '公事请假'],
-        top: '10%'
-      },
-      xAxis: {
-        type: 'category',
-        data: stages
-      },
-      yAxis: {
-        type: 'value',
-        name: '人数'
-      },
-      series: [
-        {
-          name: '病假',
-          type: 'line',
-          data: sickData,
-          smooth: true,
-          itemStyle: { color: '#5eb95e' } // 绿色
+      const option = {
+        title: {
+          text: '出勤趋势统计',
+          left: 'center'
         },
-        {
-          name: '私事请假',
-          type: 'line',
-          data: personalData,
-          smooth: true,
-          itemStyle: { color: '#3b82f6' } // 深蓝色
+        tooltip: {
+          trigger: 'axis',
+          formatter: (params) => {
+            const stageIndex = params[0].dataIndex;
+            const stageName = stages[stageIndex];
+            const rangeText = getPhaseRangeText(stageIndex);
+
+            let tooltipText = `${stageName}${rangeText}<br/>`;
+            params.forEach(param => {
+              tooltipText += `${param.marker} ${param.seriesName}: ${param.data}<br/>`;
+            });
+            return tooltipText;
+          }
         },
-        {
-          name: '公事请假',
-          type: 'line',
-          data: officialData,
-          smooth: true,
-          itemStyle: { color: '#f59e0b' } // 橙色
-        }
-      ]
-    };
-
-    chart.setOption(option);
-  },
-
-  // 渲染出勤趋势统计折线图
-  renderAttendanceTrendChart(attendanceStats) {
-    const chartDom = document.getElementById('attendance-trend-chart');
-    if (!chartDom) {
-      console.error('attendance-trend-chart 容器未找到');
-      return;
-    }
-
-    // 销毁之前的图表实例（如果存在）
-    if (this.periodStats.attendanceTrendChart) {
-      this.periodStats.attendanceTrendChart.dispose();
-    }
-
-    const chart = echarts.init(chartDom);
-    this.periodStats.attendanceTrendChart = chart;
-
-    // 准备数据
-    const stages = ['第一阶段', '第二阶段', '第三阶段'];
-    const normalData = attendanceStats.map(stage => stage.normal);
-    const lateData = attendanceStats.map(stage => stage.late);
-    const earlyData = attendanceStats.map(stage => stage.early);
-    const overtimeData = attendanceStats.map(stage => stage.overtime);
-
-    // 定义阶段时间范围显示文本
-    const getPhaseRangeText = (index) => {
-      if (!this.periodStats.phaseRanges) return '';
-      const phaseNames = ['第一阶段', '第二阶段', '第三阶段'];
-      const phaseKey = phaseNames[index];
-      const range = this.periodStats.phaseRanges[phaseKey];
-      return range ? `\n${range.start} 至 ${range.end}` : '';
-    };
-
-    const option = {
-      title: {
-        text: '出勤趋势统计',
-        left: 'center'
-      },
-      tooltip: {
-        trigger: 'axis',
-        formatter: (params) => {
-          const stageIndex = params[0].dataIndex;
-          const stageName = stages[stageIndex];
-          const rangeText = getPhaseRangeText(stageIndex);
-
-          let tooltipText = `${stageName}${rangeText}<br/>`;
-          params.forEach(param => {
-            tooltipText += `${param.marker} ${param.seriesName}: ${param.data}<br/>`;
-          });
-          return tooltipText;
-        }
-      },
-      legend: {
-        data: ['正常', '迟到', '早退', '加班'],
-        top: '10%'
-      },
-      xAxis: {
-        type: 'category',
-        data: stages
-      },
-      yAxis: {
-        type: 'value',
-        name: '人数'
-      },
-      series: [
-        {
-          name: '正常',
-          type: 'line',
-          data: normalData,
-          smooth: true,
-          itemStyle: { color: '#3b82f6' } // 蓝色
+        legend: {
+          data: ['正常', '迟到', '早退', '加班'],
+          top: '10%'
         },
-        {
-          name: '迟到',
-          type: 'line',
-          data: lateData,
-          smooth: true,
-          itemStyle: { color: '#5eb95e' } // 绿色
+        xAxis: {
+          type: 'category',
+          data: stages
         },
-        {
-          name: '早退',
-          type: 'line',
-          data: earlyData,
-          smooth: true,
-          itemStyle: { color: '#3b82f6' } // 深蓝色
+        yAxis: {
+          type: 'value',
+          name: '人数'
         },
-        {
-          name: '加班',
-          type: 'line',
-          data: overtimeData,
-          smooth: true,
-          itemStyle: { color: '#f59e0b' } // 橙色
-        }
-      ]
-    };
+        series: [
+          {
+            name: '正常',
+            type: 'line',
+            data: normalData,
+            smooth: true,
+            itemStyle: { color: '#3b82f6' } // 蓝色
+          },
+          {
+            name: '迟到',
+            type: 'line',
+            data: lateData,
+            smooth: true,
+            itemStyle: { color: '#5eb95e' } // 绿色
+          },
+          {
+            name: '早退',
+            type: 'line',
+            data: earlyData,
+            smooth: true,
+            itemStyle: { color: '#3b82f6' } // 深蓝色
+          },
+          {
+            name: '加班',
+            type: 'line',
+            data: overtimeData,
+            smooth: true,
+            itemStyle: { color: '#f59e0b' } // 橙色
+          }
+        ]
+      };
 
-    chart.setOption(option);
-  },
+      chart.setOption(option);
+    },
 
     // 显示员工详细考勤信息弹窗
     async showEmployeeDetail(employee) {
-    this.selectedEmployee = employee;
+      this.selectedEmployee = employee;
 
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employee/${employee.user_id}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employee/${employee.user_id}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+
+          // 设置员工详细信息
+          this.employeeDetail = {
+            earliestClockIn: data.earliestClockIn,
+            latestClockIn: data.latestClockIn,
+            earliestClockOut: data.earliestClockOut,
+            latestClockOut: data.latestClockOut,
+            attendanceTrendData: data.attendanceTrendData,
+            leaveTrendData: data.leaveTrendData
+          };
+        } else {
+          console.error('获取员工详细信息失败:', response.status);
+          // 如果获取失败，使用模拟数据
+          this.employeeDetail = {
+            earliestClockIn: '08:30',
+            latestClockIn: '09:15',
+            earliestClockOut: '17:45',
+            latestClockOut: '20:30',
+            attendanceTrendData: {
+              weeks: ['第1周', '第2周', '第3周'],
+              late: [2, 1, 3],
+              earlyLeave: [1, 0, 2]
+            },
+            leaveTrendData: {
+              weeks: ['第1周', '第2周', '第3周'],
+              sickLeave: [1, 0, 1],
+              personalLeave: [0, 1, 0],
+              officialLeave: [0, 0, 1]
+            }
+          };
         }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-
-        // 设置员工详细信息
-        this.employeeDetail = {
-          earliestClockIn: data.earliestClockIn,
-          latestClockIn: data.latestClockIn,
-          earliestClockOut: data.earliestClockOut,
-          latestClockOut: data.latestClockOut,
-          attendanceTrendData: data.attendanceTrendData,
-          leaveTrendData: data.leaveTrendData
-        };
-      } else {
-        console.error('获取员工详细信息失败:', response.status);
-        // 如果获取失败，使用模拟数据
+      } catch (error) {
+        console.error('获取员工详细信息时发生错误:', error);
+        // 如果发生错误，使用模拟数据
         this.employeeDetail = {
           earliestClockIn: '08:30',
           latestClockIn: '09:15',
@@ -2209,284 +2517,263 @@ methods: {
           }
         };
       }
-    } catch (error) {
-      console.error('获取员工详细信息时发生错误:', error);
-      // 如果发生错误，使用模拟数据
+
+      this.showEmployeeDetailModal = true;
+
+      // 渲染图表
+      this.$nextTick(() => {
+        this.renderAbnormalAttendanceChart();
+        this.renderEmployeeLeaveTrendChart();
+      });
+    },
+
+    // 关闭员工详细考勤信息弹窗
+    closeEmployeeDetailModal() {
+      this.showEmployeeDetailModal = false;
+      this.selectedEmployee = null;
+      // 重置employeeDetail为初始结构
       this.employeeDetail = {
-        earliestClockIn: '08:30',
-        latestClockIn: '09:15',
-        earliestClockOut: '17:45',
-        latestClockOut: '20:30',
+        earliestClockIn: '',
+        latestClockIn: '',
+        earliestClockOut: '',
+        latestClockOut: '',
         attendanceTrendData: {
-          weeks: ['第1周', '第2周', '第3周'],
-          late: [2, 1, 3],
-          earlyLeave: [1, 0, 2]
+          weeks: [],
+          late: [],
+          earlyLeave: []
         },
         leaveTrendData: {
-          weeks: ['第1周', '第2周', '第3周'],
-          sickLeave: [1, 0, 1],
-          personalLeave: [0, 1, 0],
-          officialLeave: [0, 0, 1]
+          weeks: [],
+          sickLeave: [],
+          personalLeave: [],
+          officialLeave: []
         }
       };
-    }
 
-    this.showEmployeeDetailModal = true;
-
-    // 渲染图表
-    this.$nextTick(() => {
-      this.renderAbnormalAttendanceChart();
-      this.renderEmployeeLeaveTrendChart();
-    });
-  },
-
-  // 关闭员工详细考勤信息弹窗
-  closeEmployeeDetailModal() {
-    this.showEmployeeDetailModal = false;
-    this.selectedEmployee = null;
-    // 重置employeeDetail为初始结构
-    this.employeeDetail = {
-      earliestClockIn: '',
-      latestClockIn: '',
-      earliestClockOut: '',
-      latestClockOut: '',
-      attendanceTrendData: {
-        weeks: [],
-        late: [],
-        earlyLeave: []
-      },
-      leaveTrendData: {
-        weeks: [],
-        sickLeave: [],
-        personalLeave: [],
-        officialLeave: []
+      // 销毁图表实例
+      if (this.attendanceTrendChartInstance) {
+        this.attendanceTrendChartInstance.dispose();
+        this.attendanceTrendChartInstance = null;
       }
-    };
+      if (this.leaveTrendChartInstance) {
+        this.leaveTrendChartInstance.dispose();
+        this.leaveTrendChartInstance = null;
+      }
+    },
 
-    // 销毁图表实例
-    if (this.attendanceTrendChartInstance) {
-      this.attendanceTrendChartInstance.dispose();
-      this.attendanceTrendChartInstance = null;
-    }
-    if (this.leaveTrendChartInstance) {
-      this.leaveTrendChartInstance.dispose();
-      this.leaveTrendChartInstance = null;
-    }
-  },
+    // 渲染异常考勤趋势图
+    renderAbnormalAttendanceChart() {
+      // 检查数据是否存在
+      if (!this.employeeDetail || !this.employeeDetail.attendanceTrendData) {
+        console.warn('员工详细考勤信息未加载或数据结构不正确');
+        return;
+      }
 
-  // 渲染异常考勤趋势图
-  renderAbnormalAttendanceChart() {
-    // 检查数据是否存在
-    if (!this.employeeDetail || !this.employeeDetail.attendanceTrendData) {
-      console.warn('员工详细考勤信息未加载或数据结构不正确');
-      return;
-    }
+      const chartDom = this.$refs.abnormalAttendanceChart;
+      if (!chartDom) {
+        console.error('abnormalAttendanceChart 容器未找到');
+        return;
+      }
 
-    const chartDom = this.$refs.abnormalAttendanceChart;
-    if (!chartDom) {
-      console.error('abnormalAttendanceChart 容器未找到');
-      return;
-    }
+      // 销毁之前的图表实例（如果存在）
+      if (this.attendanceTrendChartInstance) {
+        this.attendanceTrendChartInstance.dispose();
+      }
 
-    // 销毁之前的图表实例（如果存在）
-    if (this.attendanceTrendChartInstance) {
-      this.attendanceTrendChartInstance.dispose();
-    }
+      const chart = echarts.init(chartDom);
+      this.attendanceTrendChartInstance = chart;
 
-    const chart = echarts.init(chartDom);
-    this.attendanceTrendChartInstance = chart;
+      // 准备数据
+      const weeks = this.employeeDetail.attendanceTrendData.weeks;
+      const lateData = this.employeeDetail.attendanceTrendData.late;
+      const earlyLeaveData = this.employeeDetail.attendanceTrendData.earlyLeave;
 
-    // 准备数据
-    const weeks = this.employeeDetail.attendanceTrendData.weeks;
-    const lateData = this.employeeDetail.attendanceTrendData.late;
-    const earlyLeaveData = this.employeeDetail.attendanceTrendData.earlyLeave;
-
-    const option = {
-      tooltip: {
-        trigger: 'axis'
-      },
-      legend: {
-        data: ['迟到次数', '早退次数'],
-        top: '10%'
-      },
-      xAxis: {
-        type: 'category',
-        data: weeks
-      },
-      yAxis: {
-        type: 'value',
-        name: '次数'
-      },
-      series: [
-        {
-          name: '迟到次数',
-          type: 'line',
-          data: lateData,
-          smooth: true,
-          itemStyle: { color: '#f59e0b' } // 橙色
+      const option = {
+        tooltip: {
+          trigger: 'axis'
         },
-        {
-          name: '早退次数',
-          type: 'line',
-          data: earlyLeaveData,
-          smooth: true,
-          itemStyle: { color: '#3b82f6' } // 蓝色
+        legend: {
+          data: ['迟到次数', '早退次数'],
+          top: '10%'
+        },
+        xAxis: {
+          type: 'category',
+          data: weeks
+        },
+        yAxis: {
+          type: 'value',
+          name: '次数'
+        },
+        series: [
+          {
+            name: '迟到次数',
+            type: 'line',
+            data: lateData,
+            smooth: true,
+            itemStyle: { color: '#f59e0b' } // 橙色
+          },
+          {
+            name: '早退次数',
+            type: 'line',
+            data: earlyLeaveData,
+            smooth: true,
+            itemStyle: { color: '#3b82f6' } // 蓝色
+          }
+        ]
+      };
+
+      chart.setOption(option);
+
+      // 添加鼠标悬停事件监听器
+      chart.on('mouseover', (params) => {
+        if (params.componentType === 'series') {
+          this.showTooltip(event, 'abnormal', params.dataIndex);
         }
-      ]
-    };
+      });
+    },
 
-    chart.setOption(option);
-
-    // 添加鼠标悬停事件监听器
-    chart.on('mouseover', (params) => {
-      if (params.componentType === 'series') {
-        this.showTooltip(event, 'abnormal', params.dataIndex);
+    // 渲染请假趋势图
+    renderEmployeeLeaveTrendChart() {
+      // 检查数据是否存在
+      if (!this.employeeDetail || !this.employeeDetail.leaveTrendData) {
+        console.warn('员工详细考勤信息未加载或数据结构不正确');
+        return;
       }
-    });
-  },
 
-  // 渲染请假趋势图
-  renderEmployeeLeaveTrendChart() {
-    // 检查数据是否存在
-    if (!this.employeeDetail || !this.employeeDetail.leaveTrendData) {
-      console.warn('员工详细考勤信息未加载或数据结构不正确');
-      return;
-    }
+      const chartDom = this.$refs.leaveTrendChart;
+      if (!chartDom) {
+        console.error('leaveTrendChart 容器未找到');
+        return;
+      }
 
-    const chartDom = this.$refs.leaveTrendChart;
-    if (!chartDom) {
-      console.error('leaveTrendChart 容器未找到');
-      return;
-    }
+      // 销毁之前的图表实例（如果存在）
+      if (this.leaveTrendChartInstance) {
+        this.leaveTrendChartInstance.dispose();
+      }
 
-    // 销毁之前的图表实例（如果存在）
-    if (this.leaveTrendChartInstance) {
-      this.leaveTrendChartInstance.dispose();
-    }
+      const chart = echarts.init(chartDom);
+      this.leaveTrendChartInstance = chart;
 
-    const chart = echarts.init(chartDom);
-    this.leaveTrendChartInstance = chart;
+      // 准备数据
+      const weeks = this.employeeDetail.leaveTrendData.weeks;
+      const sickLeaveData = this.employeeDetail.leaveTrendData.sickLeave;
+      const personalLeaveData = this.employeeDetail.leaveTrendData.personalLeave;
+      const officialLeaveData = this.employeeDetail.leaveTrendData.officialLeave;
 
-    // 准备数据
-    const weeks = this.employeeDetail.leaveTrendData.weeks;
-    const sickLeaveData = this.employeeDetail.leaveTrendData.sickLeave;
-    const personalLeaveData = this.employeeDetail.leaveTrendData.personalLeave;
-    const officialLeaveData = this.employeeDetail.leaveTrendData.officialLeave;
-
-    const option = {
-      tooltip: {
-        trigger: 'axis'
-      },
-      legend: {
-        data: ['病假', '私事请假', '公事请假'],
-        top: '10%'
-      },
-      xAxis: {
-        type: 'category',
-        data: weeks
-      },
-      yAxis: {
-        type: 'value',
-        name: '次数'
-      },
-      series: [
-        {
-          name: '病假',
-          type: 'line',
-          data: sickLeaveData,
-          smooth: true,
-          itemStyle: { color: '#5eb95e' } // 绿色
+      const option = {
+        tooltip: {
+          trigger: 'axis'
         },
-        {
-          name: '私事请假',
-          type: 'line',
-          data: personalLeaveData,
-          smooth: true,
-          itemStyle: { color: '#3b82f6' } // 蓝色
+        legend: {
+          data: ['病假', '私事请假', '公事请假'],
+          top: '10%'
         },
-        {
-          name: '公事请假',
-          type: 'line',
-          data: officialLeaveData,
-          smooth: true,
-          itemStyle: { color: '#f59e0b' } // 橙色
+        xAxis: {
+          type: 'category',
+          data: weeks
+        },
+        yAxis: {
+          type: 'value',
+          name: '次数'
+        },
+        series: [
+          {
+            name: '病假',
+            type: 'line',
+            data: sickLeaveData,
+            smooth: true,
+            itemStyle: { color: '#5eb95e' } // 绿色
+          },
+          {
+            name: '私事请假',
+            type: 'line',
+            data: personalLeaveData,
+            smooth: true,
+            itemStyle: { color: '#3b82f6' } // 蓝色
+          },
+          {
+            name: '公事请假',
+            type: 'line',
+            data: officialLeaveData,
+            smooth: true,
+            itemStyle: { color: '#f59e0b' } // 橙色
+          }
+        ]
+      };
+
+      chart.setOption(option);
+
+      // 添加鼠标悬停事件监听器
+      chart.on('mouseover', (params) => {
+        if (params.componentType === 'series') {
+          this.showTooltip(event, 'leave', params.dataIndex);
         }
-      ]
-    };
+      });
+    },
 
-    chart.setOption(option);
-
-    // 添加鼠标悬停事件监听器
-    chart.on('mouseover', (params) => {
-      if (params.componentType === 'series') {
-        this.showTooltip(event, 'leave', params.dataIndex);
+    // 显示图表悬停提示
+    showTooltip(event, chartType, dataIndex) {
+      // 获取对应图表的数据
+      let weeksData = [];
+      if (chartType === 'abnormal' && this.employeeDetail.attendanceTrendData) {
+        weeksData = this.employeeDetail.attendanceTrendData.weeks;
+      } else if (chartType === 'leave' && this.employeeDetail.leaveTrendData) {
+        weeksData = this.employeeDetail.leaveTrendData.weeks;
       }
-    });
-  },
 
-  // 显示图表悬停提示
-  showTooltip(event, chartType, dataIndex) {
-    // 获取对应图表的数据
-    let weeksData = [];
-    if (chartType === 'abnormal' && this.employeeDetail.attendanceTrendData) {
-      weeksData = this.employeeDetail.attendanceTrendData.weeks;
-    } else if (chartType === 'leave' && this.employeeDetail.leaveTrendData) {
-      weeksData = this.employeeDetail.leaveTrendData.weeks;
-    }
+      // 确保有数据且索引有效
+      if (weeksData.length > 0 && dataIndex >= 0 && dataIndex < weeksData.length) {
+        const weekRange = weeksData[dataIndex];
+        this.tooltip.content = `${weekRange}`;
+        this.tooltip.chartType = chartType;
+        this.tooltip.visible = true;
 
-    // 确保有数据且索引有效
-    if (weeksData.length > 0 && dataIndex >= 0 && dataIndex < weeksData.length) {
-      const weekRange = weeksData[dataIndex];
-      this.tooltip.content = `${weekRange}`;
-      this.tooltip.chartType = chartType;
-      this.tooltip.visible = true;
+        // 计算提示框位置
+        const rect = event.currentTarget.getBoundingClientRect();
+        this.tooltip.top = rect.top - 40;
+        this.tooltip.left = rect.left + (rect.width / 2) - 50;
+      }
+    },
 
-      // 计算提示框位置
-      const rect = event.currentTarget.getBoundingClientRect();
-      this.tooltip.top = rect.top - 40;
-      this.tooltip.left = rect.left + (rect.width / 2) - 50;
+    // 隐藏提示框
+    hideTooltip() {
+      this.tooltip.visible = false;
     }
   },
-
-  // 隐藏提示框
-  hideTooltip() {
-    this.tooltip.visible = false;
+  computed: {
+    // 过滤后的待审核申请
+    filteredPendingEnrollments() {
+      return this.pendingFaceEnrollments.filter(enrollment => {
+        return enrollment.user_name.toLowerCase().includes(this.faceNameFilter.toLowerCase()) ||
+          enrollment.user_account.toLowerCase().includes(this.faceNameFilter.toLowerCase())
+      })
+    },
+    // 过滤后的已审核申请
+    filteredReviewedEnrollments() {
+      return this.reviewedFaceEnrollments.filter(enrollment => {
+        const nameMatch = enrollment.user_name.toLowerCase().includes(this.faceNameFilter.toLowerCase()) ||
+          enrollment.user_account.toLowerCase().includes(this.faceNameFilter.toLowerCase())
+        const statusMatch = this.faceStatusFilter === -1 || enrollment.status === this.faceStatusFilter
+        return nameMatch && statusMatch
+      })
+    },
+    // 未处理的请假申请（直接返回后端返回的数据）
+    filteredUnprocessedLeaves() {
+      return this.adminLeavesUnprocessed;
+    },
+    // 已处理的请假申请（直接返回后端返回的数据）
+    filteredProcessedLeaves() {
+      return this.adminLeavesProcessed;
+    },
+    // 已通过的请假申请
+    filteredApprovedLeaves() {
+      return this.adminLeavesApproved;
+    },
+    // 已拒绝的请假申请
+    filteredRejectedLeaves() {
+      return this.adminLeavesRejected;
+    }
   }
-},
-computed: {
-  // 过滤后的待审核申请
-  filteredPendingEnrollments() {
-    return this.pendingFaceEnrollments.filter(enrollment => {
-      return enrollment.user_name.toLowerCase().includes(this.faceNameFilter.toLowerCase()) ||
-        enrollment.user_account.toLowerCase().includes(this.faceNameFilter.toLowerCase())
-    })
-  },
-  // 过滤后的已审核申请
-  filteredReviewedEnrollments() {
-    return this.reviewedFaceEnrollments.filter(enrollment => {
-      const nameMatch = enrollment.user_name.toLowerCase().includes(this.faceNameFilter.toLowerCase()) ||
-        enrollment.user_account.toLowerCase().includes(this.faceNameFilter.toLowerCase())
-      const statusMatch = this.faceStatusFilter === -1 || enrollment.status === this.faceStatusFilter
-      return nameMatch && statusMatch
-    })
-  },
-  // 未处理的请假申请（直接返回后端返回的数据）
-  filteredUnprocessedLeaves() {
-    return this.adminLeavesUnprocessed;
-  },
-  // 已处理的请假申请（直接返回后端返回的数据）
-  filteredProcessedLeaves() {
-    return this.adminLeavesProcessed;
-  },
-  // 已通过的请假申请
-  filteredApprovedLeaves() {
-    return this.adminLeavesApproved;
-  },
-  // 已拒绝的请假申请
-  filteredRejectedLeaves() {
-    return this.adminLeavesRejected;
-  }
-}
 }
 
 </script>
@@ -2960,10 +3247,10 @@ computed: {
 
 /* 批量处理按钮样式 */
 .batch-process-btn {
-  background: #3498db;
+  background: #5dade2;
   color: white;
   border: none;
-  padding: 10px 20px;
+  padding: 8px 16px;
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
@@ -2972,7 +3259,7 @@ computed: {
 }
 
 .batch-process-btn:hover:not(:disabled) {
-  background: #2980b9;
+  background: #3498db;
 }
 
 .batch-process-btn:disabled {
@@ -3244,7 +3531,7 @@ computed: {
 .employee-name-link {
   cursor: pointer;
   color: #007bff;
-  text-decoration: underline;
+  text-decoration: none;
 }
 
 .employee-name-link:hover {

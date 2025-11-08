@@ -6,7 +6,7 @@ import pytz
 from app import app, db
 from flask_bcrypt import Bcrypt
 from sqlalchemy import text
-from models import User, Attendance, Absence, Face, FaceEnrollment
+from models import User, Attendance, Absence, Face, FaceEnrollment, MonthlyAttendanceStats
 
 # 创建中国时区对象（UTC+8）
 SHANGHAI_TZ = pytz.timezone("Asia/Shanghai")
@@ -254,6 +254,150 @@ def insert_attendance_data():
             return False
 
 
+def initialize_monthly_attendance_stats():
+    """初始化月度考勤统计数据"""
+    with app.app_context():
+        try:
+            print("\n正在初始化月度考勤统计数据...")
+            
+            # 获取当前年月
+            now = datetime.now(SHANGHAI_TZ)
+            current_year = now.year
+            current_month = now.month
+            
+            # 获取所有员工
+            employees = User.query.filter(User.role == "员工").all()
+            
+            # 为每个员工生成当前月的统计记录
+            stats_records = []
+            for employee in employees:
+                # 检查是否已存在该员工本月的统计记录
+                existing_stats = MonthlyAttendanceStats.query.filter(
+                    MonthlyAttendanceStats.user_id == employee.user_id,
+                    MonthlyAttendanceStats.year == current_year,
+                    MonthlyAttendanceStats.month == current_month
+                ).first()
+                
+                # 如果不存在，则创建新的统计记录
+                if not existing_stats:
+                    # 获取该员工本月的所有考勤记录
+                    attendance_records = Attendance.query.filter(
+                        Attendance.user_id == employee.user_id,
+                        db.extract('year', Attendance.clock_in_time) == current_year,
+                        db.extract('month', Attendance.clock_in_time) == current_month
+                    ).all()
+                    
+                    # 计算最早和最晚打卡时间
+                    earliest_clock_in = None
+                    latest_clock_in = None
+                    earliest_clock_out = None
+                    latest_clock_out = None
+                    
+                    for record in attendance_records:
+                        if record.clock_in_time:
+                            clock_in_time = record.clock_in_time.time()
+                            if not earliest_clock_in or clock_in_time < earliest_clock_in:
+                                earliest_clock_in = clock_in_time
+                            if not latest_clock_in or clock_in_time > latest_clock_in:
+                                latest_clock_in = clock_in_time
+                        
+                        if record.clock_out_time:
+                            clock_out_time = record.clock_out_time.time()
+                            if not earliest_clock_out or clock_out_time < earliest_clock_out:
+                                earliest_clock_out = clock_out_time
+                            if not latest_clock_out or clock_out_time > latest_clock_out:
+                                latest_clock_out = clock_out_time
+                    
+                    # 创建月度统计记录
+                    monthly_stats = MonthlyAttendanceStats(
+                        user_id=employee.user_id,
+                        year=current_year,
+                        month=current_month,
+                        earliest_clock_in=earliest_clock_in,
+                        latest_clock_in=latest_clock_in,
+                        earliest_clock_out=earliest_clock_out,
+                        latest_clock_out=latest_clock_out
+                    )
+                    stats_records.append(monthly_stats)
+            
+            # 批量插入统计记录
+            if stats_records:
+                db.session.add_all(stats_records)
+                db.session.commit()
+                print(f"成功初始化 {len(stats_records)} 条月度考勤统计记录。")
+            else:
+                print("没有需要初始化的月度考勤统计记录。")
+                
+            return True
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"初始化月度考勤统计数据时发生错误: {e}")
+            return False
+
+
+def insert_absence_data():
+    """为部分员工生成模拟请假数据"""
+    with app.app_context():
+        try:
+            print("\n正在生成模拟请假数据...")
+            
+            # 获取当前日期
+            now = datetime.now(SHANGHAI_TZ)
+            today = now.date()
+            
+            # 获取所有员工
+            employees = User.query.filter(User.role == "员工").all()
+            
+            # 为约10%的员工生成请假记录
+            absence_records = []
+            for employee in employees:
+                # 10%概率生成请假记录
+                if random.random() < 0.1:
+                    # 随机选择请假类型 (0:病假, 1:私事请假, 2:公事请假)
+                    absence_type = random.randint(0, 2)
+                    
+                    # 随机生成请假日期 (在未来一周内)
+                    start_date = today + timedelta(days=random.randint(1, 7))
+                    end_date = start_date + timedelta(days=random.randint(1, 5))
+                    
+                    # 生成请假原因
+                    reasons = [
+                        "身体不适，需要休息",
+                        "家中有事，需要处理",
+                        "参加重要会议",
+                        "外出培训学习",
+                        "处理紧急工作事务"
+                    ]
+                    reason = random.choice(reasons)
+                    
+                    # 创建请假记录 (状态设为未审批: 0)
+                    absence = Absence(
+                        user_id=employee.user_id,
+                        start_time=datetime.combine(start_date, time(9, 0)),
+                        end_time=datetime.combine(end_date, time(18, 0)),
+                        reason=reason,
+                        status=0,  # 未审批
+                        absence_type=absence_type
+                    )
+                    absence_records.append(absence)
+            
+            # 批量插入请假记录
+            if absence_records:
+                db.session.add_all(absence_records)
+                db.session.commit()
+                print(f"成功生成并插入了 {len(absence_records)} 条模拟请假记录。")
+            else:
+                print("没有生成任何模拟请假记录。")
+                
+            return True
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"插入模拟请假数据时发生错误: {e}")
+            return False
+
+
 def main():
     """主函数，执行数据库初始化流程"""
     print("开始设置数据库...")
@@ -264,7 +408,11 @@ def main():
 
         if create_tables_with_sqlalchemy():
             if insert_test_data():
-                insert_attendance_data()
+                if insert_attendance_data():
+                    # 初始化月度考勤统计数据
+                    initialize_monthly_attendance_stats()
+                    # 生成模拟请假数据
+                    insert_absence_data()
         else:
             print("因为表创建失败，所以无法插入测试数据。")
 
