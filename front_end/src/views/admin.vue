@@ -46,7 +46,8 @@
           <div class="nav-item" :class="{ active: activeTab === 'leave' }" @click="setActiveTab('leave')">
             <span>📝</span> 请假
           </div>
-          <div v-if="userProfile.role === '管理员'" class="nav-item" :class="{ active: activeTab === 'employee_management' }" @click="setActiveTab('employee_management')">
+          <div v-if="userProfile.role === '管理员'" class="nav-item"
+            :class="{ active: activeTab === 'employee_management' }" @click="setActiveTab('employee_management')">
             <span>👔</span> 员工管理
           </div>
         </nav>
@@ -540,21 +541,17 @@
         <div v-if="activeTab === 'employee_management' && userProfile.role === '管理员'" class="tab-content">
           <div class="section-header">
             <h2>员工管理</h2>
-            <input
-              type="text"
-              v-model="employeeSearch"
-              placeholder="搜索姓名或工号"
-              style="margin-bottom: 12px; padding: 5px; width: 220px;"
-            />
+            <input type="text" v-model="employeeSearch" placeholder="搜索姓名或工号"
+              style="margin-bottom: 12px; padding: 5px; width: 220px;" />
           </div>
-          <div class="employees-table">
+          <div class="employees-table" style="position: relative; width: 100%;">
             <table>
               <thead>
                 <tr>
-                  <th>姓名</th>
-                  <th>工号</th>
-                  <th>人脸照片</th>
-                  <th>操作</th>
+                  <th style="width: 25%;">姓名</th>
+                  <th style="width: 25%;">工号</th>
+                  <th style="width: 25%;">人脸照片</th>
+                  <th style="width: 25%;">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -562,7 +559,8 @@
                   <td>{{ employee.name }}</td>
                   <td>{{ employee.account }}</td>
                   <td>
-                    <img :src="employee.photo_url" alt="人脸照片" style="width: 100px; height: 100px; object-fit: cover;" />
+                    <img :src="getEmployeePhotoUrl(employee.photo_url)" alt="人脸照片"
+                      style="width: 100px; height: 100px; object-fit: cover;" />
                   </td>
                   <td>
                     <el-button type="primary" @click="viewAttendance(employee)">查看出勤</el-button>
@@ -575,432 +573,439 @@
             <div class="pagination-controls">
               <button :disabled="currentPage === 1" @click="() => handlePageChange(currentPage - 1)">上一页</button>
               <span>第 {{ currentPage }} 页 / 共 {{ Math.ceil(filteredEmployeesTotal / pageSize) }} 页</span>
-              <button :disabled="currentPage === Math.ceil(filteredEmployeesTotal / pageSize)" @click="() => handlePageChange(currentPage + 1)">下一页</button>
+              <button :disabled="currentPage === Math.ceil(filteredEmployeesTotal / pageSize)"
+                @click="() => handlePageChange(currentPage + 1)">下一页</button>
             </div>
             <div class="pagination-controls">
               <span>跳转到第</span>
-              <input type="number" v-model.number="jumpToPage" placeholder="跳转页码" min="1" :max="Math.ceil(filteredEmployeesTotal / pageSize)" style="width: 60px; text-align: center; margin: 0 8px;" />
+              <input type="number" v-model.number="jumpToPage" placeholder="跳转页码" min="1"
+                :max="Math.ceil(filteredEmployeesTotal / pageSize)"
+                style="width: 60px; text-align: center; margin: 0 8px;" />
               <span>页</span>
               <button @click="handlePageJump">跳转</button>
             </div>
           </div>
         </div>
 
-          <!-- 出勤情况弹窗（含员工信息） -->
-          <el-dialog title="出勤情况" v-model="attendanceDialogVisible" width="700px">
-            <div style="display: flex; gap: 32px; align-items: flex-start;">
-              <!-- 左侧员工信息 -->
-              <div style="min-width: 180px; text-align: center;">
-                <img v-if="currentAttendanceEmployee && currentAttendanceEmployee.photo_url" :src="currentAttendanceEmployee.photo_url" alt="人脸照片" style="width: 100px; height: 100px; object-fit: cover; border-radius: 8px; margin-bottom: 12px;" />
-                <div v-if="currentAttendanceEmployee">
-                  <div style="font-weight: bold; font-size: 18px; margin-bottom: 4px;">{{ currentAttendanceEmployee.name }}</div>
-                  <div style="color: #888; font-size: 15px;">工号：{{ currentAttendanceEmployee.account }}</div>
-                </div>
-              </div>
-              <!-- 右侧出勤表格 -->
-              <div style="flex: 1;">
-                <el-table :data="attendance" style="width: 100%">
-                  <el-table-column prop="clock_in_time" label="签到时间" width="180"></el-table-column>
-                  <el-table-column prop="clock_out_time" label="签退时间" width="180"></el-table-column>
-                  <el-table-column prop="status" label="状态" width="100"></el-table-column>
-                </el-table>
+        <!-- 出勤情况弹窗（含员工信息） -->
+        <el-dialog title="出勤情况" v-model="attendanceDialogVisible" width="700px" :append-to-body="true"
+          :modal-append-to-body="true" :close-on-click-modal="false">
+          <div style="display: flex; gap: 32px; align-items: flex-start;">
+            <!-- 左侧员工信息 -->
+            <div style="min-width: 180px; text-align: center;">
+              <img v-if="currentAttendanceEmployee && currentAttendanceEmployee.photo_url"
+                :src="getEmployeePhotoUrl(currentAttendanceEmployee.photo_url)" alt="人脸照片"
+                style="width: 100px; height: 100px; object-fit: cover; border-radius: 8px; margin-bottom: 12px;" />
+              <div v-if="currentAttendanceEmployee">
+                <div style="font-weight: bold; font-size: 18px; margin-bottom: 4px;">{{ currentAttendanceEmployee.name
+                }}</div>
+                <div style="color: #888; font-size: 15px;">工号：{{ currentAttendanceEmployee.account }}</div>
               </div>
             </div>
-            <template #footer>
-              <el-button @click="attendanceDialogVisible = false">关闭</el-button>
-            </template>
-          </el-dialog>
-        </div>
-
-        <!-- 请假（员工提交 / 管理员审核） -->
-        <div v-if="activeTab === 'leave'" class="tab-content">
-          <template v-if="userProfile.role === '员工'">
-            <h2>请假申请</h2>
-            <div class="leave-form">
-              <label>开始时间</label>
-              <input type="datetime-local" v-model="leaveForm.start_time" />
-              <label>结束时间</label>
-              <input type="datetime-local" v-model="leaveForm.end_time" />
-              <label>请假原因</label>
-              <textarea v-model="leaveForm.reason" rows="3"></textarea>
-              <label>请假类型</label>
-              <select v-model="leaveForm.absence_type">
-                <option v-for="type in leaveTypes" :key="type.value" :value="type.value">{{ type.label }}</option>
-              </select>
-              <button @click="submitLeave" class="clock-btn leave-submit">提交申请</button>
-              <div v-if="leaveMessage" class="clock-message" :class="leaveMessageType">{{ leaveMessage }}</div>
+            <!-- 右侧出勤表格 -->
+            <div style="flex: 1;">
+              <el-table :data="attendance" style="width: 100%">
+                <el-table-column prop="clock_in_time" label="签到时间" width="180"></el-table-column>
+                <el-table-column prop="clock_out_time" label="签退时间" width="180"></el-table-column>
+                <el-table-column prop="status" label="状态" width="100"></el-table-column>
+              </el-table>
             </div>
-
-            <div class="records-table">
-              <h3>历史请假申请</h3>
-              <!-- 用户端历史请假记录页签和排序控件 -->
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <!-- 10px * 0.8 -->
-                <div class="tab-switch">
-                  <button :class="{ active: myLeavesTab === 'pending' }"
-                    @click="myLeavesTab = 'pending'; loadMyLeaves(1)">申请中</button>
-                  <button :class="{ active: myLeavesTab === 'approved' }"
-                    @click="myLeavesTab = 'approved'; loadMyLeaves(1)">已通过</button>
-                  <button :class="{ active: myLeavesTab === 'rejected' }"
-                    @click="myLeavesTab = 'rejected'; loadMyLeaves(1)">已拒绝</button>
-                </div>
-
-                <!-- 用户端历史请假记录排序控件 -->
-                <div class="sort-controls" style="display: flex; align-items: center; gap: 8px;">
-                  <!-- 10px * 0.8 -->
-                  <label>排序方式:</label>
-                  <select v-model="myLeavesSortBy" @change="loadMyLeaves(1)" style="padding: 5px;">
-                    <option value="start_time">起始时间</option>
-                    <option value="end_time">结束时间</option>
-                  </select>
-                  <select v-model="myLeavesSortOrder" @change="loadMyLeaves(1)" style="padding: 5px;">
-                    <option value="asc">正序</option>
-                    <option value="desc">倒序</option>
-                  </select>
-                </div>
-              </div>
-
-              <table>
-                <thead>
-                  <tr>
-                    <th>起始时间</th>
-                    <th>结束时间</th>
-                    <th>事由</th>
-                    <th>请假类型</th>
-                    <th>状态</th>
-                    <th v-if="myLeavesTab === 'pending'">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in myLeaves" :key="item.id">
-                    <td>{{ formatDateTime(item.start_time) }}</td>
-                    <td>{{ formatDateTime(item.end_time) }}</td>
-                    <td>{{ item.reason }}</td>
-                    <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
-                    <td>{{ statusMap[item.status] || item.status }}</td>
-                    <td v-if="myLeavesTab === 'pending'">
-                      <button class="clock-btn clock-out" @click="cancelLeave(item.id)">撤销</button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-
-              <!-- 分页控件 -->
-              <div class="pagination" v-if="pagination.myLeaves.total > 0">
-                <button @click="changeMyLeavesPage(pagination.myLeaves.currentPage - 1)"
-                  :disabled="pagination.myLeaves.currentPage === 1" class="pagination-btn">
-                  上一页
-                </button>
-
-                <span v-for="page in generatePageNumbers(pagination.myLeaves.pages, pagination.myLeaves.currentPage)"
-                  :key="page" @click="changeMyLeavesPage(page)"
-                  :class="['pagination-item', { active: page === pagination.myLeaves.currentPage }]">
-                  {{ page }}
-                </span>
-
-                <button @click="changeMyLeavesPage(pagination.myLeaves.currentPage + 1)"
-                  :disabled="pagination.myLeaves.currentPage === pagination.myLeaves.pages" class="pagination-btn">
-                  下一页
-                </button>
-
-                <span class="pagination-info">
-                  共 {{ pagination.myLeaves.total }} 条记录，第 {{ pagination.myLeaves.currentPage }} / {{
-                    pagination.myLeaves.pages }} 页
-                </span>
-              </div>
-            </div>
+          </div>
+          <template #footer>
+            <el-button @click="attendanceDialogVisible = false">关闭</el-button>
           </template>
-          <template v-else>
-            <h2>请假审核</h2>
-            <div class="tab-switch">
-              <button :class="{ active: leaveAdminTab === 'unprocessed' }"
-                @click="leaveAdminTab = 'unprocessed'; loadAdminLeaves(false)">
-                未处理
-              </button>
-              <button :class="{ active: leaveAdminTab === 'processed' }"
-                @click="leaveAdminTab = 'processed'; loadAdminLeaves(true)">
-                已处理
-              </button>
-            </div>
+        </el-dialog>
+      </div>
 
-            <!-- 筛选控件 -->
-            <div class="filter-controls"
-              style="margin: 12px 0; display: flex; justify-content: space-between; align-items: center;">
-              <!-- 15px * 0.8 -->
-              <div>
-                <input type="text" v-model="nameFilter" placeholder="搜索姓名" style="margin-right: 8px; padding: 5px;" />
+      <!-- 请假（员工提交 / 管理员审核） -->
+      <div v-if="activeTab === 'leave'" class="tab-content">
+        <template v-if="userProfile.role === '员工'">
+          <h2>请假申请</h2>
+          <div class="leave-form">
+            <label>开始时间</label>
+            <input type="datetime-local" v-model="leaveForm.start_time" />
+            <label>结束时间</label>
+            <input type="datetime-local" v-model="leaveForm.end_time" />
+            <label>请假原因</label>
+            <textarea v-model="leaveForm.reason" rows="3"></textarea>
+            <label>请假类型</label>
+            <select v-model="leaveForm.absence_type">
+              <option v-for="type in leaveTypes" :key="type.value" :value="type.value">{{ type.label }}</option>
+            </select>
+            <button @click="submitLeave" class="clock-btn leave-submit">提交申请</button>
+            <div v-if="leaveMessage" class="clock-message" :class="leaveMessageType">{{ leaveMessage }}</div>
+          </div>
+
+          <div class="records-table">
+            <h3>历史请假申请</h3>
+            <!-- 用户端历史请假记录页签和排序控件 -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <!-- 10px * 0.8 -->
+              <div class="tab-switch">
+                <button :class="{ active: myLeavesTab === 'pending' }"
+                  @click="myLeavesTab = 'pending'; loadMyLeaves(1)">申请中</button>
+                <button :class="{ active: myLeavesTab === 'approved' }"
+                  @click="myLeavesTab = 'approved'; loadMyLeaves(1)">已通过</button>
+                <button :class="{ active: myLeavesTab === 'rejected' }"
+                  @click="myLeavesTab = 'rejected'; loadMyLeaves(1)">已拒绝</button>
+              </div>
+
+              <!-- 用户端历史请假记录排序控件 -->
+              <div class="sort-controls" style="display: flex; align-items: center; gap: 8px;">
                 <!-- 10px * 0.8 -->
-                <select v-model="typeFilter" style="padding: 5px;">
-                  <option value="-1">全部类型</option>
-                  <option v-for="type in leaveTypes" :key="type.value" :value="type.value">{{ type.label }}</option>
+                <label>排序方式:</label>
+                <select v-model="myLeavesSortBy" @change="loadMyLeaves(1)" style="padding: 5px;">
+                  <option value="start_time">起始时间</option>
+                  <option value="end_time">结束时间</option>
+                </select>
+                <select v-model="myLeavesSortOrder" @change="loadMyLeaves(1)" style="padding: 5px;">
+                  <option value="asc">正序</option>
+                  <option value="desc">倒序</option>
                 </select>
               </div>
-              <div v-if="leaveAdminTab === 'unprocessed'">
-                <button class="batch-process-btn" @click="toggleBatchMode" v-if="!isBatchMode">
-                  批量处理
-                </button>
-                <div v-else style="display: flex; gap: 8px;">
-                  <!-- 10px * 0.8 -->
-                  <button class="batch-btn batch-approve" @click="batchReview('approve')"
-                    :disabled="isBatchProcessing || selectedLeaves.length === 0">
-                    {{ isBatchProcessing ? '处理中' : '批量通过' }}
-                  </button>
-                  <button class="batch-btn batch-reject" @click="batchReview('reject')"
-                    :disabled="isBatchProcessing || selectedLeaves.length === 0">
-                    {{ isBatchProcessing ? '处理中' : '批量拒绝' }}
-                  </button>
-                  <button class="batch-btn batch-exit" @click="toggleBatchMode">
-                    退出
-                  </button>
-                </div>
-              </div>
             </div>
 
-            <!-- 未处理标签页内容 -->
-            <div class="records-table" v-if="leaveAdminTab === 'unprocessed'">
-              <table>
-                <thead>
-                  <tr>
-                    <th v-if="isBatchMode">选择</th>
-                    <th>姓名</th>
-                    <th>工号</th>
-                    <th>起始时间</th>
-                    <th>结束时间</th>
-                    <th>事由</th>
-                    <th>请假类型</th>
-                    <th v-if="!isBatchMode">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in filteredUnprocessedLeaves" :key="item.id">
-                    <td v-if="isBatchMode">
-                      <input type="checkbox" v-model="selectedLeaves" :value="item.id" class="batch-checkbox">
-                    </td>
-                    <td>{{ item.name }}</td>
-                    <td>{{ item.account }}</td>
-                    <td>{{ formatDateTime(item.start_time) }}</td>
-                    <td>{{ formatDateTime(item.end_time) }}</td>
-                    <td @click="selectedLeave = item" class="reason-cell">{{ item.reason }}</td>
-                    <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
-                    <td v-if="!isBatchMode">
-                      <button class="clock-btn clock-in" @click.stop="reviewLeave(item.id, 'approve')">通过</button>
-                      <button class="clock-btn clock-out" @click.stop="reviewLeave(item.id, 'reject')">拒绝</button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            <table>
+              <thead>
+                <tr>
+                  <th>起始时间</th>
+                  <th>结束时间</th>
+                  <th>事由</th>
+                  <th>请假类型</th>
+                  <th>状态</th>
+                  <th v-if="myLeavesTab === 'pending'">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in myLeaves" :key="item.id">
+                  <td>{{ formatDateTime(item.start_time) }}</td>
+                  <td>{{ formatDateTime(item.end_time) }}</td>
+                  <td>{{ item.reason }}</td>
+                  <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
+                  <td>{{ statusMap[item.status] || item.status }}</td>
+                  <td v-if="myLeavesTab === 'pending'">
+                    <button class="clock-btn clock-out" @click="cancelLeave(item.id)">撤销</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
 
-              <!-- 未处理分页控件 -->
-              <div class="pagination" v-if="pagination.adminLeaves.unprocessed.total > 0 && !isBatchMode">
-                <button
-                  @click="changeAdminLeavesPage(false, Math.max(1, pagination.adminLeaves.unprocessed.currentPage - 1))"
-                  :disabled="pagination.adminLeaves.unprocessed.currentPage === 1" class="pagination-btn">
-                  上一页
+            <!-- 分页控件 -->
+            <div class="pagination" v-if="pagination.myLeaves.total > 0">
+              <button @click="changeMyLeavesPage(pagination.myLeaves.currentPage - 1)"
+                :disabled="pagination.myLeaves.currentPage === 1" class="pagination-btn">
+                上一页
+              </button>
+
+              <span v-for="page in generatePageNumbers(pagination.myLeaves.pages, pagination.myLeaves.currentPage)"
+                :key="page" @click="changeMyLeavesPage(page)"
+                :class="['pagination-item', { active: page === pagination.myLeaves.currentPage }]">
+                {{ page }}
+              </span>
+
+              <button @click="changeMyLeavesPage(pagination.myLeaves.currentPage + 1)"
+                :disabled="pagination.myLeaves.currentPage === pagination.myLeaves.pages" class="pagination-btn">
+                下一页
+              </button>
+
+              <span class="pagination-info">
+                共 {{ pagination.myLeaves.total }} 条记录，第 {{ pagination.myLeaves.currentPage }} / {{
+                  pagination.myLeaves.pages }} 页
+              </span>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <h2>请假审核</h2>
+          <div class="tab-switch">
+            <button :class="{ active: leaveAdminTab === 'unprocessed' }"
+              @click="leaveAdminTab = 'unprocessed'; loadAdminLeaves(false)">
+              未处理
+            </button>
+            <button :class="{ active: leaveAdminTab === 'processed' }"
+              @click="leaveAdminTab = 'processed'; loadAdminLeaves(true)">
+              已处理
+            </button>
+          </div>
+
+          <!-- 筛选控件 -->
+          <div class="filter-controls"
+            style="margin: 12px 0; display: flex; justify-content: space-between; align-items: center;">
+            <!-- 15px * 0.8 -->
+            <div>
+              <input type="text" v-model="nameFilter" placeholder="搜索姓名" style="margin-right: 8px; padding: 5px;" />
+              <!-- 10px * 0.8 -->
+              <select v-model="typeFilter" style="padding: 5px;">
+                <option value="-1">全部类型</option>
+                <option v-for="type in leaveTypes" :key="type.value" :value="type.value">{{ type.label }}</option>
+              </select>
+            </div>
+            <div v-if="leaveAdminTab === 'unprocessed'">
+              <button class="batch-process-btn" @click="toggleBatchMode" v-if="!isBatchMode">
+                批量处理
+              </button>
+              <div v-else style="display: flex; gap: 8px;">
+                <!-- 10px * 0.8 -->
+                <button class="batch-btn batch-approve" @click="batchReview('approve')"
+                  :disabled="isBatchProcessing || selectedLeaves.length === 0">
+                  {{ isBatchProcessing ? '处理中' : '批量通过' }}
                 </button>
-
-                <span
-                  v-for="page in generatePageNumbers(pagination.adminLeaves.unprocessed.pages, pagination.adminLeaves.unprocessed.currentPage)"
-                  :key="page" @click="changeAdminLeavesPage(false, page)"
-                  :class="['pagination-item', { active: page === pagination.adminLeaves.unprocessed.currentPage }]">
-                  {{ page }}
-                </span>
-
-                <button
-                  @click="changeAdminLeavesPage(false, Math.min(pagination.adminLeaves.unprocessed.pages, pagination.adminLeaves.unprocessed.currentPage + 1))"
-                  :disabled="pagination.adminLeaves.unprocessed.currentPage === pagination.adminLeaves.unprocessed.pages"
-                  class="pagination-btn">
-                  下一页
+                <button class="batch-btn batch-reject" @click="batchReview('reject')"
+                  :disabled="isBatchProcessing || selectedLeaves.length === 0">
+                  {{ isBatchProcessing ? '处理中' : '批量拒绝' }}
                 </button>
-
-                <span class="pagination-info">
-                  共筛选到 {{ pagination.adminLeaves.unprocessed.total }} 条记录，第 {{
-                    pagination.adminLeaves.unprocessed.currentPage }} / {{ pagination.adminLeaves.unprocessed.pages }} 页
-                </span>
+                <button class="batch-btn batch-exit" @click="toggleBatchMode">
+                  退出
+                </button>
               </div>
             </div>
+          </div>
 
-            <!-- 已通过标签页内容 -->
-            <div class="records-table" v-else-if="leaveAdminTab === 'approved'">
-              <table>
-                <thead>
-                  <tr>
-                    <th>姓名</th>
-                    <th>工号</th>
-                    <th>起始时间</th>
-                    <th>结束时间</th>
-                    <th>事由</th>
-                    <th>请假类型</th>
-                    <th>状态</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in filteredApprovedLeaves" :key="item.id">
-                    <td>{{ item.name }}</td>
-                    <td>{{ item.account }}</td>
-                    <td>{{ formatDateTime(item.start_time) }}</td>
-                    <td>{{ formatDateTime(item.end_time) }}</td>
-                    <td>{{ item.reason }}</td>
-                    <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
-                    <td>{{ statusMap[item.status] || item.status }}</td>
-                  </tr>
-                </tbody>
-              </table>
+          <!-- 未处理标签页内容 -->
+          <div class="records-table" v-if="leaveAdminTab === 'unprocessed'">
+            <table>
+              <thead>
+                <tr>
+                  <th v-if="isBatchMode">选择</th>
+                  <th>姓名</th>
+                  <th>工号</th>
+                  <th>起始时间</th>
+                  <th>结束时间</th>
+                  <th>事由</th>
+                  <th>请假类型</th>
+                  <th v-if="!isBatchMode">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in filteredUnprocessedLeaves" :key="item.id">
+                  <td v-if="isBatchMode">
+                    <input type="checkbox" v-model="selectedLeaves" :value="item.id" class="batch-checkbox">
+                  </td>
+                  <td>{{ item.name }}</td>
+                  <td>{{ item.account }}</td>
+                  <td>{{ formatDateTime(item.start_time) }}</td>
+                  <td>{{ formatDateTime(item.end_time) }}</td>
+                  <td @click="selectedLeave = item" class="reason-cell">{{ item.reason }}</td>
+                  <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
+                  <td v-if="!isBatchMode">
+                    <button class="clock-btn clock-in" @click.stop="reviewLeave(item.id, 'approve')">通过</button>
+                    <button class="clock-btn clock-out" @click.stop="reviewLeave(item.id, 'reject')">拒绝</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
 
-              <!-- 已通过分页控件 -->
-              <div class="pagination" v-if="pagination.adminLeaves.approved.total > 0 && !isBatchMode">
-                <button
-                  @click="changeAdminLeavesPage('approved', Math.max(1, pagination.adminLeaves.approved.currentPage - 1))"
-                  :disabled="pagination.adminLeaves.approved.currentPage === 1" class="pagination-btn">
-                  上一页
-                </button>
+            <!-- 未处理分页控件 -->
+            <div class="pagination" v-if="pagination.adminLeaves.unprocessed.total > 0 && !isBatchMode">
+              <button
+                @click="changeAdminLeavesPage(false, Math.max(1, pagination.adminLeaves.unprocessed.currentPage - 1))"
+                :disabled="pagination.adminLeaves.unprocessed.currentPage === 1" class="pagination-btn">
+                上一页
+              </button>
 
-                <span
-                  v-for="page in generatePageNumbers(pagination.adminLeaves.approved.pages, pagination.adminLeaves.approved.currentPage)"
-                  :key="page" @click="changeAdminLeavesPage('approved', page)"
-                  :class="['pagination-item', { active: page === pagination.adminLeaves.approved.currentPage }]">
-                  {{ page }}
-                </span>
+              <span
+                v-for="page in generatePageNumbers(pagination.adminLeaves.unprocessed.pages, pagination.adminLeaves.unprocessed.currentPage)"
+                :key="page" @click="changeAdminLeavesPage(false, page)"
+                :class="['pagination-item', { active: page === pagination.adminLeaves.unprocessed.currentPage }]">
+                {{ page }}
+              </span>
 
-                <button
-                  @click="changeAdminLeavesPage('approved', Math.min(pagination.adminLeaves.approved.pages, pagination.adminLeaves.approved.currentPage + 1))"
-                  :disabled="pagination.adminLeaves.approved.currentPage === pagination.adminLeaves.approved.pages"
-                  class="pagination-btn">
-                  下一页
-                </button>
+              <button
+                @click="changeAdminLeavesPage(false, Math.min(pagination.adminLeaves.unprocessed.pages, pagination.adminLeaves.unprocessed.currentPage + 1))"
+                :disabled="pagination.adminLeaves.unprocessed.currentPage === pagination.adminLeaves.unprocessed.pages"
+                class="pagination-btn">
+                下一页
+              </button>
 
-                <span class="pagination-info">
-                  共筛选到 {{ pagination.adminLeaves.approved.total }} 条记录，第 {{
-                    pagination.adminLeaves.approved.currentPage }} / {{ pagination.adminLeaves.approved.pages }} 页
-                </span>
-              </div>
+              <span class="pagination-info">
+                共筛选到 {{ pagination.adminLeaves.unprocessed.total }} 条记录，第 {{
+                  pagination.adminLeaves.unprocessed.currentPage }} / {{ pagination.adminLeaves.unprocessed.pages }} 页
+              </span>
             </div>
+          </div>
 
-            <!-- 已处理标签页内容 -->
-            <div class="records-table" v-else-if="leaveAdminTab === 'processed'">
-              <table>
-                <thead>
-                  <tr>
-                    <th>姓名</th>
-                    <th>工号</th>
-                    <th>起始时间</th>
-                    <th>结束时间</th>
-                    <th>事由</th>
-                    <th>请假类型</th>
-                    <th>状态</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in filteredProcessedLeaves" :key="item.id">
-                    <td>{{ item.name }}</td>
-                    <td>{{ item.account }}</td>
-                    <td>{{ formatDateTime(item.start_time) }}</td>
-                    <td>{{ formatDateTime(item.end_time) }}</td>
-                    <td>{{ item.reason }}</td>
-                    <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
-                    <td>{{ statusMap[item.status] || item.status }}</td>
-                  </tr>
-                </tbody>
-              </table>
+          <!-- 已通过标签页内容 -->
+          <div class="records-table" v-else-if="leaveAdminTab === 'approved'">
+            <table>
+              <thead>
+                <tr>
+                  <th>姓名</th>
+                  <th>工号</th>
+                  <th>起始时间</th>
+                  <th>结束时间</th>
+                  <th>事由</th>
+                  <th>请假类型</th>
+                  <th>状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in filteredApprovedLeaves" :key="item.id">
+                  <td>{{ item.name }}</td>
+                  <td>{{ item.account }}</td>
+                  <td>{{ formatDateTime(item.start_time) }}</td>
+                  <td>{{ formatDateTime(item.end_time) }}</td>
+                  <td>{{ item.reason }}</td>
+                  <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
+                  <td>{{ statusMap[item.status] || item.status }}</td>
+                </tr>
+              </tbody>
+            </table>
 
-              <!-- 已处理分页控件 -->
-              <div class="pagination" v-if="pagination.adminLeaves.processed.total > 0 && !isBatchMode">
-                <button
-                  @click="changeAdminLeavesPage(true, Math.max(1, pagination.adminLeaves.processed.currentPage - 1))"
-                  :disabled="pagination.adminLeaves.processed.currentPage === 1" class="pagination-btn">
-                  上一页
-                </button>
+            <!-- 已通过分页控件 -->
+            <div class="pagination" v-if="pagination.adminLeaves.approved.total > 0 && !isBatchMode">
+              <button
+                @click="changeAdminLeavesPage('approved', Math.max(1, pagination.adminLeaves.approved.currentPage - 1))"
+                :disabled="pagination.adminLeaves.approved.currentPage === 1" class="pagination-btn">
+                上一页
+              </button>
 
-                <span
-                  v-for="page in generatePageNumbers(pagination.adminLeaves.processed.pages, pagination.adminLeaves.processed.currentPage)"
-                  :key="page" @click="changeAdminLeavesPage(true, page)"
-                  :class="['pagination-item', { active: page === pagination.adminLeaves.processed.currentPage }]">
-                  {{ page }}
-                </span>
+              <span
+                v-for="page in generatePageNumbers(pagination.adminLeaves.approved.pages, pagination.adminLeaves.approved.currentPage)"
+                :key="page" @click="changeAdminLeavesPage('approved', page)"
+                :class="['pagination-item', { active: page === pagination.adminLeaves.approved.currentPage }]">
+                {{ page }}
+              </span>
 
-                <button
-                  @click="changeAdminLeavesPage(true, Math.min(pagination.adminLeaves.processed.pages, pagination.adminLeaves.processed.currentPage + 1))"
-                  :disabled="pagination.adminLeaves.processed.currentPage === pagination.adminLeaves.processed.pages"
-                  class="pagination-btn">
-                  下一页
-                </button>
+              <button
+                @click="changeAdminLeavesPage('approved', Math.min(pagination.adminLeaves.approved.pages, pagination.adminLeaves.approved.currentPage + 1))"
+                :disabled="pagination.adminLeaves.approved.currentPage === pagination.adminLeaves.approved.pages"
+                class="pagination-btn">
+                下一页
+              </button>
 
-                <span class="pagination-info">
-                  共筛选到 {{ pagination.adminLeaves.processed.total }} 条记录，第 {{
-                    pagination.adminLeaves.processed.currentPage }} / {{ pagination.adminLeaves.processed.pages }} 页
-                </span>
-              </div>
+              <span class="pagination-info">
+                共筛选到 {{ pagination.adminLeaves.approved.total }} 条记录，第 {{
+                  pagination.adminLeaves.approved.currentPage }} / {{ pagination.adminLeaves.approved.pages }} 页
+              </span>
             </div>
+          </div>
 
-            <!-- 已拒绝标签页内容 -->
-            <div class="records-table" v-else-if="leaveAdminTab === 'rejected'">
-              <table>
-                <thead>
-                  <tr>
-                    <th>姓名</th>
-                    <th>工号</th>
-                    <th>起始时间</th>
-                    <th>结束时间</th>
-                    <th>事由</th>
-                    <th>请假类型</th>
-                    <th>状态</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in filteredRejectedLeaves" :key="item.id">
-                    <td>{{ item.name }}</td>
-                    <td>{{ item.account }}</td>
-                    <td>{{ formatDateTime(item.start_time) }}</td>
-                    <td>{{ formatDateTime(item.end_time) }}</td>
-                    <td>{{ item.reason }}</td>
-                    <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
-                    <td>{{ statusMap[item.status] || item.status }}</td>
-                  </tr>
-                </tbody>
-              </table>
+          <!-- 已处理标签页内容 -->
+          <div class="records-table" v-else-if="leaveAdminTab === 'processed'">
+            <table>
+              <thead>
+                <tr>
+                  <th>姓名</th>
+                  <th>工号</th>
+                  <th>起始时间</th>
+                  <th>结束时间</th>
+                  <th>事由</th>
+                  <th>请假类型</th>
+                  <th>状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in filteredProcessedLeaves" :key="item.id">
+                  <td>{{ item.name }}</td>
+                  <td>{{ item.account }}</td>
+                  <td>{{ formatDateTime(item.start_time) }}</td>
+                  <td>{{ formatDateTime(item.end_time) }}</td>
+                  <td>{{ item.reason }}</td>
+                  <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
+                  <td>{{ statusMap[item.status] || item.status }}</td>
+                </tr>
+              </tbody>
+            </table>
 
-              <!-- 已拒绝分页控件 -->
-              <div class="pagination" v-if="pagination.adminLeaves.rejected.total > 0 && !isBatchMode">
-                <button
-                  @click="changeAdminLeavesPage('rejected', Math.max(1, pagination.adminLeaves.rejected.currentPage - 1))"
-                  :disabled="pagination.adminLeaves.rejected.currentPage === 1" class="pagination-btn">
-                  上一页
-                </button>
+            <!-- 已处理分页控件 -->
+            <div class="pagination" v-if="pagination.adminLeaves.processed.total > 0 && !isBatchMode">
+              <button
+                @click="changeAdminLeavesPage(true, Math.max(1, pagination.adminLeaves.processed.currentPage - 1))"
+                :disabled="pagination.adminLeaves.processed.currentPage === 1" class="pagination-btn">
+                上一页
+              </button>
 
-                <span
-                  v-for="page in generatePageNumbers(pagination.adminLeaves.rejected.pages, pagination.adminLeaves.rejected.currentPage)"
-                  :key="page" @click="changeAdminLeavesPage('rejected', page)"
-                  :class="['pagination-item', { active: page === pagination.adminLeaves.rejected.currentPage }]">
-                  {{ page }}
-                </span>
+              <span
+                v-for="page in generatePageNumbers(pagination.adminLeaves.processed.pages, pagination.adminLeaves.processed.currentPage)"
+                :key="page" @click="changeAdminLeavesPage(true, page)"
+                :class="['pagination-item', { active: page === pagination.adminLeaves.processed.currentPage }]">
+                {{ page }}
+              </span>
 
-                <button
-                  @click="changeAdminLeavesPage('rejected', Math.min(pagination.adminLeaves.rejected.pages, pagination.adminLeaves.rejected.currentPage + 1))"
-                  :disabled="pagination.adminLeaves.rejected.currentPage === pagination.adminLeaves.rejected.pages"
-                  class="pagination-btn">
-                  下一页
-                </button>
+              <button
+                @click="changeAdminLeavesPage(true, Math.min(pagination.adminLeaves.processed.pages, pagination.adminLeaves.processed.currentPage + 1))"
+                :disabled="pagination.adminLeaves.processed.currentPage === pagination.adminLeaves.processed.pages"
+                class="pagination-btn">
+                下一页
+              </button>
 
-                <span class="pagination-info">
-                  共筛选到 {{ pagination.adminLeaves.rejected.total }} 条记录，第 {{
-                    pagination.adminLeaves.rejected.currentPage }} / {{ pagination.adminLeaves.rejected.pages }} 页
-                </span>
-              </div>
+              <span class="pagination-info">
+                共筛选到 {{ pagination.adminLeaves.processed.total }} 条记录，第 {{
+                  pagination.adminLeaves.processed.currentPage }} / {{ pagination.adminLeaves.processed.pages }} 页
+              </span>
             </div>
+          </div>
 
-            <div v-if="selectedLeave" class="leave-detail leave-detail-center">
-              <h3>申请详情</h3>
-              <p>姓名：{{ selectedLeave.name }}（工号：{{ selectedLeave.account }}）</p>
-              <p>起止：{{ formatDateTime(selectedLeave.start_time) }} - {{ formatDateTime(selectedLeave.end_time) }}</p>
-              <p>事由：{{ selectedLeave.reason }}</p>
-              <div class="detail-actions">
-                <button class="clock-btn clock-in" @click="reviewLeave(selectedLeave.id, 'approve')">通过</button>
-                <button class="clock-btn clock-out" @click="reviewLeave(selectedLeave.id, 'reject')">拒绝</button>
-              </div>
+          <!-- 已拒绝标签页内容 -->
+          <div class="records-table" v-else-if="leaveAdminTab === 'rejected'">
+            <table>
+              <thead>
+                <tr>
+                  <th>姓名</th>
+                  <th>工号</th>
+                  <th>起始时间</th>
+                  <th>结束时间</th>
+                  <th>事由</th>
+                  <th>请假类型</th>
+                  <th>状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in filteredRejectedLeaves" :key="item.id">
+                  <td>{{ item.name }}</td>
+                  <td>{{ item.account }}</td>
+                  <td>{{ formatDateTime(item.start_time) }}</td>
+                  <td>{{ formatDateTime(item.end_time) }}</td>
+                  <td>{{ item.reason }}</td>
+                  <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
+                  <td>{{ statusMap[item.status] || item.status }}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- 已拒绝分页控件 -->
+            <div class="pagination" v-if="pagination.adminLeaves.rejected.total > 0 && !isBatchMode">
+              <button
+                @click="changeAdminLeavesPage('rejected', Math.max(1, pagination.adminLeaves.rejected.currentPage - 1))"
+                :disabled="pagination.adminLeaves.rejected.currentPage === 1" class="pagination-btn">
+                上一页
+              </button>
+
+              <span
+                v-for="page in generatePageNumbers(pagination.adminLeaves.rejected.pages, pagination.adminLeaves.rejected.currentPage)"
+                :key="page" @click="changeAdminLeavesPage('rejected', page)"
+                :class="['pagination-item', { active: page === pagination.adminLeaves.rejected.currentPage }]">
+                {{ page }}
+              </span>
+
+              <button
+                @click="changeAdminLeavesPage('rejected', Math.min(pagination.adminLeaves.rejected.pages, pagination.adminLeaves.rejected.currentPage + 1))"
+                :disabled="pagination.adminLeaves.rejected.currentPage === pagination.adminLeaves.rejected.pages"
+                class="pagination-btn">
+                下一页
+              </button>
+
+              <span class="pagination-info">
+                共筛选到 {{ pagination.adminLeaves.rejected.total }} 条记录，第 {{
+                  pagination.adminLeaves.rejected.currentPage }} / {{ pagination.adminLeaves.rejected.pages }} 页
+              </span>
             </div>
-          </template>
-        </div>
+          </div>
+
+          <div v-if="selectedLeave" class="leave-detail leave-detail-center">
+            <h3>申请详情</h3>
+            <p>姓名：{{ selectedLeave.name }}（工号：{{ selectedLeave.account }}）</p>
+            <p>起止：{{ formatDateTime(selectedLeave.start_time) }} - {{ formatDateTime(selectedLeave.end_time) }}</p>
+            <p>事由：{{ selectedLeave.reason }}</p>
+            <div class="detail-actions">
+              <button class="clock-btn clock-in" @click="reviewLeave(selectedLeave.id, 'approve')">通过</button>
+              <button class="clock-btn clock-out" @click="reviewLeave(selectedLeave.id, 'reject')">拒绝</button>
+            </div>
+          </div>
+        </template>
       </div>
     </div>
+  </div>
 </template>
 
 <script>
@@ -1024,6 +1029,8 @@ export default {
         normal_count: 0
       },
       employees: [],
+      allEmployees: [], // 员工管理界面使用的所有员工数据
+      employeeSearch: '', // 员工搜索关键词
       sortBy: 'account',
       sortOrder: 'asc',
       isLoading: false,
@@ -1176,7 +1183,10 @@ export default {
       },
       // 图表实例
       attendanceTrendChartInstance: null,
-      leaveTrendChartInstance: null
+      leaveTrendChartInstance: null,
+      // 员工管理界面相关
+      attendanceDialogVisible: false,
+      currentAttendanceEmployee: null
     }
   },
   watch: {
@@ -1275,7 +1285,7 @@ export default {
       this.$router.push({ name: 'FaceRegister' })
     },
 
-    goToEmployeeManagement(){
+    goToEmployeeManagement() {
       this.$router.push({ name: 'EmployeeManagement' })
     },
 
@@ -1435,6 +1445,22 @@ export default {
         return `${this.apiBaseUrl}/${imagePath}`;
       }
       return imagePath;
+    },
+
+    // 获取员工照片URL
+    getEmployeePhotoUrl(imagePath) {
+      if (!imagePath) {
+        // 如果没有照片，返回默认图片或空字符串
+        return '';
+      }
+
+      if (imagePath.startsWith('http')) {
+        // 如果已经是完整URL，直接返回
+        return imagePath;
+      }
+
+      // 否则，构造完整URL
+      return `${this.apiBaseUrl}/${imagePath}`;
     },
 
     // 审核人脸录入申请
@@ -3132,7 +3158,7 @@ export default {
   max-width: 400px;
   background: #fff;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   padding: 24px 32px;
   z-index: 10;
 }
@@ -3250,13 +3276,16 @@ export default {
 
 .employees-table,
 .records-table {
-  overflow-x: auto;
+  /* 移除滚动条 */
+  overflow: visible;
 }
 
 .employees-table table,
 .records-table table {
   width: 100%;
   border-collapse: collapse;
+  /* 固定表格布局，防止内容变化导致列宽变化 */
+  table-layout: fixed;
 }
 
 .employees-table th,

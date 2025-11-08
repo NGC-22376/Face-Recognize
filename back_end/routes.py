@@ -1005,11 +1005,16 @@ def get_employees_attendance():
 
     employees_list = []
     for row in employees:
+        # 查找员工的人脸照片URL
+        face = Face.query.filter_by(user_id=row.user_id).first()
+        photo_url = face.image_path if face else None
+        
         employees_list.append(
             {
                 "user_id": row.user_id,
                 "name": row.name,
                 "account": row.account,
+                "photo_url": photo_url,
                 "monthly_stats": {
                     "total_days": row.total_days,
                     "late_count": row.late_count,
