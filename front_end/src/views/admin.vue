@@ -1035,9 +1035,15 @@ export default {
     // 获取人脸录入图片URL
     getEnrollmentImageUrl(imagePath) {
       if (imagePath && !imagePath.startsWith('http')) {
-        return `${this.apiBaseUrl}/${imagePath}`
+        // 如果imagePath包含temp_images路径，则构造正确的URL
+        if (imagePath.includes('temp_images')) {
+          // 后端返回的路径格式为 "temp_images/filename.jpg"
+          // 我们需要构造 "/temp_images/filename.jpg" 格式的URL
+          return `${this.apiBaseUrl}/${imagePath}`;
+        }
+        return `${this.apiBaseUrl}/${imagePath}`;
       }
-      return imagePath
+      return imagePath;
     },
 
     // 审核人脸录入申请
@@ -1144,7 +1150,7 @@ export default {
       this.isLoading = true
       try {
         const token = localStorage.getItem('access_token')
-        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}`, {
+        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}&page=${this.currentPage}&page_size=${this.pageSize}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -1153,6 +1159,7 @@ export default {
         if (response.ok) {
           const data = await response.json()
           this.employees = data.employees
+          this.totalEmployees = data.total  // 设置总员工数用于分页
         } else {
           console.error('Failed to load data, status:', response.status)
           alert('加载员工数据失败！')
@@ -2573,10 +2580,8 @@ export default {
 
 /* 管理员页面筛选控件样式 */
 .filter-controls select {
-  width: 150%;
-  /* 增加为原本的1.5倍 */
+  width: 100px;
   padding: 6.4px;
-  /* 8px * 0.8 */
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 14px;
@@ -2659,6 +2664,11 @@ export default {
   color: #333;
 }
 
+.status-approved {
+  color: #27ae60;
+  font-weight: 500;
+}
+
 .status-rejected {
   color: #e74c3c;
   font-weight: 500;
@@ -2676,5 +2686,32 @@ export default {
   padding: 40px;
   color: #3498db;
   font-style: italic;
+}
+
+.close-btn {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 30px;
+  cursor: pointer;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s;
+}
+
+.preview-image:hover {
+  transform: scale(1.1);
 }
 </style>
