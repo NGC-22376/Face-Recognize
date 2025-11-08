@@ -658,6 +658,192 @@ def get_daily_attendance_overview():
     )
 
 
+# 管理员查看阶段考勤统计
+@app.route("/admin/attendance/period", methods=["GET"])
+@jwt_required()
+def get_period_attendance_stats():
+    # 应用18:00后的规则更新
+    apply_end_of_day_rules()
+    current_user_id = int(get_jwt_identity())
+    user = User.query.get(current_user_id)
+
+    # 检查是否为管理员
+    if not user or user.role != "管理员":
+        return jsonify({"message": "Access denied. Admin role required."}), 403
+
+    # 获取查询参数
+    start_date_str = request.args.get("start_date")
+    end_date_str = request.args.get("end_date")
+
+    # 如果没有提供日期参数，使用默认近一个月
+    if not start_date_str or not end_date_str:
+        end_date = date.today()
+        start_date = end_date - timedelta(days=30)
+    else:
+        try:
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"message": "日期格式不正确，应为 YYYY-MM-DD"}), 400
+
+    # 确保结束日期不早于开始日期
+    if end_date < start_date:
+        return jsonify({"message": "结束日期不能早于开始日期"}), 400
+
+    # 计算三个阶段的时间范围 (按照1:2:1的比例)
+    total_days = (end_date - start_date).days + 1
+    # 第一阶段和第三阶段各占1/4，第二阶段占1/2
+    phase1_days = total_days // 4
+    phase2_days = total_days // 2
+    phase3_days = total_days - phase1_days - phase2_days  # 剩余天数给第三阶段
+
+    phase1_end = start_date + timedelta(days=phase1_days - 1)
+    phase2_end = phase1_end + timedelta(days=phase2_days)
+    phase3_end = end_date
+
+    # 获取请假统计（按阶段）
+    def get_absence_stats_by_phase():
+        absence_stats = []
+        
+        # 定义阶段
+        phases = [
+            ("第一阶段", start_date, phase1_end),
+            ("第二阶段", phase1_end + timedelta(days=1), phase2_end),
+            ("第三阶段", phase2_end + timedelta(days=1), phase3_end)
+        ]
+        
+        for phase_name, phase_start, phase_end in phases:
+            # 病假 (absence_type = 0)
+            sick_leave = db.session.query(func.count(Absence.id)).filter(
+                and_(
+                    Absence.absence_type == 0,
+                    Absence.status == 2,  # 已批准
+                    func.date(Absence.start_time) <= phase_end,
+                    func.date(Absence.end_time) >= phase_start
+                )
+            ).scalar() or 0
+            
+            # 私事请假 (absence_type = 1)
+            personal_leave = db.session.query(func.count(Absence.id)).filter(
+                and_(
+                    Absence.absence_type == 1,
+                    Absence.status == 2,  # 已批准
+                    func.date(Absence.start_time) <= phase_end,
+                    func.date(Absence.end_time) >= phase_start
+                )
+            ).scalar() or 0
+            
+            # 公事请假 (absence_type = 2)
+            official_leave = db.session.query(func.count(Absence.id)).filter(
+                and_(
+                    Absence.absence_type == 2,
+                    Absence.status == 2,  # 已批准
+                    func.date(Absence.start_time) <= phase_end,
+                    func.date(Absence.end_time) >= phase_start
+                )
+            ).scalar() or 0
+            
+            absence_stats.append({
+                "phase": phase_name,
+                "sick_leave": sick_leave,      # 病假
+                "personal_leave": personal_leave,  # 私事请假
+                "official_leave": official_leave   # 公事请假
+            })
+            
+        return absence_stats
+
+    # 获取出勤统计（按阶段）
+    def get_attendance_stats_by_phase():
+        attendance_stats = []
+        
+        # 定义阶段
+        phases = [
+            ("第一阶段", start_date, phase1_end),
+            ("第二阶段", phase1_end + timedelta(days=1), phase2_end),
+            ("第三阶段", phase2_end + timedelta(days=1), phase3_end)
+        ]
+        
+        for phase_name, phase_start, phase_end in phases:
+            # 正常出勤
+            normal = db.session.query(func.count(Attendance.attendance_id)).filter(
+                and_(
+                    func.date(Attendance.clock_in_time) >= phase_start,
+                    func.date(Attendance.clock_in_time) <= phase_end,
+                    Attendance.status == "正常"
+                )
+            ).scalar() or 0
+            
+            # 迟到
+            late = db.session.query(func.count(Attendance.attendance_id)).filter(
+                and_(
+                    func.date(Attendance.clock_in_time) >= phase_start,
+                    func.date(Attendance.clock_in_time) <= phase_end,
+                    Attendance.status == "迟到"
+                )
+            ).scalar() or 0
+            
+            # 早退
+            early = db.session.query(func.count(Attendance.attendance_id)).filter(
+                and_(
+                    func.date(Attendance.clock_in_time) >= phase_start,
+                    func.date(Attendance.clock_in_time) <= phase_end,
+                    Attendance.status == "早退"
+                )
+            ).scalar() or 0
+            
+            # 加班（这里假设加班是指正常工作时间外的打卡）
+            # 为了简化，我们可以通过 clock_out_time 晚于 18:00 来判断加班
+            overtime = db.session.query(func.count(Attendance.attendance_id)).filter(
+                and_(
+                    func.date(Attendance.clock_in_time) >= phase_start,
+                    func.date(Attendance.clock_in_time) <= phase_end,
+                    Attendance.clock_out_time.isnot(None),
+                    extract('hour', Attendance.clock_out_time) > 18
+                )
+            ).scalar() or 0
+            
+            attendance_stats.append({
+                "phase": phase_name,
+                "normal": normal,      # 正常
+                "late": late,          # 迟到
+                "early": early,        # 早退
+                "overtime": overtime   # 加班
+            })
+            
+        return attendance_stats
+
+    # 获取统计数据
+    absence_stats = get_absence_stats_by_phase()
+    attendance_stats = get_attendance_stats_by_phase()
+
+    # 添加阶段的具体时间范围
+    phase_ranges = {
+        "第一阶段": {
+            "start": start_date.strftime("%Y-%m-%d"),
+            "end": phase1_end.strftime("%Y-%m-%d")
+        },
+        "第二阶段": {
+            "start": (phase1_end + timedelta(days=1)).strftime("%Y-%m-%d"),
+            "end": phase2_end.strftime("%Y-%m-%d")
+        },
+        "第三阶段": {
+            "start": (phase2_end + timedelta(days=1)).strftime("%Y-%m-%d"),
+            "end": phase3_end.strftime("%Y-%m-%d")
+        }
+    }
+
+    return (
+        jsonify({
+            "start_date": start_date.strftime("%Y-%m-%d"),
+            "end_date": end_date.strftime("%Y-%m-%d"),
+            "phase_ranges": phase_ranges,
+            "absence_stats": absence_stats,
+            "attendance_stats": attendance_stats
+        }),
+        200
+    )
+
+
 # 管理员查看所有员工考勤情况
 @app.route("/admin/attendance/employees", methods=["GET"])
 @jwt_required()

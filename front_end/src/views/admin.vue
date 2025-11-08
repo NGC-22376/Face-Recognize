@@ -77,12 +77,32 @@
             </div>
           </div>
           <div class="charts-container">
-            <h3>考勤统计图表</h3>
+            <h3>今日考勤统计</h3>
             <div class="charts-row">
               <div id="attendance-chart-1" style="width: 100%; height: 400px;"></div>
               <div id="attendance-chart-2" style="width: 100%; height: 400px; margin-left: 20px;"></div>
             </div>
           </div>
+
+          <!-- 阶段考勤统计 -->
+          <div class="period-stats-container">
+            <h3>阶段考勤统计</h3>
+            <div class="date-picker-container">
+              <div class="date-picker">
+                <label>开始日期：</label>
+                <input type="date" v-model="periodStats.startDate" @change="loadPeriodStats">
+              </div>
+              <div class="date-picker">
+                <label>结束日期：</label>
+                <input type="date" v-model="periodStats.endDate" @change="loadPeriodStats">
+              </div>
+            </div>
+            <div class="charts-row">
+              <div id="leave-trend-chart" style="width: 100%; height: 400px;"></div>
+              <div id="attendance-trend-chart" style="width: 100%; height: 400px; margin-left: 20px;"></div>
+            </div>
+          </div>
+
           <div class="date-info">
             <p>统计日期：{{ dailyStats.date }}</p>
           </div>
@@ -823,6 +843,15 @@ export default {
       previewImageUrl: '',
       loadingPending: false,
       loadingReviewed: false,
+
+      // 阶段考勤统计相关
+      periodStats: {
+        startDate: '',
+        endDate: '',
+        leaveTrendChart: null,
+        attendanceTrendChart: null,
+        phaseRanges: null
+      },
     }
   },
   watch: {
@@ -856,6 +885,8 @@ export default {
       await this.loadDashboardData();
       this.$nextTick(() => {
         this.renderAttendanceCharts();
+        // 加载阶段考勤统计数据
+        this.loadPeriodStats();
       });
     } else {
       this.activeTab = 'personal';
@@ -1810,6 +1841,241 @@ export default {
         ]
       };
       chart2.setOption(option2);
+    },
+
+    // 加载阶段考勤统计数据
+    async loadPeriodStats() {
+      try {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+          alert('登录已过期，请重新登录');
+          this.$router.push('/');
+          return;
+        }
+
+        // 如果没有选择日期，设置默认日期（近一个月）
+        let startDate = this.periodStats.startDate;
+        let endDate = this.periodStats.endDate;
+
+        if (!startDate || !endDate) {
+          const today = new Date();
+          endDate = today.toISOString().split('T')[0];
+          startDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+          // 更新数据模型中的日期
+          this.periodStats.startDate = startDate;
+          this.periodStats.endDate = endDate;
+        }
+
+        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/period?start_date=${startDate}&end_date=${endDate}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          // 保存阶段时间范围数据
+          this.periodStats.phaseRanges = data.phase_ranges;
+          this.renderLeaveTrendChart(data.absence_stats);
+          this.renderAttendanceTrendChart(data.attendance_stats);
+        } else {
+          const errorData = await response.json();
+          alert(errorData.message || '获取阶段考勤统计数据失败');
+        }
+      } catch (error) {
+        console.error('获取阶段考勤统计数据失败:', error);
+        alert('网络错误，请稍后重试');
+      }
+    },
+
+    // 渲染请假趋势统计折线图
+    renderLeaveTrendChart(absenceStats) {
+      const chartDom = document.getElementById('leave-trend-chart');
+      if (!chartDom) {
+        console.error('leave-trend-chart 容器未找到');
+        return;
+      }
+
+      // 销毁之前的图表实例（如果存在）
+      if (this.periodStats.leaveTrendChart) {
+        this.periodStats.leaveTrendChart.dispose();
+      }
+
+      const chart = echarts.init(chartDom);
+      this.periodStats.leaveTrendChart = chart;
+
+      // 准备数据
+      const stages = ['第一阶段', '第二阶段', '第三阶段'];
+      const sickData = absenceStats.map(stage => stage.sick_leave);
+      const personalData = absenceStats.map(stage => stage.personal_leave);
+      const officialData = absenceStats.map(stage => stage.official_leave);
+
+      // 定义阶段时间范围显示文本
+      const getPhaseRangeText = (index) => {
+        if (!this.periodStats.phaseRanges) return '';
+        const phaseNames = ['第一阶段', '第二阶段', '第三阶段'];
+        const phaseKey = phaseNames[index];
+        const range = this.periodStats.phaseRanges[phaseKey];
+        return range ? `\n${range.start} 至 ${range.end}` : '';
+      };
+
+      const option = {
+        title: {
+          text: '请假趋势统计',
+          left: 'center'
+        },
+        tooltip: {
+          trigger: 'axis',
+          formatter: (params) => {
+            const stageIndex = params[0].dataIndex;
+            const stageName = stages[stageIndex];
+            const rangeText = getPhaseRangeText(stageIndex);
+
+            let tooltipText = `${stageName}${rangeText}<br/>`;
+            params.forEach(param => {
+              tooltipText += `${param.marker} ${param.seriesName}: ${param.data}<br/>`;
+            });
+            return tooltipText;
+          }
+        },
+        legend: {
+          data: ['病假', '私事请假', '公事请假'],
+          top: '10%'
+        },
+        xAxis: {
+          type: 'category',
+          data: stages
+        },
+        yAxis: {
+          type: 'value',
+          name: '人数'
+        },
+        series: [
+          {
+            name: '病假',
+            type: 'line',
+            data: sickData,
+            smooth: true,
+            itemStyle: { color: '#5eb95e' } // 绿色
+          },
+          {
+            name: '私事请假',
+            type: 'line',
+            data: personalData,
+            smooth: true,
+            itemStyle: { color: '#3b82f6' } // 深蓝色
+          },
+          {
+            name: '公事请假',
+            type: 'line',
+            data: officialData,
+            smooth: true,
+            itemStyle: { color: '#f59e0b' } // 橙色
+          }
+        ]
+      };
+
+      chart.setOption(option);
+    },
+
+    // 渲染出勤趋势统计折线图
+    renderAttendanceTrendChart(attendanceStats) {
+      const chartDom = document.getElementById('attendance-trend-chart');
+      if (!chartDom) {
+        console.error('attendance-trend-chart 容器未找到');
+        return;
+      }
+
+      // 销毁之前的图表实例（如果存在）
+      if (this.periodStats.attendanceTrendChart) {
+        this.periodStats.attendanceTrendChart.dispose();
+      }
+
+      const chart = echarts.init(chartDom);
+      this.periodStats.attendanceTrendChart = chart;
+
+      // 准备数据
+      const stages = ['第一阶段', '第二阶段', '第三阶段'];
+      const normalData = attendanceStats.map(stage => stage.normal);
+      const lateData = attendanceStats.map(stage => stage.late);
+      const earlyData = attendanceStats.map(stage => stage.early);
+      const overtimeData = attendanceStats.map(stage => stage.overtime);
+
+      // 定义阶段时间范围显示文本
+      const getPhaseRangeText = (index) => {
+        if (!this.periodStats.phaseRanges) return '';
+        const phaseNames = ['第一阶段', '第二阶段', '第三阶段'];
+        const phaseKey = phaseNames[index];
+        const range = this.periodStats.phaseRanges[phaseKey];
+        return range ? `\n${range.start} 至 ${range.end}` : '';
+      };
+
+      const option = {
+        title: {
+          text: '出勤趋势统计',
+          left: 'center'
+        },
+        tooltip: {
+          trigger: 'axis',
+          formatter: (params) => {
+            const stageIndex = params[0].dataIndex;
+            const stageName = stages[stageIndex];
+            const rangeText = getPhaseRangeText(stageIndex);
+
+            let tooltipText = `${stageName}${rangeText}<br/>`;
+            params.forEach(param => {
+              tooltipText += `${param.marker} ${param.seriesName}: ${param.data}<br/>`;
+            });
+            return tooltipText;
+          }
+        },
+        legend: {
+          data: ['正常', '迟到', '早退', '加班'],
+          top: '10%'
+        },
+        xAxis: {
+          type: 'category',
+          data: stages
+        },
+        yAxis: {
+          type: 'value',
+          name: '人数'
+        },
+        series: [
+          {
+            name: '正常',
+            type: 'line',
+            data: normalData,
+            smooth: true,
+            itemStyle: { color: '#3b82f6' } // 蓝色
+          },
+          {
+            name: '迟到',
+            type: 'line',
+            data: lateData,
+            smooth: true,
+            itemStyle: { color: '#5eb95e' } // 绿色
+          },
+          {
+            name: '早退',
+            type: 'line',
+            data: earlyData,
+            smooth: true,
+            itemStyle: { color: '#3b82f6' } // 深蓝色
+          },
+          {
+            name: '加班',
+            type: 'line',
+            data: overtimeData,
+            smooth: true,
+            itemStyle: { color: '#f59e0b' } // 橙色
+          }
+        ]
+      };
+
+      chart.setOption(option);
     }
   },
   computed: {
@@ -2033,6 +2299,7 @@ export default {
   border-radius: 8px;
   padding: 24px;
   text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .stat-card.late {
@@ -2066,6 +2333,37 @@ export default {
 
 .charts-row>div {
   flex: 1;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+}
+
+.period-stats-container {
+  margin-top: 30px;
+  padding: 20px;
+}
+
+.date-picker-container {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.date-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.date-picker label {
+  font-weight: 500;
+}
+
+.date-picker input {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
 }
 
 .section-header {
