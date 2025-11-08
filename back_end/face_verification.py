@@ -4,14 +4,9 @@ from face import *
 import os
 
 # 人脸图片与特征存储目录
-base_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(base_dir)  # 项目根目录
-face_image_dir = os.path.join(base_dir, "FaceImage")
-face_feature_dir = os.path.join(base_dir, "FaceFeature")
-temp_images_dir = os.path.join(project_root, "temp_images")  # 修改为项目根目录下的temp_images
-os.makedirs(face_image_dir, exist_ok=True)
-os.makedirs(face_feature_dir, exist_ok=True)
-os.makedirs(temp_images_dir, exist_ok=True)
+os.makedirs("FaceImage", exist_ok=True)
+os.makedirs("FaceFeature", exist_ok=True)
+os.makedirs("temp_images", exist_ok=True)
 
 # 人脸录入审核状态
 ENROLLMENT_PENDING = 0
@@ -19,7 +14,7 @@ ENROLLMENT_APPROVED = 1
 ENROLLMENT_REJECTED = 2
 
 # 图片存储目录
-IMAGE_FOLDER = temp_images_dir
+IMAGE_FOLDER = os.path.join(os.path.dirname(__file__), "temp_images")
 
 
 # 图片显示
@@ -27,10 +22,7 @@ IMAGE_FOLDER = temp_images_dir
 def get_image(filename):
     """提供图片静态文件服务"""
     try:
-        # 使用项目根目录下的temp_images文件夹
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        image_folder = os.path.join(project_root, "temp_images")
-        return send_from_directory(image_folder, filename)
+        return send_from_directory(IMAGE_FOLDER, filename)
     except FileNotFoundError:
         return {"error": "Image not found"}, 404
 
@@ -173,7 +165,7 @@ def review_face_enrollment(enrollment_id):
                 if existing_face:
                     existing_face.image_path = feature_path
                     existing_face.rec_time = datetime.now(SHANGHAI_TZ)
-                    existing_face.result = "已更新"
+                    existing_face.result = "已录入"
                 else:
                     # 创建人脸记录
                     new_face = Face(

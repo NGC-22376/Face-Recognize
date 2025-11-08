@@ -27,6 +27,10 @@
             @click="setActiveTab('employees')">
             <span>👥</span> 员工考勤
           </div>
+          <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'personal_info' }"
+            @click="setActiveTab('personal_info')">
+            <span>👤</span> 个人信息
+          </div>
           <div v-if="userProfile.role === '员工'" class="nav-item" :class="{ active: activeTab === 'personal' }"
             @click="setActiveTab('personal')">
             <span>👤</span> 个人考勤
@@ -164,6 +168,196 @@
             </div>
           </div>
         </div>
+
+        <!-- 个人信息 -->
+        <div v-if="activeTab === 'personal_info'" class="tab-content">
+          <h2>个人信息</h2>
+          <div class="personal-info-container">
+            <!-- 头像上传区域 -->
+            <div class="avatar-section">
+              <div class="avatar-upload">
+                <div class="avatar-preview">
+                  <img :src="avatarBlobUrl" alt="头像" class="avatar-image" />
+                  <div class="avatar-overlay" @click="triggerFileInput">
+                    <span>更换头像</span>
+                  </div>
+                </div>
+                <input
+                  type="file"
+                  ref="fileInput"
+                  @change="handleAvatarUpload"
+                  accept="image/jpeg,image/png,image/gif"
+                  style="display: none"
+                />
+                <div class="upload-tips">
+                  <p>支持 JPG、PNG、GIF 格式，文件大小不超过 2MB</p>
+                </div>
+              </div>
+            </div>
+           </div>
+           <!-- 个人信息表单 -->
+           <div class="info-form-section">
+              <div class="info-card">
+              <h3>基本信息</h3>
+              <form @submit.prevent="updateProfile" class="profile-form">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>工号</label>
+                    <input type="text" v-model="userInfo.account" disabled class="disabled-input" />
+                  </div>
+                  <div class="form-group">
+                   <label>姓名</label>
+                   <input type="text" v-model="userInfo.name" disabled class="disabled-input"/>
+                  </div>
+                </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>职位</label>
+              <input type="text" v-model="userInfo.role" disabled class="disabled-input" />
+            </div>
+            <div class="form-group">
+              <label>密码</label>
+              <div class="password-field">
+              <input type="password" value="********" disabled class="disabled-input" />
+              <button type="button" class="modify-btn" @click="showPasswordModal = true">修改</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row">
+          <div class="form-group">
+          <label>人脸状态</label>
+          <div class="password-field">
+          <input type="text" v-model="faceStatus" disabled  class="face-status-text" :class="{
+            'face-status-recorded': faceStatus === '已录入',
+            'face-status-pending': faceStatus === '待审核',
+            'face-status-not-recorded': faceStatus === '未录入'}" />
+          <button v-if="faceStatus === '已录入'" type="button" class="modify-btn" @click="reEnrollFace" :disabled="isReEnrolling">
+             {{ isReEnrolling ? '申请中...' : '申请重录' }}
+          </button>
+          </div>
+          </div>
+          <div class="form-group">
+          <label></label>
+          <span></span>
+          </div>
+          </div>
+
+          <h4 style="margin-top: 24px; margin-bottom: 16px; color: #333;">安全设置</h4>
+          <div class="form-row">
+          <div class="form-group">
+            <label>密保问题 1</label>
+            <input type="text" v-model="userInfo.security_question_1" placeholder="请输入密保问题" />
+          </div>
+          <div class="form-group">
+            <label>答案 1</label>
+            <div class="password-field">
+               <input type="password" value="********" disabled class="disabled-input" />
+               <button type="button" class="modify-btn" @click="showAnswerModal(1)">修改</button>
+            </div>
+          </div>
+          </div>
+          <div class="form-row">
+          <div class="form-group">
+            <label>密保问题 2</label>
+            <input type="text" v-model="userInfo.security_question_2" placeholder="请输入密保问题" />
+          </div>
+          <div class="form-group">
+            <label>答案 2</label>
+            <div class="password-field">
+                <input type="password" value="********" disabled class="disabled-input" />
+                <button type="button" class="modify-btn" @click="showAnswerModal(2)">修改</button>
+              </div>
+          </div>
+          </div>
+          <div class="form-row">
+          <div class="form-group">
+            <label>密保问题 3</label>
+            <input type="text" v-model="userInfo.security_question_3" placeholder="请输入密保问题" />
+          </div>
+          <div class="form-group">
+            <label>答案 3</label>
+            <div class="password-field">
+                <input type="password" value="********" disabled class="disabled-input" />
+                <button type="button" class="modify-btn" @click="showAnswerModal(3)">修改</button>
+              </div>
+          </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="save-btn" :disabled="isSaving">
+              {{ isSaving ? '保存中...' : '保存信息' }}
+            </button>
+            <button type="button" @click="loadDetailedProfile" class="refresh-btn">
+              刷新信息
+            </button>
+          </div>
+
+          <div v-if="profileMessage" class="profile-message" :class="profileMessageType">
+            {{ profileMessage }}
+          </div>
+        </form>
+      </div>
+    </div>
+        </div>
+        <!-- 修改密码模态框 -->
+  <div v-if="showPasswordModal" class="modal-overlay" @click="showPasswordModal = false">
+    <div class="modal-content" @click.stop>
+      <div class="modal-header">
+        <h3>修改密码</h3>
+        <button class="close-btn" @click="showPasswordModal = false">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>原密码</label>
+          <input type="password" v-model="passwordForm.oldPassword" placeholder="请输入原密码" />
+        </div>
+        <div class="form-group">
+          <label>新密码</label>
+          <input type="password" v-model="passwordForm.newPassword" placeholder="请输入新密码" />
+        </div>
+        <div class="form-group">
+          <label>确认新密码</label>
+          <input type="password" v-model="passwordForm.confirmPassword" placeholder="请再次输入新密码" />
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="cancel-btn" @click="showPasswordModal = false">取消</button>
+        <button class="confirm-btn" @click="updatePassword" :disabled="isUpdatingPassword">
+          {{ isUpdatingPassword ? '修改中...' : '确认修改' }}
+        </button>
+      </div>
+    </div>
+  </div>
+        <!-- 修改密保答案模态框 -->
+  <div v-if="showAnswerSecurityModal" class="modal-overlay" @click="showAnswerSecurityModal = false">
+    <div class="modal-content" @click.stop>
+      <div class="modal-header">
+        <h3>修改密保答案 {{ editingAnswerIndex }}</h3>
+        <button class="close-btn" @click="showAnswerSecurityModal = false">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>问题</label>
+          <input type="text" :value="getQuestionText(editingAnswerIndex)" disabled class="disabled-input" />
+        </div>
+        <div class="form-group">
+          <label>新答案</label>
+          <input type="text" v-model="answerForm.newAnswer" placeholder="请输入新答案" />
+        </div>
+        <div class="form-group">
+          <label>确认新答案</label>
+          <input type="text" v-model="answerForm.confirmAnswer" placeholder="请再次输入新答案" />
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="cancel-btn" @click="showAnswerSecurityModal = false">取消</button>
+        <button class="confirm-btn" @click="updateSecurityAnswer" :disabled="isUpdatingAnswer">
+          {{ isUpdatingAnswer ? '修改中...' : '确认修改' }}
+        </button>
+      </div>
+    </div>
+  </div>
 
         <!-- 个人考勤 -->
         <div v-if="activeTab === 'personal'" class="tab-content">
@@ -715,7 +909,7 @@ export default {
   name: 'AdminPage',
   data() {
     return {
-      activeTab: 'personal',
+      activeTab: 'personal_info',
       userProfile: {},
       apiBaseUrl: 'http://localhost:5000',
       dailyStats: {
@@ -821,6 +1015,32 @@ export default {
       previewImageUrl: '',
       loadingPending: false,
       loadingReviewed: false,
+      //个人信息
+      isUploading: false,
+      avatarBlobUrl: '',
+      isSaving: false,
+      profileMessage: '',
+      profileMessageType: '',
+      userInfo: {},
+      // 模态框状态
+      showPasswordModal: false,
+      showAnswerSecurityModal: false,
+      editingAnswerIndex: 1,
+      isUpdatingPassword: false,
+      isUpdatingAnswer: false,
+      // 表单数据
+      passwordForm: {
+        oldPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      },
+      answerForm: {
+        newAnswer: '',
+        confirmAnswer: ''
+      },
+      //人脸状态
+      faceStatus: '未录入',
+      isReEnrolling: false,
     }
   },
   watch: {
@@ -856,7 +1076,8 @@ export default {
         this.renderAttendanceCharts();
       });
     } else {
-      this.activeTab = 'personal';
+      this.activeTab = 'personal_info';
+      await this.loadPersonalInfo();
       await this.loadPersonalData();
     }
 
@@ -869,6 +1090,293 @@ export default {
   },
 
   methods: {
+     // 获取人脸状态
+     async loadFaceStatus() {
+       try {
+         const token = localStorage.getItem('access_token');
+         const response = await fetch(`${this.apiBaseUrl}/user/face_status`, {
+         headers: {
+            'Authorization': `Bearer ${token}`
+         }
+       });
+       if (response.ok) {
+         const data = await response.json();
+         if (data.ok) {
+           this.faceStatus = data.status;
+         }
+       }
+     } catch (error) {
+       console.error('获取人脸状态失败:', error);
+     }
+     },
+
+     // 申请重新录入人脸
+     async reEnrollFace() {
+       this.isReEnrolling = true;
+       try {
+          const token = localStorage.getItem('access_token');
+          const response = await fetch(`${this.apiBaseUrl}/user/face_re_enroll`, {
+             method: 'POST',
+             headers: {
+               'Content-Type': 'application/json',
+               'Authorization': `Bearer ${token}`
+            }
+          });
+          const data = await response.json();
+          if (response.ok && data.ok) {
+            ElMessage.success('申请成功，请前往人脸录入页面');
+            this.$router.push({ name: 'FaceRegister' });
+          } else {
+            ElMessage.error('申请失败，请重试');
+          }
+       } catch (error) {
+          console.error('申请失败重新录入人脸失败:', error);
+          ElMessage.error('网络错误，请重试');
+       } finally {
+         this.isReEnrolling = false;
+       }
+     },
+    // 显示修改密保答案模态框
+    showAnswerModal(index) {
+      this.editingAnswerIndex = index;
+      this.answerForm.newAnswer = '';
+      this.answerForm.confirmAnswer = '';
+      this.showAnswerSecurityModal = true;
+    },
+    // 获取问题文本
+    getQuestionText(index) {
+      const questions = {
+        1: this.userInfo.security_question_1 || '未设置问题',
+        2: this.userInfo.security_question_2 || '未设置问题',
+        3: this.userInfo.security_question_3 || '未设置问题'
+      };
+      return questions[index];
+    },
+    // 修改密码
+    async updatePassword() {
+      if (!this.passwordForm.oldPassword) {
+        ElMessage.error('请输入原密码');
+        return;
+      }
+      if (!this.passwordForm.newPassword) {
+        ElMessage.error('请输入新密码');
+        return;
+      }
+      if (this.passwordForm.newPassword !== this.passwordForm.confirmPassword) {
+        ElMessage.error('两次输入的新密码不一致');
+        return;
+      }
+      this.isUpdatingPassword = true;
+      try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.apiBaseUrl}/user/update_password`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            old_password: this.passwordForm.oldPassword,
+            new_password: this.passwordForm.newPassword
+          })
+        });
+        const data = await response.json();
+        if (response.ok && data.ok) {
+          ElMessage.success('密码修改成功');
+          this.showPasswordModal = false;
+          this.passwordForm = { oldPassword: '', newPassword: '', confirmPassword: '' };
+        } else {
+          ElMessage.error(data.msg || '密码修改失败');
+        }
+      } catch (error) {
+        console.error('修改密码失败:', error);
+        ElMessage.error('网络错误，请重试');
+      } finally {
+        this.isUpdatingPassword = false;
+      }
+    },
+    // 修改密保答案
+    async updateSecurityAnswer() {
+      if (!this.answerForm.newAnswer) {
+        ElMessage.error('请输入新答案');
+        return;
+      }
+      if (this.answerForm.newAnswer !== this.answerForm.confirmAnswer) {
+        ElMessage.error('两次输入的答案不一致');
+        return;
+      }
+      this.isUpdatingAnswer = true;
+      try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.apiBaseUrl}/user/update_security_answer`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            question_index: this.editingAnswerIndex,
+            answer: this.answerForm.newAnswer
+          })
+        });
+        const data = await response.json();
+        if (response.ok && data.ok) {
+          ElMessage.success('密保答案修改成功');
+          this.showAnswerSecurityModal = false;
+          this.answerForm = { newAnswer: '', confirmAnswer: '' };
+          // 重新加载用户信息
+          await this.loadDetailedProfile();
+        } else {
+          ElMessage.error(data.msg || '密保答案修改失败');
+        }
+      } catch (error) {
+        console.error('修改密保答案失败:', error);
+        ElMessage.error('网络错误，请重试');
+      } finally {
+        this.isUpdatingAnswer = false;
+      }
+    },
+    // 加载个人信息
+    async loadPersonalInfo() {
+      await this.loadAvatarBlob();
+      await this.loadDetailedProfile();
+      await this.loadFaceStatus();
+    },
+    //加载头像
+    async loadAvatarBlob() {
+      try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.apiBaseUrl}/profile/avatar_pre`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (response.ok) {
+          const blob = await response.blob();
+          this.avatarBlobUrl = URL.createObjectURL(blob);
+        } else {
+          // 使用默认头像
+          this.avatarBlobUrl = `${this.apiBaseUrl}/profile/temp.jpg`;
+        }
+      } catch (error) {
+          console.error('加载头像失败:', error);
+          this.avatarBlobUrl = `${this.apiBaseUrl}/profile/temp.jpg`;
+      }
+    },
+    // 触发文件选择
+    triggerFileInput() {
+      this.$refs.fileInput.click();
+    },
+    // 处理头像上传
+    async handleAvatarUpload(event) {
+      const file = event.target.files[0];
+      if (!file){
+         ElMessage.error('请上传文件');
+         return;
+      }
+      // 文件类型检查
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+      if (!allowedTypes.includes(file.type)) {
+        ElMessage.error('请上传 JPG、PNG 或 GIF 格式的图片');
+        return;
+      }
+      // 文件大小检查 (2MB)
+      if (file.size > 2 * 1024 * 1024) {
+        ElMessage.error('图片大小不能超过 2MB');
+        return;
+      }
+      this.isUploading = true;
+      try {
+        const formData = new FormData();
+        formData.append('avatar', file);
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.apiBaseUrl}/user/avatar`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+        if (response.ok) {
+          ElMessage.success('头像上传成功');
+          //更新同步
+          this.loadAvatarBlob();
+        } else {
+          ElMessage.error(response.msg);
+        }
+      } catch (error) {
+        console.error('头像上传失败:', error);
+        ElMessage.error('网络错误，请重试');
+      } finally {
+        this.isUploading = false;
+        // 清空文件输入，允许重复选择同一文件
+        event.target.value = '';
+      }
+    },
+
+    // 加载详细信息
+    async loadDetailedProfile() {
+      try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.apiBaseUrl}/user/profile/detailed`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.ok) {
+            // 合并基本信息和新获取的详细信息
+            this.userInfo = data.profile;
+            ElMessage.success('刷新成功')
+          } else {
+            ElMessage.error('加载个人信息失败');
+          }
+        } else {
+          ElMessage.error('加载个人信息失败');
+        }
+      } catch (error) {
+        console.error('加载详细信息失败:', error);
+        ElMessage.error('网络错误，请重试');
+      }
+    },
+
+    // 更新个人信息
+    async updateProfile() {
+      this.isSaving = true;
+      this.profileMessage = '';
+      try {
+        const token = localStorage.getItem('access_token');
+        const updateData = {
+          name: this.userInfo.name,
+          security_question_1: this.userInfo.security_question_1,
+          security_question_2: this.userInfo.security_question_2,
+          security_question_3: this.userInfo.security_question_3
+        };
+        const response = await fetch(`${this.apiBaseUrl}/user/profile/update`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(updateData)
+        });
+        const data = await response.json();
+        if (response.ok && data.ok) {
+          ElMessage.success('个人信息更新成功');
+          // 重新加载确保数据同步
+          await this.loadDetailedProfile();
+        } else {
+          ElMessage.error(data.msg);
+        }
+      } catch (error) {
+        console.error('更新个人信息失败:', error);
+        ElMessage.error('网络错误，请重试');
+      } finally {
+        this.isSaving = false;
+      }
+    },
+
     // 重置分页到第一页
     resetPagination() {
       if (this.leaveAdminTab === 'unprocessed') {
@@ -900,6 +1408,8 @@ export default {
         this.loadDashboardData()
       } else if (tab === 'employees') {
         this.loadEmployeesData()
+      } else if (tab === 'personal_info') {
+        this.loadPersonalInfo()
       } else if (tab === 'personal') {
         this.loadPersonalData()
       } else if (tab === 'face_review') {
@@ -916,46 +1426,6 @@ export default {
         }
       }
     },
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     // 切换人脸审核标签页
     switchFaceReviewTab(tab) {
@@ -1035,15 +1505,9 @@ export default {
     // 获取人脸录入图片URL
     getEnrollmentImageUrl(imagePath) {
       if (imagePath && !imagePath.startsWith('http')) {
-        // 如果imagePath包含temp_images路径，则构造正确的URL
-        if (imagePath.includes('temp_images')) {
-          // 后端返回的路径格式为 "temp_images/filename.jpg"
-          // 我们需要构造 "/temp_images/filename.jpg" 格式的URL
-          return `${this.apiBaseUrl}/${imagePath}`;
-        }
-        return `${this.apiBaseUrl}/${imagePath}`;
+        return `${this.apiBaseUrl}/${imagePath}`
       }
-      return imagePath;
+      return imagePath
     },
 
     // 审核人脸录入申请
@@ -1150,7 +1614,7 @@ export default {
       this.isLoading = true
       try {
         const token = localStorage.getItem('access_token')
-        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}&page=${this.currentPage}&page_size=${this.pageSize}`, {
+        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -1159,7 +1623,6 @@ export default {
         if (response.ok) {
           const data = await response.json()
           this.employees = data.employees
-          this.totalEmployees = data.total  // 设置总员工数用于分页
         } else {
           console.error('Failed to load data, status:', response.status)
           alert('加载员工数据失败！')
@@ -2580,8 +3043,10 @@ export default {
 
 /* 管理员页面筛选控件样式 */
 .filter-controls select {
-  width: 100px;
+  width: 150%;
+  /* 增加为原本的1.5倍 */
   padding: 6.4px;
+  /* 8px * 0.8 */
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 14px;
@@ -2664,11 +3129,6 @@ export default {
   color: #333;
 }
 
-.status-approved {
-  color: #27ae60;
-  font-weight: 500;
-}
-
 .status-rejected {
   color: #e74c3c;
   font-weight: 500;
@@ -2688,30 +3148,372 @@ export default {
   font-style: italic;
 }
 
-.close-btn {
-  position: absolute;
-  top: -40px;
-  right: 0;
-  background: none;
-  border: none;
-  color: white;
-  font-size: 30px;
-  cursor: pointer;
-  width: 40px;
-  height: 40px;
+/* 个人信息样式 */
+.personal-info-container {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  gap: 32px;
+  margin-top: 24px;
 }
 
-.preview-image {
+.avatar-section {
+  flex: 0 0 200px;
+}
+
+.avatar-upload {
+  text-align: center;
+}
+
+.avatar-preview {
+  position: relative;
+  width: 150px;
+  height: 150px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid #e1e8ed;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.avatar-preview:hover {
+  border-color: #3498db;
+}
+
+.avatar-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.2s;
 }
 
-.preview-image:hover {
-  transform: scale(1.1);
+.avatar-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  color: white;
+  font-size: 14px;
 }
+
+.avatar-preview:hover .avatar-overlay {
+  opacity: 1;
+}
+
+.upload-tips {
+  font-size: 12px;
+  color: #7f8c8d;
+  line-height: 1.4;
+}
+
+/* 个人信息表单样式 */
+.info-form-section {
+  flex: 1;
+}
+
+.info-card {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 24px;
+  border-left: 4px solid #3498db;
+}
+
+.profile-form {
+  margin-top: 16px;
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.form-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #333;
+}
+
+.form-group input {
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.3s;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.disabled-input {
+  background-color: #f5f5f5;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #e1e8ed;
+}
+
+.save-btn, .refresh-btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.save-btn {
+  background: #27ae60;
+  color: white;
+}
+
+.save-btn:hover:not(:disabled) {
+  background: #229954;
+}
+
+.save-btn:disabled {
+  background: #95a5a6;
+  cursor: not-allowed;
+}
+
+.refresh-btn {
+  background: #3498db;
+  color: white;
+}
+
+.refresh-btn:hover {
+  background: #2980b9;
+}
+
+.profile-message {
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.profile-message.success {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.profile-message.error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .personal-info-container {
+    flex-direction: column;
+  }
+
+  .avatar-section {
+    flex: none;
+    margin-bottom: 24px;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+/* 密码字段样式 */
+.password-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-field input {
+  flex: 1;
+  margin-right: 8px;
+}
+
+.modify-btn {
+  padding: 8px 12px;
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.modify-btn:hover {
+  background: #2980b9;
+}
+
+/* 模态框样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 8px;
+  width: 400px;
+  max-width: 90%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e1e8ed;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #7f8c8d;
+}
+
+.close-btn:hover {
+  color: #e74c3c;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid #e1e8ed;
+}
+
+.cancel-btn, .confirm-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.cancel-btn {
+  background: #95a5a6;
+  color: white;
+}
+
+.cancel-btn:hover {
+  background: #7f8c8d;
+}
+
+.confirm-btn {
+  background: #27ae60;
+  color: white;
+}
+
+.confirm-btn:hover:not(:disabled) {
+  background: #229954;
+}
+
+.confirm-btn:disabled {
+  background: #bdc3c7;
+  cursor: not-allowed;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .password-field {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .password-field input {
+    margin-right: 0;
+    margin-bottom: 8px;
+  }
+
+  .modal-content {
+    width: 95%;
+  }
+}
+
+/* 人脸状态输入框样式 */
+.face-status-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.face-status-text {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: 14px;
+  border: 1px solid #ddd;
+  background-color: #f5f5f5;
+  color: #333;
+  text-align: center;
+  width: 100px; /* 固定宽度使其看起来更整齐 */
+}
+
+/* 已录入 - 绿色 */
+.face-status-text.face-status-recorded {
+  background: #d4edda;
+  color: #155724;
+  border-color: #c3e6cb;
+}
+
+/* 待审核 - 黄色 */
+.face-status-text.face-status-pending {
+  background: #fff3cd;
+  color: #856404;
+  border-color: #ffeaa7;
+}
+
+/* 未录入 - 红色 */
+.face-status-text.face-status-not-recorded {
+  background: #f8d7da;
+  color: #721c24;
+  border-color: #f5c6cb;
+}
+
 </style>

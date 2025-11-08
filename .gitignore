@@ -10,7 +10,7 @@ back_end/__pycache__/
 # 人脸特征点文件
 FaceFeature/
 FaceImage/
-back_end/temp_images/
+temp_images/
 
 # local env files
 .env.local

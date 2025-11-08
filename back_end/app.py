@@ -45,6 +45,7 @@ db = SQLAlchemy(app)
 from routes import *
 from face import *
 from face_verification import *
+from personal_info import *
 
 if __name__ == "__main__":
     # 测试数据库连接
