@@ -2353,6 +2353,11 @@ export default {
       } catch (e) {
         this.leaveMessage = '网络错误'
         this.leaveMessageType = 'error'
+      } finally {
+        // 2秒后自动清除提示信息
+        setTimeout(() => {
+          this.leaveMessage = ''
+        }, 2000)
       }
     },
 

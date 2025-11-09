@@ -12,6 +12,10 @@ FaceFeature/
 FaceImage/
 temp_images/
 
+# 图片文件
+*.jpg
+*.png
+
 # local env files
 .env.local
 .env.*.local
