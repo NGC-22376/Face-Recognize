@@ -444,7 +444,7 @@ def generate_historical_monthly_stats():
 
 
 def insert_absence_data():
-    """为部分员工生成模拟请假数据"""
+    """为部分员工生成模拟请假数据，涵盖各种类型和状态"""
     with app.app_context():
         try:
             print("\n正在生成模拟请假数据...")
@@ -456,42 +456,162 @@ def insert_absence_data():
             # 获取所有员工
             employees = User.query.filter(User.role == "员工").all()
 
-            # 生成40条请假记录
+            # 生成100条请假记录
             absence_records = []
-            for _ in range(40):
+            
+            # 定义请假类型和对应的中文描述
+            absence_types = [
+                (0, "病假"),
+                (1, "私事请假"),
+                (2, "公事请假")
+            ]
+            
+            # 定义请假状态
+            absence_statuses = [
+                (0, "未审批"),
+                (1, "已拒绝"),
+                (2, "已通过")
+            ]
+            
+            # 确保每种类型和状态都有足够的数据
+            # 生成100条记录，其中：
+            # - 30条病假（包含各种状态）
+            # - 30条私事请假（包含各种状态）
+            # - 30条公事请假（包含各种状态）
+            # - 10条随机类型（用于补充）
+            
+            for type_id, type_name in absence_types:
+                # 为每种类型生成30条记录
+                for i in range(30):
+                    # 随机选择一个员工
+                    employee = random.choice(employees)
+                    
+                    # 根据索引确定状态分布，确保每种状态都有覆盖
+                    if i < 10:
+                        status_id, status_name = absence_statuses[0]  # 未审批
+                    elif i < 20:
+                        status_id, status_name = absence_statuses[1]  # 已拒绝
+                    else:
+                        status_id, status_name = absence_statuses[2]  # 已通过
+                    
+                    # 生成不同时间段的请假日期
+                    # 前10条：过去一个月内的请假
+                    # 中间10条：当前日期附近的请假
+                    # 后10条：未来一个月内的请假
+                    if i < 10:
+                        # 过去一个月
+                        days_offset = random.randint(-30, -1)
+                    elif i < 20:
+                        # 当前日期附近
+                        days_offset = random.randint(-5, 5)
+                    else:
+                        # 未来一个月
+                        days_offset = random.randint(1, 30)
+                    
+                    start_date = today + timedelta(days=days_offset)
+                    end_date = start_date + timedelta(days=random.randint(1, 10))
+
+                    # 生成针对不同类型请假的原因
+                    reason_templates = {
+                        0: [  # 病假原因
+                            "感冒发烧，需要休息治疗",
+                            "肠胃不适，去医院检查",
+                            "头痛严重，需要就医",
+                            "牙痛难忍，预约看牙医",
+                            "腰椎疼痛，需要理疗",
+                            "眼部不适，眼科复查",
+                            "皮肤过敏，需要药物治疗",
+                            "血压偏高，定期检查",
+                            "呼吸道感染，需要输液",
+                            "身体疲劳，需要调养"
+                        ],
+                        1: [  # 私事请假原因
+                            "家中有事，需要处理",
+                            "家庭聚会，庆祝生日",
+                            "个人事务处理",
+                            "朋友婚礼，需要出席",
+                            "搬家整理，需要时间",
+                            "家人手术，需要陪护",
+                            "孩子学校家长会",
+                            "房屋维修，需要监督",
+                            "银行办理重要业务",
+                            "照顾生病家属"
+                        ],
+                        2: [  # 公事请假原因
+                            "参加重要会议",
+                            "外出培训学习",
+                            "处理紧急工作事务",
+                            "出差洽谈业务",
+                            "参加行业展会",
+                            "公司团建活动",
+                            "接待重要客户",
+                            "参加学术研讨会",
+                            "外出调研考察",
+                            "参加政府会议"
+                        ]
+                    }
+                    
+                    reason = random.choice(reason_templates[type_id])
+
+                    # 创建请假记录
+                    absence = Absence(
+                        user_id=employee.user_id,
+                        start_time=datetime.combine(start_date, time(9, 0)),
+                        end_time=datetime.combine(end_date, time(18, 0)),
+                        reason=reason,
+                        status=status_id,
+                        absence_type=type_id,
+                    )
+                    absence_records.append(absence)
+            
+            # 生成额外的10条随机类型记录
+            for _ in range(10):
                 # 随机选择一个员工
                 employee = random.choice(employees)
-
-                # 随机选择请假类型 (0:病假, 1:私事请假, 2:公事请假)
-                absence_type = random.randint(0, 2)
-
-                # 随机生成请假日期 (在未来一个月内)
-                start_date = today + timedelta(days=random.randint(1, 30))
+                
+                # 随机选择请假类型
+                type_id, type_name = random.choice(absence_types)
+                
+                # 随机选择状态
+                status_id, status_name = random.choice(absence_statuses)
+                
+                # 随机生成请假日期 (在过去或未来一个月内)
+                days_offset = random.randint(-30, 30)
+                start_date = today + timedelta(days=days_offset)
                 end_date = start_date + timedelta(days=random.randint(1, 10))
+                
+                # 根据类型选择原因
+                reason_templates = {
+                    0: [  # 病假原因
+                        "身体不适，需要休息",
+                        "去医院体检",
+                        "需要复诊治疗",
+                        "药物副作用反应"
+                    ],
+                    1: [  # 私事请假原因
+                        "处理个人事务",
+                        "家庭安排调整",
+                        "私人约会",
+                        "其他私人事务"
+                    ],
+                    2: [  # 公事请假原因
+                        "公务外出",
+                        "临时工作安排",
+                        "参加会议",
+                        "紧急工作任务"
+                    ]
+                }
+                
+                reason = random.choice(reason_templates[type_id])
 
-                # 生成请假原因
-                reasons = [
-                    "身体不适，需要休息",
-                    "家中有事，需要处理",
-                    "参加重要会议",
-                    "外出培训学习",
-                    "处理紧急工作事务",
-                    "家庭聚会",
-                    "个人事务处理",
-                    "医疗检查",
-                    "朋友婚礼",
-                    "其他私人事务",
-                ]
-                reason = random.choice(reasons)
-
-                # 创建请假记录 (状态设为未审批: 0)
+                # 创建请假记录
                 absence = Absence(
                     user_id=employee.user_id,
                     start_time=datetime.combine(start_date, time(9, 0)),
                     end_time=datetime.combine(end_date, time(18, 0)),
                     reason=reason,
-                    status=0,  # 未审批
-                    absence_type=absence_type,
+                    status=status_id,
+                    absence_type=type_id,
                 )
                 absence_records.append(absence)
 
@@ -500,6 +620,17 @@ def insert_absence_data():
                 db.session.add_all(absence_records)
                 db.session.commit()
                 print(f"成功生成并插入了 {len(absence_records)} 条模拟请假记录。")
+                
+                # 统计各类数据
+                type_counts = {0: 0, 1: 0, 2: 0}
+                status_counts = {0: 0, 1: 0, 2: 0}
+                
+                for record in absence_records:
+                    type_counts[record.absence_type] += 1
+                    status_counts[record.status] += 1
+                
+                print(f"请假类型统计: 病假({type_counts[0]}), 私事请假({type_counts[1]}), 公事请假({type_counts[2]})")
+                print(f"请假状态统计: 未审批({status_counts[0]}), 已拒绝({status_counts[1]}), 已通过({status_counts[2]})")
             else:
                 print("没有生成任何模拟请假记录。")
 

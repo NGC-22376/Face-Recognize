@@ -275,7 +275,7 @@ def attendance():
         )
         db.session.add(new_attendance)
         db.session.commit()
-        
+
         # 更新月度统计信息
         update_monthly_attendance_stats(current_user_id)
 
@@ -324,10 +324,10 @@ def attendance():
             today_attendance.status = "正常"
 
         db.session.commit()
-        
+
         # 更新月度统计信息
         update_monthly_attendance_stats(current_user_id)
-        
+
         return jsonify({"message": "Clock-out recorded successfully"}), 200
 
 
@@ -385,7 +385,7 @@ def update_monthly_attendance_stats(user_id):
     now = datetime.now(SHANGHAI_TZ)
     current_year = now.year
     current_month = now.month
-    
+
     # 获取员工本月的所有考勤记录
     attendance_records = Attendance.query.filter(
         and_(
@@ -394,13 +394,13 @@ def update_monthly_attendance_stats(user_id):
             extract("month", Attendance.clock_in_time) == current_month,
         )
     ).all()
-    
+
     # 计算最早和最晚打卡时间
     earliest_clock_in = None
     latest_clock_in = None
     earliest_clock_out = None
     latest_clock_out = None
-    
+
     for record in attendance_records:
         if record.clock_in_time:
             clock_in_time = record.clock_in_time.time()
@@ -408,14 +408,14 @@ def update_monthly_attendance_stats(user_id):
                 earliest_clock_in = clock_in_time
             if not latest_clock_in or clock_in_time > latest_clock_in:
                 latest_clock_in = clock_in_time
-                
+
         if record.clock_out_time:
             clock_out_time = record.clock_out_time.time()
             if not earliest_clock_out or clock_out_time < earliest_clock_out:
                 earliest_clock_out = clock_out_time
             if not latest_clock_out or clock_out_time > latest_clock_out:
                 latest_clock_out = clock_out_time
-    
+
     # 获取或创建月度统计记录
     monthly_stats = MonthlyAttendanceStats.query.filter(
         and_(
@@ -424,21 +424,19 @@ def update_monthly_attendance_stats(user_id):
             MonthlyAttendanceStats.month == current_month,
         )
     ).first()
-    
+
     if not monthly_stats:
         monthly_stats = MonthlyAttendanceStats(
-            user_id=user_id,
-            year=current_year,
-            month=current_month
+            user_id=user_id, year=current_year, month=current_month
         )
         db.session.add(monthly_stats)
-    
+
     # 更新统计信息
     monthly_stats.earliest_clock_in = earliest_clock_in
     monthly_stats.latest_clock_in = latest_clock_in
     monthly_stats.earliest_clock_out = earliest_clock_out
     monthly_stats.latest_clock_out = latest_clock_out
-    
+
     db.session.commit()
 
 
@@ -773,112 +771,151 @@ def get_period_attendance_stats():
     # 获取请假统计（按阶段）
     def get_absence_stats_by_phase():
         absence_stats = []
-        
+
         # 定义阶段
         phases = [
             ("第一阶段", start_date, phase1_end),
             ("第二阶段", phase1_end + timedelta(days=1), phase2_end),
-            ("第三阶段", phase2_end + timedelta(days=1), phase3_end)
+            ("第三阶段", phase2_end + timedelta(days=1), phase3_end),
         ]
-        
+
         for phase_name, phase_start, phase_end in phases:
             # 病假 (absence_type = 0)
-            sick_leave = db.session.query(func.count(Absence.id)).filter(
-                and_(
-                    Absence.absence_type == 0,
-                    Absence.status == 2,  # 已批准
-                    func.date(Absence.start_time) <= phase_end,
-                    func.date(Absence.end_time) >= phase_start
+            sick_leave = (
+                db.session.query(func.count(Absence.id))
+                .filter(
+                    and_(
+                        Absence.absence_type == 0,
+                        Absence.status == 2,  # 已批准
+                        func.date(Absence.start_time) <= phase_end,
+                        func.date(Absence.end_time) >= phase_start,
+                    )
                 )
-            ).scalar() or 0
-            
+                .scalar()
+                or 0
+            )
+
             # 私事请假 (absence_type = 1)
-            personal_leave = db.session.query(func.count(Absence.id)).filter(
-                and_(
-                    Absence.absence_type == 1,
-                    Absence.status == 2,  # 已批准
-                    func.date(Absence.start_time) <= phase_end,
-                    func.date(Absence.end_time) >= phase_start
+            personal_leave = (
+                db.session.query(func.count(Absence.id))
+                .filter(
+                    and_(
+                        Absence.absence_type == 1,
+                        Absence.status == 2,  # 已批准
+                        func.date(Absence.start_time) <= phase_end,
+                        func.date(Absence.end_time) >= phase_start,
+                    )
                 )
-            ).scalar() or 0
-            
+                .scalar()
+                or 0
+            )
+
             # 公事请假 (absence_type = 2)
-            official_leave = db.session.query(func.count(Absence.id)).filter(
-                and_(
-                    Absence.absence_type == 2,
-                    Absence.status == 2,  # 已批准
-                    func.date(Absence.start_time) <= phase_end,
-                    func.date(Absence.end_time) >= phase_start
+            official_leave = (
+                db.session.query(func.count(Absence.id))
+                .filter(
+                    and_(
+                        Absence.absence_type == 2,
+                        Absence.status == 2,  # 已批准
+                        func.date(Absence.start_time) <= phase_end,
+                        func.date(Absence.end_time) >= phase_start,
+                    )
                 )
-            ).scalar() or 0
-            
-            absence_stats.append({
-                "phase": phase_name,
-                "sick_leave": sick_leave,      # 病假
-                "personal_leave": personal_leave,  # 私事请假
-                "official_leave": official_leave   # 公事请假
-            })
-            
+                .scalar()
+                or 0
+            )
+
+            absence_stats.append(
+                {
+                    "phase": phase_name,
+                    "sick_leave": sick_leave,  # 病假
+                    "personal_leave": personal_leave,  # 私事请假
+                    "official_leave": official_leave,  # 公事请假
+                }
+            )
+
         return absence_stats
 
     # 获取出勤统计（按阶段）
     def get_attendance_stats_by_phase():
         attendance_stats = []
-        
+
         # 定义阶段
         phases = [
             ("第一阶段", start_date, phase1_end),
             ("第二阶段", phase1_end + timedelta(days=1), phase2_end),
-            ("第三阶段", phase2_end + timedelta(days=1), phase3_end)
+            ("第三阶段", phase2_end + timedelta(days=1), phase3_end),
         ]
-        
+
         for phase_name, phase_start, phase_end in phases:
             # 正常出勤
-            normal = db.session.query(func.count(Attendance.attendance_id)).filter(
-                and_(
-                    func.date(Attendance.clock_in_time) >= phase_start,
-                    func.date(Attendance.clock_in_time) <= phase_end,
-                    Attendance.status == "正常"
+            normal = (
+                db.session.query(func.count(Attendance.attendance_id))
+                .filter(
+                    and_(
+                        func.date(Attendance.clock_in_time) >= phase_start,
+                        func.date(Attendance.clock_in_time) <= phase_end,
+                        Attendance.status == "正常",
+                    )
                 )
-            ).scalar() or 0
-            
+                .scalar()
+                or 0
+            )
+
             # 迟到
-            late = db.session.query(func.count(Attendance.attendance_id)).filter(
-                and_(
-                    func.date(Attendance.clock_in_time) >= phase_start,
-                    func.date(Attendance.clock_in_time) <= phase_end,
-                    Attendance.status == "迟到"
+            late = (
+                db.session.query(func.count(Attendance.attendance_id))
+                .filter(
+                    and_(
+                        func.date(Attendance.clock_in_time) >= phase_start,
+                        func.date(Attendance.clock_in_time) <= phase_end,
+                        Attendance.status == "迟到",
+                    )
                 )
-            ).scalar() or 0
-            
+                .scalar()
+                or 0
+            )
+
             # 早退
-            early = db.session.query(func.count(Attendance.attendance_id)).filter(
-                and_(
-                    func.date(Attendance.clock_in_time) >= phase_start,
-                    func.date(Attendance.clock_in_time) <= phase_end,
-                    Attendance.status == "早退"
+            early = (
+                db.session.query(func.count(Attendance.attendance_id))
+                .filter(
+                    and_(
+                        func.date(Attendance.clock_in_time) >= phase_start,
+                        func.date(Attendance.clock_in_time) <= phase_end,
+                        Attendance.status == "早退",
+                    )
                 )
-            ).scalar() or 0
-            
-            # 加班（这里假设加班是指正常工作时间外的打卡）
-            # 为了简化，我们可以通过 clock_out_time 晚于 18:00 来判断加班
-            overtime = db.session.query(func.count(Attendance.attendance_id)).filter(
-                and_(
-                    func.date(Attendance.clock_in_time) >= phase_start,
-                    func.date(Attendance.clock_in_time) <= phase_end,
-                    Attendance.clock_out_time.isnot(None),
-                    extract('hour', Attendance.clock_out_time) > 18
+                .scalar()
+                or 0
+            )
+
+            # 加班（下班打卡时间晚于18:00的人数）
+            overtime = (
+                db.session.query(func.count(Attendance.attendance_id))
+                .filter(
+                    and_(
+                        func.date(Attendance.clock_in_time) >= phase_start,
+                        func.date(Attendance.clock_in_time) <= phase_end,
+                        Attendance.clock_out_time.isnot(None),
+                        Attendance.clock_out_time
+                        > func.date(Attendance.clock_out_time) + timedelta(hours=18),
+                    )
                 )
-            ).scalar() or 0
-            
-            attendance_stats.append({
-                "phase": phase_name,
-                "normal": normal,      # 正常
-                "late": late,          # 迟到
-                "early": early,        # 早退
-                "overtime": overtime   # 加班
-            })
-            
+                .scalar()
+                or 0
+            )
+
+            attendance_stats.append(
+                {
+                    "phase": phase_name,
+                    "normal": normal,  # 正常
+                    "late": late,  # 迟到
+                    "early": early,  # 早退
+                    "overtime": overtime,  # 加班
+                }
+            )
+
         return attendance_stats
 
     # 获取统计数据
@@ -889,27 +926,29 @@ def get_period_attendance_stats():
     phase_ranges = {
         "第一阶段": {
             "start": start_date.strftime("%Y-%m-%d"),
-            "end": phase1_end.strftime("%Y-%m-%d")
+            "end": phase1_end.strftime("%Y-%m-%d"),
         },
         "第二阶段": {
             "start": (phase1_end + timedelta(days=1)).strftime("%Y-%m-%d"),
-            "end": phase2_end.strftime("%Y-%m-%d")
+            "end": phase2_end.strftime("%Y-%m-%d"),
         },
         "第三阶段": {
             "start": (phase2_end + timedelta(days=1)).strftime("%Y-%m-%d"),
-            "end": phase3_end.strftime("%Y-%m-%d")
-        }
+            "end": phase3_end.strftime("%Y-%m-%d"),
+        },
     }
 
     return (
-        jsonify({
-            "start_date": start_date.strftime("%Y-%m-%d"),
-            "end_date": end_date.strftime("%Y-%m-%d"),
-            "phase_ranges": phase_ranges,
-            "absence_stats": absence_stats,
-            "attendance_stats": attendance_stats
-        }),
-        200
+        jsonify(
+            {
+                "start_date": start_date.strftime("%Y-%m-%d"),
+                "end_date": end_date.strftime("%Y-%m-%d"),
+                "phase_ranges": phase_ranges,
+                "absence_stats": absence_stats,
+                "attendance_stats": attendance_stats,
+            }
+        ),
+        200,
     )
 
 
@@ -1008,7 +1047,7 @@ def get_employees_attendance():
         # 查找员工的人脸照片URL
         face = Face.query.filter_by(user_id=row.user_id).first()
         photo_url = face.image_path if face else None
-        
+
         employees_list.append(
             {
                 "user_id": row.user_id,
@@ -1113,129 +1152,144 @@ def get_employee_detail(employee_id):
     # 获取本月第一天和今天
     first_day_of_month = now.replace(day=1)
     today = now.date()
-    
+
     # 计算三周的数据
     weeks_data = []
     week_start = first_day_of_month
-    
+
     # 计算本月第一周的开始日期（周一）
     while week_start.weekday() != 0:  # 0表示周一
         week_start -= timedelta(days=1)
-    
+
     # 生成最近三周的数据
     for i in range(3):
         week_end = week_start + timedelta(days=6)
         # 确保周结束日期不超过今天
         if week_end.date() > today:
             week_end = datetime.combine(today, time(23, 59, 59))
-        
-        weeks_data.append({
-            "start": week_start.date(),
-            "end": week_end.date()
-        })
-        
+
+        weeks_data.append({"start": week_start.date(), "end": week_end.date()})
+
         # 移动到下一周
         week_start = week_end.date() + timedelta(days=1)
         # 调整到周一
         while week_start.weekday() != 0:
             week_start += timedelta(days=1)
-    
-    # 计算每周的迟到和早退次数
-    attendance_trend_data = {
-        "weeks": [],
-        "late": [],
-        "earlyLeave": []
-    }
-    
+
+    # 计算每周的迟到、早退和加班次数
+    attendance_trend_data = {"weeks": [], "late": [], "earlyLeave": [], "overtime": []}
+
     for week in weeks_data:
         # 格式化周显示名称
         week_name = f"{week['start'].strftime('%m.%d')}-{week['end'].strftime('%m.%d')}"
         attendance_trend_data["weeks"].append(week_name)
-        
+
         # 计算迟到次数
         late_count = Attendance.query.filter(
             and_(
                 Attendance.user_id == employee_id,
                 func.date(Attendance.clock_in_time) >= week["start"],
                 func.date(Attendance.clock_in_time) <= week["end"],
-                Attendance.status == "迟到"
+                Attendance.status == "迟到",
             )
         ).count()
         attendance_trend_data["late"].append(late_count)
-        
+
         # 计算早退次数
         early_leave_count = Attendance.query.filter(
             and_(
                 Attendance.user_id == employee_id,
                 func.date(Attendance.clock_in_time) >= week["start"],
                 func.date(Attendance.clock_in_time) <= week["end"],
-                Attendance.status == "早退"
+                Attendance.status == "早退",
             )
         ).count()
         attendance_trend_data["earlyLeave"].append(early_leave_count)
+
+        # 计算加班次数（下班打卡时间晚于18:00）
+        overtime_count = Attendance.query.filter(
+            and_(
+                Attendance.user_id == employee_id,
+                func.date(Attendance.clock_in_time) >= week["start"],
+                func.date(Attendance.clock_in_time) <= week["end"],
+                Attendance.clock_out_time.isnot(None),
+                extract("hour", Attendance.clock_out_time) > 18,
+            )
+        ).count()
+        attendance_trend_data["overtime"].append(overtime_count)
 
     # 计算最近三周的请假趋势数据
     leave_trend_data = {
         "weeks": [],
         "sickLeave": [],
         "personalLeave": [],
-        "officialLeave": []
+        "officialLeave": [],
     }
-    
+
     for week in weeks_data:
         # 格式化周显示名称
         week_name = f"{week['start'].strftime('%m.%d')}-{week['end'].strftime('%m.%d')}"
         leave_trend_data["weeks"].append(week_name)
-        
+
         # 计算病假次数 (absence_type = 0)
         sick_leave_count = Absence.query.filter(
             and_(
                 Absence.user_id == employee_id,
-                func.date(Absence.start_time) <= week["end"],
-                func.date(Absence.end_time) >= week["start"],
+                func.date(Absence.start_time) <= func.date(week["end"]),
+                func.date(Absence.end_time) >= func.date(week["start"]),
                 Absence.absence_type == 0,
-                Absence.status == 2  # 已批准
+                Absence.status == 2,  # 已批准
             )
         ).count()
         leave_trend_data["sickLeave"].append(sick_leave_count)
-        
+
         # 计算私事请假次数 (absence_type = 1)
         personal_leave_count = Absence.query.filter(
             and_(
                 Absence.user_id == employee_id,
-                func.date(Absence.start_time) <= week["end"],
-                func.date(Absence.end_time) >= week["start"],
+                func.date(Absence.start_time) <= func.date(week["end"]),
+                func.date(Absence.end_time) >= func.date(week["start"]),
                 Absence.absence_type == 1,
-                Absence.status == 2  # 已批准
+                Absence.status == 2,  # 已批准
             )
         ).count()
         leave_trend_data["personalLeave"].append(personal_leave_count)
-        
+
         # 计算公事请假次数 (absence_type = 2)
         official_leave_count = Absence.query.filter(
             and_(
                 Absence.user_id == employee_id,
-                func.date(Absence.start_time) <= week["end"],
-                func.date(Absence.end_time) >= week["start"],
+                func.date(Absence.start_time) <= func.date(week["end"]),
+                func.date(Absence.end_time) >= func.date(week["start"]),
                 Absence.absence_type == 2,
-                Absence.status == 2  # 已批准
+                Absence.status == 2,  # 已批准
             )
         ).count()
         leave_trend_data["officialLeave"].append(official_leave_count)
 
-    return jsonify({
-        "employee": {
-            "user_id": employee.user_id,
-            "name": employee.name,
-            "account": employee.account
-        },
-        "earliestClockIn": earliest_clock_in.strftime("%H:%M") if earliest_clock_in else "",
-        "latestClockIn": latest_clock_in.strftime("%H:%M") if latest_clock_in else "",
-        "earliestClockOut": earliest_clock_out.strftime("%H:%M") if earliest_clock_out else "",
-        "latestClockOut": latest_clock_out.strftime("%H:%M") if latest_clock_out else "",
-        "attendanceTrendData": attendance_trend_data,
-        "leaveTrendData": leave_trend_data
-    }), 200
+    return jsonify(
+        {
+            "employee": {
+                "user_id": employee.user_id,
+                "name": employee.name,
+                "account": employee.account,
+            },
+            "earliestClockIn": earliest_clock_in.strftime("%H:%M")
+            if earliest_clock_in
+            else "",
+            "latestClockIn": latest_clock_in.strftime("%H:%M")
+            if latest_clock_in
+            else "",
+            "earliestClockOut": earliest_clock_out.strftime("%H:%M")
+            if earliest_clock_out
+            else "",
+            "latestClockOut": latest_clock_out.strftime("%H:%M")
+            if latest_clock_out
+            else "",
+            "attendanceTrendData": attendance_trend_data,
+            "leaveTrendData": leave_trend_data,
+        }
+    ), 200
 
 
 # 请假申请：用户提交
@@ -1365,26 +1419,26 @@ def get_personal_absences():
 def cancel_absence(absence_id):
     try:
         current_user_id = int(get_jwt_identity())
-        
+
         # 查找请假记录
         absence = Absence.query.get(absence_id)
-        
+
         # 检查记录是否存在
         if not absence:
             return jsonify(message="请假申请不存在"), 404
-            
+
         # 检查是否是本人的申请
         if absence.user_id != current_user_id:
             return jsonify(message="无权限操作此申请"), 403
-            
+
         # 检查申请状态是否为未处理（status=0）
         if absence.status != 0:
             return jsonify(message="只能撤销未处理的请假申请"), 400
-            
+
         # 删除请假记录
         db.session.delete(absence)
         db.session.commit()
-        
+
         return jsonify(message="请假申请已撤销"), 200
     except Exception as e:
         db.session.rollback()
@@ -1543,6 +1597,7 @@ def admin_batch_review_absence():
         message=f"成功处理 {success_count} 条申请", success_count=success_count
     ), 200
 
+
 @app.route("/employees", methods=["GET"])
 @jwt_required()
 def get_all_employees():
@@ -1552,13 +1607,16 @@ def get_all_employees():
         # 查找 Face 表中与该员工 user_id 匹配的图片路径
         face = Face.query.filter_by(user_id=emp.user_id).first()
         photo_url = face.image_path if face else None
-        employee_list.append({
-            "user_id": emp.user_id,
-            "name": emp.name,
-            "account": emp.account,
-            "photo_url": photo_url,
-        })
+        employee_list.append(
+            {
+                "user_id": emp.user_id,
+                "name": emp.name,
+                "account": emp.account,
+                "photo_url": photo_url,
+            }
+        )
     return jsonify({"employees": employee_list}), 200
+
 
 # 管理员查看指定员工考勤记录
 @app.route("/attendance/<int:user_id>", methods=["GET"])
@@ -1578,10 +1636,16 @@ def get_employee_attendance(user_id):
     )
     records_list = []
     for record in records:
-        records_list.append({
-            "attendance_id": record.attendance_id,
-            "clock_in_time": record.clock_in_time.strftime("%Y-%m-%d %H:%M:%S") if record.clock_in_time else None,
-            "clock_out_time": record.clock_out_time.strftime("%Y-%m-%d %H:%M:%S") if record.clock_out_time else None,
-            "status": record.status,
-        })
+        records_list.append(
+            {
+                "attendance_id": record.attendance_id,
+                "clock_in_time": record.clock_in_time.strftime("%Y-%m-%d %H:%M:%S")
+                if record.clock_in_time
+                else None,
+                "clock_out_time": record.clock_out_time.strftime("%Y-%m-%d %H:%M:%S")
+                if record.clock_out_time
+                else None,
+                "status": record.status,
+            }
+        )
     return jsonify({"attendance": records_list}), 200

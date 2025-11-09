@@ -1376,34 +1376,7 @@ export default {
       leaveTrendChartInstance: null,
       // 员工管理界面相关
       attendanceDialogVisible: false,
-      currentAttendanceEmployee: null,
-
-      //个人信息
-      isUploading: false,
-      avatarBlobUrl: '',
-      isSaving: false,
-      profileMessage: '',
-      profileMessageType: '',
-      userInfo: {},
-      // 模态框状态
-      showPasswordModal: false,
-      showAnswerSecurityModal: false,
-      editingAnswerIndex: 1,
-      isUpdatingPassword: false,
-      isUpdatingAnswer: false,
-      // 表单数据
-      passwordForm: {
-        oldPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-      },
-      answerForm: {
-        newAnswer: '',
-        confirmAnswer: ''
-      },
-      //人脸状态
-      faceStatus: '未录入',
-      isReEnrolling: false,
+      currentAttendanceEmployee: null
     }
   },
   watch: {
@@ -3086,8 +3059,7 @@ export default {
             attendanceTrendData: {
               weeks: ['第1周', '第2周', '第3周'],
               late: [2, 1, 3],
-              earlyLeave: [1, 0, 2],
-              overtime: [0, 1, 2]
+              earlyLeave: [1, 0, 2]
             },
             leaveTrendData: {
               weeks: ['第1周', '第2周', '第3周'],
@@ -3108,8 +3080,7 @@ export default {
           attendanceTrendData: {
             weeks: ['第1周', '第2周', '第3周'],
             late: [2, 1, 3],
-            earlyLeave: [1, 0, 2],
-            overtime: [0, 1, 2]
+            earlyLeave: [1, 0, 2]
           },
           leaveTrendData: {
             weeks: ['第1周', '第2周', '第3周'],
@@ -3142,8 +3113,7 @@ export default {
         attendanceTrendData: {
           weeks: [],
           late: [],
-          earlyLeave: [],
-          overtime: []
+          earlyLeave: []
         },
         leaveTrendData: {
           weeks: [],
@@ -3229,30 +3199,13 @@ export default {
       const weeks = this.employeeDetail.attendanceTrendData.weeks;
       const lateData = this.employeeDetail.attendanceTrendData.late;
       const earlyLeaveData = this.employeeDetail.attendanceTrendData.earlyLeave;
-      const overtimeData = this.employeeDetail.attendanceTrendData.overtime;
 
       const option = {
         tooltip: {
-          trigger: 'axis',
-          formatter: (params) => {
-            // params是一个数组，包含所有系列在该点的数据
-            if (params.length > 0) {
-              const dataIndex = params[0].dataIndex;
-              // 确保索引有效
-              if (dataIndex >= 0 && dataIndex < weeks.length) {
-                const weekRange = weeks[dataIndex];
-                let tooltipText = `${weekRange}<br/>`;
-                params.forEach(param => {
-                  tooltipText += `${param.marker} ${param.seriesName}: ${param.data}<br/>`;
-                });
-                return tooltipText;
-              }
-            }
-            return '';
-          }
+          trigger: 'axis'
         },
         legend: {
-          data: ['迟到次数', '早退次数', '加班次数'],
+          data: ['迟到次数', '早退次数'],
           top: '10%'
         },
         xAxis: {
@@ -3277,18 +3230,18 @@ export default {
             data: earlyLeaveData,
             smooth: true,
             itemStyle: { color: '#3b82f6' } // 蓝色
-          },
-          {
-            name: '加班次数',
-            type: 'line',
-            data: overtimeData,
-            smooth: true,
-            itemStyle: { color: '#8b5cf6' } // 紫色
           }
         ]
       };
 
       chart.setOption(option);
+
+      // 添加鼠标悬停事件监听器
+      chart.on('mouseover', (params) => {
+        if (params.componentType === 'series') {
+          this.showTooltip(event, 'abnormal', params.dataIndex);
+        }
+      });
     },
 
     // 渲染请假趋势图
@@ -3321,23 +3274,7 @@ export default {
 
       const option = {
         tooltip: {
-          trigger: 'axis',
-          formatter: (params) => {
-            // params是一个数组，包含所有系列在该点的数据
-            if (params.length > 0) {
-              const dataIndex = params[0].dataIndex;
-              // 确保索引有效
-              if (dataIndex >= 0 && dataIndex < weeks.length) {
-                const weekRange = weeks[dataIndex];
-                let tooltipText = `${weekRange}<br/>`;
-                params.forEach(param => {
-                  tooltipText += `${param.marker} ${param.seriesName}: ${param.data}<br/>`;
-                });
-                return tooltipText;
-              }
-            }
-            return '';
-          }
+          trigger: 'axis'
         },
         legend: {
           data: ['病假', '私事请假', '公事请假'],
@@ -3377,6 +3314,13 @@ export default {
       };
 
       chart.setOption(option);
+
+      // 添加鼠标悬停事件监听器
+      chart.on('mouseover', (params) => {
+        if (params.componentType === 'series') {
+          this.showTooltip(event, 'leave', params.dataIndex);
+        }
+      });
     },
 
     // 显示图表悬停提示
@@ -3392,9 +3336,7 @@ export default {
       // 确保有数据且索引有效
       if (weeksData.length > 0 && dataIndex >= 0 && dataIndex < weeksData.length) {
         const weekRange = weeksData[dataIndex];
-        // 显示"第x周"在上一行，日期范围在下一行
-        const weekNumber = dataIndex + 1;
-        this.tooltip.content = `第${weekNumber}周\n${weekRange}`;
+        this.tooltip.content = `${weekRange}`;
         this.tooltip.chartType = chartType;
         this.tooltip.visible = true;
 
@@ -3547,7 +3489,7 @@ export default {
   font-size: 14px;
   z-index: 1000;
   pointer-events: none;
-  white-space: pre-line;
+  white-space: nowrap;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
