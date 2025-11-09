@@ -57,6 +57,9 @@ class Attendance(db.Model):
     clock_in_time = db.Column(db.DateTime, nullable=True)
     clock_out_time = db.Column(db.DateTime, nullable=True)
     status = db.Column(db.String(50))
+    work_date = db.Column(db.Date, nullable=True)  # 工作日期
+    clock_in_status = db.Column(db.String(50), nullable=True)  # 上班打卡状态：正常、迟到
+    clock_out_status = db.Column(db.String(50), nullable=True)  # 下班打卡状态：正常、早退、加班、未签退
 
 
 class Absence(db.Model):
@@ -88,6 +91,15 @@ class MonthlyAttendanceStats(db.Model):
     latest_clock_in = db.Column(db.Time, nullable=True)
     earliest_clock_out = db.Column(db.Time, nullable=True)
     latest_clock_out = db.Column(db.Time, nullable=True)
+    
+    # 考勤状态统计字段
+    normal_count = db.Column(db.Integer, default=0)
+    late_count = db.Column(db.Integer, default=0)
+    early_leave_count = db.Column(db.Integer, default=0)
+    overtime_count = db.Column(db.Integer, default=0)
+    no_checkout_count = db.Column(db.Integer, default=0)
+    absence_count = db.Column(db.Integer, default=0)
+    leave_count = db.Column(db.Integer, default=0)
     
     # 确保每个用户每月只有一条记录
     __table_args__ = (db.UniqueConstraint('user_id', 'year', 'month', name='unique_user_month'),)

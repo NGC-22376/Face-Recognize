@@ -129,7 +129,7 @@
                   <option value="late_count">迟到次数</option>
                   <option value="early_leave_count">早退次数</option>
                   <option value="normal_count">正常次数</option>
-                  <option value="leave_count">请假次数</option>
+                  <option value="leave_count">请假天数</option>
                 </select>
                 <select v-model="sortOrder" @change="loadEmployeesData">
                   <option value="asc">升序</option>
@@ -151,7 +151,7 @@
                   <th>迟到次数</th>
                   <th>早退次数</th>
                   <th>正常次数</th>
-                  <th>请假次数</th>
+                  <th>请假天数</th>
                   <th>应出勤天数</th>
                 </tr>
               </thead>
@@ -739,10 +739,9 @@
             <table>
               <thead>
                 <tr>
-                  <th style="width: 25%;">姓名</th>
-                  <th style="width: 25%;">工号</th>
-                  <th style="width: 25%;">人脸照片</th>
-                  <th style="width: 25%;">操作</th>
+                  <th style="width: 33.33%;">姓名</th>
+                  <th style="width: 33.33%;">工号</th>
+                  <th style="width: 33.33%;">人脸照片</th>
                 </tr>
               </thead>
               <tbody>
@@ -752,9 +751,6 @@
                   <td>
                     <img :src="getEmployeePhotoUrl(employee.photo_url)" alt="人脸照片"
                       style="width: 100px; height: 100px; object-fit: cover;" />
-                  </td>
-                  <td>
-                    <el-button type="primary" @click="viewAttendance(employee)">查看出勤</el-button>
                   </td>
                 </tr>
               </tbody>
@@ -1209,7 +1205,7 @@ export default {
     return {
       activeTab: 'personal_info',
       userProfile: {},
-      apiBaseUrl: 'http://localhost:5000',
+      apiBaseUrl: '/api',
       dailyStats: {
         date: '',
         should_attend: 0,
@@ -1445,7 +1441,7 @@ export default {
     } else {
       this.activeTab = 'personal_info';
       await this.loadPersonalInfo();
-      await this.loadPersonalData();
+      await this.loadPersonalDataPure();
     }
 
     // 如果人脸识别完跳回来，自动打卡
@@ -1784,7 +1780,7 @@ export default {
       } else if (tab === 'employee_management') {
         this.loadEmployeesData_c(1)
       } else if (tab === 'personal') {
-        this.loadPersonalData()
+        this.loadPersonalDataPure()
       } else if (tab === 'face_review') {
         this.switchFaceReviewTab('pending')
       } else if (tab === 'leave') {
@@ -2204,6 +2200,30 @@ export default {
       }
     },
 
+    // 获取个人纯考勤数据（不包含请假相关内容）
+    async loadPersonalDataPure() {
+      try {
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${this.apiBaseUrl}/attendance/personal/pure`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          // 更新最近记录
+          this.recentRecords = data.recent_records
+          // 更新考勤统计数据
+          if (data.monthly_stats) {
+            this.personalStats = data.monthly_stats
+          }
+        }
+      } catch (error) {
+        console.error('获取个人纯考勤数据失败:', error)
+        this.$message.error('获取个人纯考勤数据失败')
+      }
+    },
+
     async clockIn() {
       await this.performClock('clock_in')
     },
@@ -2234,7 +2254,7 @@ export default {
           this.clockMessageType = 'success'
           // 刷新数据
           this.loadDashboardData()
-          this.loadPersonalData()
+          this.loadPersonalDataPure()
         } else {
           this.clockMessage = data.message || '打卡失败'
           this.clockMessageType = 'error'
@@ -2417,7 +2437,7 @@ export default {
 
           this.selectedLeave = null;
           // 同步刷新个人考勤（如果涉及到本人）
-          this.loadPersonalData();
+          this.loadPersonalDataPure();
         } else {
           // 服务器返回错误
           alert(data.message || '操作失败：服务器返回错误');
@@ -2925,7 +2945,12 @@ export default {
         },
         yAxis: {
           type: 'value',
-          name: '人数'
+          name: '人数',
+          axisLabel: {
+            formatter: '{value}'
+          },
+          splitNumber: 5,
+          minInterval: 1
         },
         series: [
           {
@@ -3016,7 +3041,12 @@ export default {
         },
         yAxis: {
           type: 'value',
-          name: '人数'
+          name: '人数',
+          axisLabel: {
+            formatter: '{value}'
+          },
+          splitNumber: 5,
+          minInterval: 1
         },
         series: [
           {
@@ -3059,6 +3089,14 @@ export default {
 
       try {
         const token = localStorage.getItem('access_token');
+        if (!token) {
+          alert('登录已过期，请重新登录');
+          this.$router.push('/');
+          return;
+        }
+
+        console.log('请求URL:', `${this.apiBaseUrl}/admin/attendance/employee/${employee.user_id}`);
+
         const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employee/${employee.user_id}`, {
           method: 'GET',
           headers: {
@@ -3066,8 +3104,12 @@ export default {
           }
         });
 
+        console.log('响应状态:', response.status);
+        console.log('响应状态文本:', response.statusText);
+
         if (response.ok) {
           const data = await response.json();
+          console.log('响应数据:', data);
 
           // 设置员工详细信息
           this.employeeDetail = {
@@ -3079,15 +3121,17 @@ export default {
             leaveTrendData: data.leaveTrendData
           };
         } else {
-          console.error('获取员工详细信息失败:', response.status);
+          console.error('获取员工详细信息失败:', response.status, response.statusText);
+          const errorText = await response.text();
+          console.error('错误详情:', errorText);
           // 如果获取失败，显示错误信息，不使用模拟数据
-          alert('获取员工详细信息失败，请稍后重试');
+          alert(`获取员工详细信息失败: ${response.status} ${response.statusText}\n${errorText}`);
           return;
         }
       } catch (error) {
         console.error('获取员工详细信息时发生错误:', error);
         // 如果发生错误，显示错误信息，不使用模拟数据
-        alert('获取员工详细信息时发生网络错误，请检查网络连接后重试');
+        alert(`获取员工详细信息时发生网络错误，请检查网络连接后重试\n错误信息: ${error.message}\n错误堆栈: ${error.stack}`);
         return;
       }
 
@@ -3232,7 +3276,12 @@ export default {
         },
         yAxis: {
           type: 'value',
-          name: '次数'
+          name: '次数',
+          axisLabel: {
+            formatter: '{value}'
+          },
+          splitNumber: 5,
+          minInterval: 1
         },
         series: [
           {
@@ -3320,7 +3369,12 @@ export default {
         },
         yAxis: {
           type: 'value',
-          name: '次数'
+          name: '次数',
+          axisLabel: {
+            formatter: '{value}'
+          },
+          splitNumber: 5,
+          minInterval: 1
         },
         series: [
           {

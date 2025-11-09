@@ -114,16 +114,26 @@
             </div>
           </template>
           <el-table :data="attendanceRecords" stripe style="width: 100%">
-            <el-table-column prop="date" label="日期" width="120"></el-table-column>
-            <el-table-column prop="clock_in_time" label="上班时间" width="120"></el-table-column>
-            <el-table-column prop="clock_out_time" label="下班时间" width="120"></el-table-column>
+            <el-table-column prop="date" label="日期" width="120">
+                  <template #default="scope">
+                    {{ formatDate(scope.row.date) }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="clock_in_time" label="上班时间" width="120">
+                  <template #default="scope">
+                    {{ formatTime(scope.row.clock_in_time) }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="clock_out_time" label="下班时间" width="120">
+                  <template #default="scope">
+                    {{ formatTime(scope.row.clock_out_time) }}
+                  </template>
+                </el-table-column>
             <el-table-column prop="status" label="状态" width="150">
-              <template #default="scope">
-                <el-tag :type="getStatusTagType(scope.row.status)">
-                  {{ getStatusText(scope.row.status) }}
-                </el-tag>
-              </template>
-            </el-table-column>
+            <template #default="scope">
+              <div v-html="getStatusText(scope.row.status)"></div>
+            </template>
+          </el-table-column>
             <el-table-column prop="late_minutes" label="迟到(分钟)" width="100"></el-table-column>
             <el-table-column prop="early_leave_minutes" label="早退(分钟)" width="100"></el-table-column>
           </el-table>
@@ -249,6 +259,7 @@ const fetchAttendanceRecords = async (page = 1) => {
     ).then(r => r.json())
 
     if (res.ok) {
+      // 后端已经处理了请假状态，直接使用返回的数据
       attendanceRecords.value = res.data.records
       totalRecords.value = res.data.total
       currentPage.value = page
@@ -331,7 +342,12 @@ const renderAttendanceChart = (data) => {
     },
     yAxis: {
       type: 'value',
-      name: '次数'
+      name: '次数',
+      axisLabel: {
+        formatter: '{value}'
+      },
+      splitNumber: 5,
+      minInterval: 1
     },
     series: [
       {
@@ -400,7 +416,12 @@ const renderLeaveChart = (data) => {
     },
     yAxis: {
       type: 'value',
-      name: '次数'
+      name: '次数',
+      axisLabel: {
+        formatter: '{value}'
+      },
+      splitNumber: 5,
+      minInterval: 1
     },
     series: [
       {
@@ -445,7 +466,11 @@ const getStatusTagType = (status) => {
     case 'absence':
       return 'danger'
     case 'overtime':
-      return 'primary'
+      return 'primary' // 蓝色
+    case 'leave':
+      return 'info' // 请假状态
+    case '请假':  // 后端可能直接返回中文状态
+      return 'info' // 请假状态
     default:
       return 'info'
   }
@@ -463,12 +488,48 @@ const getStatusText = (status) => {
     case 'absence':
       return '缺勤'
     case 'overtime':
-      return '加班'
+      return '<span style="color: blue">加班</span>' // 加班字体蓝色
+    case 'leave':
+      return '<span style="color: purple">请假</span>' // 请假字体紫色
     case 'not_signed_out':
       return '未签退'
+    case '请假':  // 后端可能直接返回中文状态
+      return '<span style="color: purple">请假</span>' // 请假字体紫色
     default:
-      return status
+      // 对于其他可能的状态值，如果包含"请假"关键字则也显示为请假状态
+      if (status && status.includes('请假')) {
+        return '<span style="color: purple">请假</span>'
+      }
+      return status || '未知'
   }
+}
+
+// 格式化日期函数
+const formatDate = (dateString) => {
+  if (!dateString || dateString === '-' || dateString === 'Invalid Date') return dateString
+  
+  // 处理YYYY-MM-DD格式的日期字符串
+  if (typeof dateString === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    const [year, month, day] = dateString.split('-')
+    const date = new Date(year, month - 1, day)
+    if (!isNaN(date.getTime())) {
+      return date.toLocaleDateString('zh-CN')
+    }
+  }
+  
+  const date = new Date(dateString)
+  // 检查日期是否有效
+  if (isNaN(date.getTime())) return dateString // 返回原始值而不是'Invalid Date'
+  return date.toLocaleDateString('zh-CN')
+}
+
+// 格式化时间函数
+const formatTime = (timeString) => {
+  if (!timeString || timeString === '-' || timeString === 'Invalid Time') return timeString
+  const date = new Date(timeString)
+  // 检查日期是否有效
+  if (isNaN(date.getTime())) return timeString // 返回原始值而不是'Invalid Time'
+  return date.toLocaleTimeString('zh-CN', { hour12: false })
 }
 
 // 初始化所有数据

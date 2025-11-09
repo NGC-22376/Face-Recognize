@@ -194,54 +194,99 @@ def insert_attendance_data():
 
                 # 5. 为每个员工生成当天的考勤记录
                 for user_id in employee_ids:
-                    # 模拟大约5%的缺勤率 (当天无记录)
-                    if random.random() < 0.05:
+                    # 检查是否有请假记录覆盖当天
+                    has_leave = Absence.query.filter(
+                        Absence.user_id == user_id,
+                        Absence.status == 2,  # 已批准的请假
+                        db.func.date(Absence.start_time) <= current_date,
+                        db.func.date(Absence.end_time) >= current_date,
+                    ).first()
+
+                    if has_leave:
+                        # 创建请假状态的考勤记录
+                        record = Attendance(
+                            user_id=user_id, work_date=current_date, status="请假"
+                        )
+                        attendance_records.append(record)
                         continue
 
-                    status_parts = []
+                    # 模拟10%的未出勤（未打卡）
+                    if random.random() < 0.1:
+                        record = Attendance(
+                            user_id=user_id, work_date=current_date, status="未出勤"
+                        )
+                        attendance_records.append(record)
+                        continue
 
                     # --- 生成上班打卡时间 ---
                     base_in_time = datetime.combine(
                         current_date, WORK_START_TIME, tzinfo=SHANGHAI_TZ
                     )
-                    # 模拟15%的迟到率
-                    if random.random() < 0.15:
+                    # 模拟20%的迟到率
+                    if random.random() < 0.2:
                         # 迟到 1 到 59 分钟
                         delay = timedelta(minutes=random.randint(1, 59))
                         clock_in = base_in_time + delay
-                        status_parts.append("迟到")
+                        clock_in_status = "迟到"
                     else:
                         # 正常/早到: 提前 0 到 30 分钟
                         early_arrival = timedelta(minutes=random.randint(0, 30))
                         clock_in = base_in_time - early_arrival
+                        clock_in_status = "正常"
+
+                    # 模拟15%的未签退情况
+                    if random.random() < 0.15:
+                        # 只打卡上班，不打卡下班
+                        record = Attendance(
+                            user_id=user_id,
+                            clock_in_time=clock_in,
+                            work_date=current_date,
+                            status="未签退",
+                            clock_in_status=clock_in_status,
+                            clock_out_status="未签退",
+                        )
+                        attendance_records.append(record)
+                        continue
 
                     # --- 生成下班打卡时间 ---
                     base_out_time = datetime.combine(
                         current_date, WORK_END_TIME, tzinfo=SHANGHAI_TZ
                     )
-                    # 模拟15%的早退率
-                    if random.random() < 0.15:
+                    # 模拟20%的早退率
+                    if random.random() < 0.2:
                         # 早退 1 到 59 分钟
                         early_departure = timedelta(minutes=random.randint(1, 59))
                         clock_out = base_out_time - early_departure
-                        status_parts.append("早退")
-                    else:
-                        # 正常/加班: 延迟 0 到 90 分钟
-                        overtime = timedelta(minutes=random.randint(0, 90))
+                        clock_out_status = "早退"
+                        final_status = "早退"
+                    elif random.random() < 0.2:  # 模拟20%的加班率
+                        # 加班 1 到 120 分钟
+                        overtime = timedelta(minutes=random.randint(1, 120))
                         clock_out = base_out_time + overtime
-
-                    # --- 确定最终状态 ---
-                    if not status_parts:
-                        status = "正常"
+                        clock_out_status = "加班"
+                        final_status = "加班"
                     else:
-                        status = "、".join(status_parts)  # 例如 "迟到、早退"
+                        # 正常下班
+                        clock_out = base_out_time
+                        clock_out_status = "正常"
+                        final_status = "正常"
+
+                    # 如果上班迟到，最终状态需要包含迟到信息
+                    if clock_in_status == "迟到":
+                        if final_status != "正常":
+                            final_status = "迟到、" + final_status
+                        else:
+                            final_status = "迟到"
 
                     # 创建考勤对象
                     record = Attendance(
                         user_id=user_id,
                         clock_in_time=clock_in,
                         clock_out_time=clock_out,
-                        status=status,
+                        work_date=current_date,
+                        status=final_status,
+                        clock_in_status=clock_in_status,
+                        clock_out_status=clock_out_status,
                     )
                     attendance_records.append(record)
 
@@ -333,6 +378,13 @@ def initialize_monthly_attendance_stats():
                         latest_clock_in=latest_clock_in,
                         earliest_clock_out=earliest_clock_out,
                         latest_clock_out=latest_clock_out,
+                        normal_count=0,
+                        late_count=0,
+                        early_leave_count=0,
+                        overtime_count=0,
+                        no_checkout_count=0,
+                        absence_count=0,
+                        leave_count=0,
                     )
                     stats_records.append(monthly_stats)
 
@@ -424,6 +476,13 @@ def generate_historical_monthly_stats():
                             latest_clock_in=latest_clock_in,
                             earliest_clock_out=earliest_clock_out,
                             latest_clock_out=latest_clock_out,
+                            normal_count=random.randint(0, 20),
+                            late_count=random.randint(0, 5),
+                            early_leave_count=random.randint(0, 3),
+                            overtime_count=random.randint(0, 10),
+                            no_checkout_count=0,
+                            absence_count=random.randint(0, 2),
+                            leave_count=random.randint(0, 3),
                         )
                         stats_records.append(monthly_stats)
 
@@ -458,34 +517,26 @@ def insert_absence_data():
 
             # 生成100条请假记录
             absence_records = []
-            
+
             # 定义请假类型和对应的中文描述
-            absence_types = [
-                (0, "病假"),
-                (1, "私事请假"),
-                (2, "公事请假")
-            ]
-            
+            absence_types = [(0, "病假"), (1, "私事请假"), (2, "公事请假")]
+
             # 定义请假状态
-            absence_statuses = [
-                (0, "未审批"),
-                (1, "已拒绝"),
-                (2, "已通过")
-            ]
-            
+            absence_statuses = [(0, "未审批"), (1, "已拒绝"), (2, "已通过")]
+
             # 确保每种类型和状态都有足够的数据
             # 生成100条记录，其中：
             # - 30条病假（包含各种状态）
             # - 30条私事请假（包含各种状态）
             # - 30条公事请假（包含各种状态）
             # - 10条随机类型（用于补充）
-            
+
             for type_id, type_name in absence_types:
                 # 为每种类型生成30条记录
                 for i in range(30):
                     # 随机选择一个员工
                     employee = random.choice(employees)
-                    
+
                     # 根据索引确定状态分布，确保每种状态都有覆盖
                     if i < 10:
                         status_id, status_name = absence_statuses[0]  # 未审批
@@ -493,7 +544,7 @@ def insert_absence_data():
                         status_id, status_name = absence_statuses[1]  # 已拒绝
                     else:
                         status_id, status_name = absence_statuses[2]  # 已通过
-                    
+
                     # 生成不同时间段的请假日期
                     # 前10条：过去一个月内的请假
                     # 中间10条：当前日期附近的请假
@@ -507,7 +558,7 @@ def insert_absence_data():
                     else:
                         # 未来一个月
                         days_offset = random.randint(1, 30)
-                    
+
                     start_date = today + timedelta(days=days_offset)
                     end_date = start_date + timedelta(days=random.randint(1, 10))
 
@@ -523,7 +574,7 @@ def insert_absence_data():
                             "皮肤过敏，需要药物治疗",
                             "血压偏高，定期检查",
                             "呼吸道感染，需要输液",
-                            "身体疲劳，需要调养"
+                            "身体疲劳，需要调养",
                         ],
                         1: [  # 私事请假原因
                             "家中有事，需要处理",
@@ -535,7 +586,7 @@ def insert_absence_data():
                             "孩子学校家长会",
                             "房屋维修，需要监督",
                             "银行办理重要业务",
-                            "照顾生病家属"
+                            "照顾生病家属",
                         ],
                         2: [  # 公事请假原因
                             "参加重要会议",
@@ -547,10 +598,10 @@ def insert_absence_data():
                             "接待重要客户",
                             "参加学术研讨会",
                             "外出调研考察",
-                            "参加政府会议"
-                        ]
+                            "参加政府会议",
+                        ],
                     }
-                    
+
                     reason = random.choice(reason_templates[type_id])
 
                     # 创建请假记录
@@ -563,45 +614,45 @@ def insert_absence_data():
                         absence_type=type_id,
                     )
                     absence_records.append(absence)
-            
+
             # 生成额外的10条随机类型记录
             for _ in range(10):
                 # 随机选择一个员工
                 employee = random.choice(employees)
-                
+
                 # 随机选择请假类型
                 type_id, type_name = random.choice(absence_types)
-                
+
                 # 随机选择状态
                 status_id, status_name = random.choice(absence_statuses)
-                
+
                 # 随机生成请假日期 (在过去或未来一个月内)
                 days_offset = random.randint(-30, 30)
                 start_date = today + timedelta(days=days_offset)
                 end_date = start_date + timedelta(days=random.randint(1, 10))
-                
+
                 # 根据类型选择原因
                 reason_templates = {
                     0: [  # 病假原因
                         "身体不适，需要休息",
                         "去医院体检",
                         "需要复诊治疗",
-                        "药物副作用反应"
+                        "药物副作用反应",
                     ],
                     1: [  # 私事请假原因
                         "处理个人事务",
                         "家庭安排调整",
                         "私人约会",
-                        "其他私人事务"
+                        "其他私人事务",
                     ],
                     2: [  # 公事请假原因
                         "公务外出",
                         "临时工作安排",
                         "参加会议",
-                        "紧急工作任务"
-                    ]
+                        "紧急工作任务",
+                    ],
                 }
-                
+
                 reason = random.choice(reason_templates[type_id])
 
                 # 创建请假记录
@@ -620,17 +671,21 @@ def insert_absence_data():
                 db.session.add_all(absence_records)
                 db.session.commit()
                 print(f"成功生成并插入了 {len(absence_records)} 条模拟请假记录。")
-                
+
                 # 统计各类数据
                 type_counts = {0: 0, 1: 0, 2: 0}
                 status_counts = {0: 0, 1: 0, 2: 0}
-                
+
                 for record in absence_records:
                     type_counts[record.absence_type] += 1
                     status_counts[record.status] += 1
-                
-                print(f"请假类型统计: 病假({type_counts[0]}), 私事请假({type_counts[1]}), 公事请假({type_counts[2]})")
-                print(f"请假状态统计: 未审批({status_counts[0]}), 已拒绝({status_counts[1]}), 已通过({status_counts[2]})")
+
+                print(
+                    f"请假类型统计: 病假({type_counts[0]}), 私事请假({type_counts[1]}), 公事请假({type_counts[2]})"
+                )
+                print(
+                    f"请假状态统计: 未审批({status_counts[0]}), 已拒绝({status_counts[1]}), 已通过({status_counts[2]})"
+                )
             else:
                 print("没有生成任何模拟请假记录。")
 
