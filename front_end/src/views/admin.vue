@@ -932,6 +932,7 @@
         </template>
         <template v-else>
           <h2>请假审核</h2>
+          <div v-if="leaveMessage" class="clock-message" :class="leaveMessageType">{{ leaveMessage }}</div>
           <div class="tab-switch">
             <button :class="{ active: leaveAdminTab === 'unprocessed' }"
               @click="leaveAdminTab = 'unprocessed'; loadAdminLeaves(false)">
@@ -2483,6 +2484,15 @@ export default {
         const data = await res.json();
 
         if (res.ok) {
+          // 显示成功提示信息
+          this.leaveMessage = data.message;
+          this.leaveMessageType = 'success';
+
+          // 2秒后自动清除提示信息
+          setTimeout(() => {
+            this.leaveMessage = '';
+          }, 2000);
+
           // 审核后刷新列表，保持当前页码
           const isProcessed = this.leaveAdminTab === 'processed';
           const currentPage = isProcessed ?
@@ -2502,12 +2512,26 @@ export default {
           this.loadPersonalDataPure();
         } else {
           // 服务器返回错误
-          alert(data.message || '操作失败：服务器返回错误');
+          this.leaveMessage = data.message || '操作失败：服务器返回错误';
+          this.leaveMessageType = 'error';
+
+          // 2秒后自动清除提示信息
+          setTimeout(() => {
+            this.leaveMessage = '';
+          }, 2000);
+
           console.error('审核失败:', data);
         }
       } catch (e) {
         // 网络或其他错误
-        alert('操作失败：网络错误或服务器异常');
+        this.leaveMessage = '操作失败：网络错误或服务器异常';
+        this.leaveMessageType = 'error';
+
+        // 2秒后自动清除提示信息
+        setTimeout(() => {
+          this.leaveMessage = '';
+        }, 2000);
+
         console.error('审核请假时发生错误:', e);
       }
     },
@@ -2824,9 +2848,10 @@ export default {
     },
     handlePageChange(newPage) {
       // 确保页码在有效范围内
-      const totalPages = Math.ceil(this.filteredEmployeesTotal / this.pageSize);
+      const totalPages = Math.ceil(this.totalEmployees / this.pageSize);
       if (newPage >= 1 && newPage <= totalPages) {
         this.currentPage = newPage; // 更新当前页码
+        this.loadEmployeesData(); // 重新加载数据
       }
     },
 
@@ -4258,9 +4283,12 @@ export default {
 }
 
 .clock-message {
-  padding: 12px;
+  padding: 8px 12px;
   border-radius: 4px;
   font-weight: 500;
+  font-size: 14px;
+  line-height: 1.4;
+  margin-bottom: 12px;
 }
 
 .clock-message.success {

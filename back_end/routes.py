@@ -362,7 +362,7 @@ def attendance():
 
         # 判断是否早退或加班
         if current_time.hour < 18 or (
-            current_time.hour == 18 and current_time.minute == 0
+            current_time.hour == 18 and current_time.minute < 30
         ):
             today_attendance.clock_out_status = "早退"
             # 如果之前是迟到，现在是早退，状态为迟到+早退
@@ -370,7 +370,16 @@ def attendance():
                 today_attendance.status = "迟到+早退"
             else:
                 today_attendance.status = "早退"
+        elif current_time.hour < 19:
+            # 18:30-19:00之间打卡算正常下班
+            today_attendance.clock_out_status = "正常"
+            # 如果之前是迟到，现在是正常下班，状态为迟到
+            if today_attendance.status == "迟到":
+                today_attendance.status = "迟到"
+            else:
+                today_attendance.status = "正常"
         else:
+            # 19:00后打卡才算加班
             today_attendance.clock_out_status = "加班"
             # 如果之前是迟到，现在是加班，状态为迟到+加班
             if today_attendance.status == "迟到":
@@ -584,37 +593,80 @@ def update_monthly_attendance_stats(user_id):
 
 # 计算指定用户在某月应出勤的天数（截至today）
 def calculate_should_attend_days(user_id, year, month, today):
-    # 1. 计算从本月1号到今天为止，总共有多少个工作日
-    workdays_upto_today = 0
+    # 1. 计算整个本月总共有多少个工作日
+    # 获取本月最后一天
+    if month == 12:
+        next_month = 1
+        next_year = year + 1
+    else:
+        next_month = month + 1
+        next_year = year
+
     first_day_of_month = date(year, month, 1)
+    last_day_of_month = date(next_year, next_month, 1) - timedelta(days=1)
+
+    total_workdays_in_month = 0
     current_day = first_day_of_month
-    while current_day <= today:
+    while current_day <= last_day_of_month:
         if current_day.weekday() < 5:  # 0-4 是周一到周五
-            workdays_upto_today += 1
+            total_workdays_in_month += 1
         current_day += timedelta(days=1)
 
-    # 2. 计算本月到今天为止，已批准的请假覆盖了多少个工作日
+    # 2. 计算本月整月内，已批准的请假覆盖了多少个工作日
     approved_leaves_this_month = Absence.query.filter(
         Absence.user_id == user_id,
         Absence.status == 2,
-        func.date(Absence.start_time) <= today,
+        func.date(Absence.start_time) <= last_day_of_month,
         func.date(Absence.end_time) >= first_day_of_month,
     ).all()
+
+    # 定义标准工作时间（可根据公司政策调整）
+    WORK_START_HOUR = 9  # 上班时间 9:00
+    WORK_END_HOUR = 18  # 下班时间 18:00
 
     leave_workdays = set()
     for leave in approved_leaves_this_month:
         start_date = max(leave.start_time.date(), first_day_of_month)
-        end_date = min(leave.end_time.date(), today)
-        d = start_date
-        while d <= end_date:
-            if d.weekday() < 5:
-                leave_workdays.add(d)
-            d += timedelta(days=1)
+        end_date = min(leave.end_time.date(), last_day_of_month)
+
+        # 处理请假开始和结束日期的特殊情况
+        if start_date == end_date:
+            # 同一天请假
+            if start_date.weekday() < 5:  # 是工作日
+                # 检查是否在工作时间内
+                start_hour = leave.start_time.hour
+                end_hour = leave.end_time.hour
+
+                # 如果请假时间覆盖了工作时间，则计入请假天数
+                if start_hour < WORK_END_HOUR and end_hour > WORK_START_HOUR:
+                    leave_workdays.add(start_date)
+        else:
+            # 跨天请假
+            d = start_date
+            while d <= end_date:
+                if d.weekday() < 5:  # 是工作日
+                    should_count = True
+
+                    # 特殊处理开始日期
+                    if d == start_date:
+                        # 如果开始时间在下班时间之后，则不计入当天请假
+                        if leave.start_time.hour >= WORK_END_HOUR:
+                            should_count = False
+
+                    # 特殊处理结束日期
+                    if d == end_date:
+                        # 如果结束时间在上班时间之前，则不计入当天请假
+                        if leave.end_time.hour <= WORK_START_HOUR:
+                            should_count = False
+
+                    if should_count:
+                        leave_workdays.add(d)
+                d += timedelta(days=1)
 
     leave_day_count = len(leave_workdays)
 
-    # 3. 返回最终结果：应出勤天数 = 总工作日 - 请假成功的工作日
-    return max(0, workdays_upto_today - leave_day_count)
+    # 3. 返回最终结果：应出勤天数 = 整月总工作日 - 请假成功的工作日
+    return max(0, total_workdays_in_month - leave_day_count)
 
 
 # 获取个人考勤记录和统计
@@ -940,6 +992,22 @@ def get_personal_attendance_pure():
         or 0
     )
 
+    # 加班次数（不计未来日期，不包含请假期间）
+    overtime_count = (
+        db.session.query(func.count(Attendance.attendance_id))
+        .filter(
+            and_(
+                Attendance.user_id == current_user_id,
+                extract("month", Attendance.clock_in_time) == current_month,
+                extract("year", Attendance.clock_in_time) == current_year,
+                Attendance.status == "加班",
+                func.date(Attendance.clock_in_time) <= today,
+            )
+        )
+        .scalar()
+        or 0
+    )
+
     # 应出勤天数计算（不计未来日期，减去请假天数）
     should_attend_days = calculate_should_attend_days(
         current_user_id, current_year, current_month, today
@@ -1016,6 +1084,7 @@ def get_personal_attendance_pure():
         "late_count": late_count,
         "early_leave_count": early_leave_count,
         "normal_count": normal_count,
+        "overtime_count": overtime_count,
     }
 
     return (
@@ -1290,7 +1359,7 @@ def get_period_attendance_stats():
                 or 0
             )
 
-            # 加班（下班打卡时间晚于18:00的人数）
+            # 加班（下班打卡时间晚于等于19:00的人数）
             overtime = (
                 db.session.query(func.count(Attendance.attendance_id))
                 .filter(
@@ -1298,8 +1367,7 @@ def get_period_attendance_stats():
                         func.date(Attendance.clock_in_time) >= phase_start,
                         func.date(Attendance.clock_in_time) <= phase_end,
                         Attendance.clock_out_time.isnot(None),
-                        Attendance.clock_out_time
-                        > func.date(Attendance.clock_out_time) + timedelta(hours=18),
+                        extract("hour", Attendance.clock_out_time) >= 19,
                     )
                 )
                 .scalar()
@@ -1396,10 +1464,23 @@ def get_employees_attendance():
     if page_size < 1:
         return jsonify({"message": "每页大小必须大于等于1"}), 400
 
-    # 获取所有员工列表
-    employees = User.query.filter(User.role == "员工").all()
+    # 获取所有员工列表（用于计算总数）
+    all_employees = User.query.filter(User.role == "员工")
+    total = all_employees.count()
 
-    # 为每个员工计算统计数据
+    # 应用排序到查询
+    if sort_by == "name":
+        # 按姓名排序需要特殊处理
+        employees_query = all_employees
+    else:
+        # 其他字段排序
+        employees_query = all_employees
+
+    # 获取当前页的员工列表（分页查询）
+    employees_offset = (page - 1) * page_size
+    employees = employees_query.offset(employees_offset).limit(page_size).all()
+
+    # 为当前页的每个员工计算统计数据
     employees_data = []
 
     for employee in employees:
@@ -1467,7 +1548,7 @@ def get_employees_attendance():
             or 0
         )
 
-        # 请假天数（已批准）
+        # 请假天数（已批准，仅计算当前月份）
         approved_leaves = Absence.query.filter(
             and_(
                 Absence.user_id == employee.user_id,
@@ -1476,12 +1557,28 @@ def get_employees_attendance():
         ).all()
 
         leave_days = 0
+        # 获取当前月份的第一天和最后一天
+        first_day_of_month = now.replace(day=1).date()
+        last_day_of_month = (now.replace(day=28) + timedelta(days=4)).replace(
+            day=1
+        ) - timedelta(days=1)
+        last_day_of_month = last_day_of_month.date()
+
         for leave in approved_leaves:
             # 计算请假开始日期和结束日期之间的天数
             start_date = leave.start_time.date()
             end_date = leave.end_time.date()
 
-            # 遍历请假期间的每一天
+            # 调整计算范围，只计算本月内的请假天数
+            # 如果请假开始日期在本月之前，则从本月第一天开始计算
+            if start_date < first_day_of_month:
+                start_date = first_day_of_month
+
+            # 如果请假结束日期在本月之后，则计算到本月最后一天为止
+            if end_date > last_day_of_month:
+                end_date = last_day_of_month
+
+            # 遍历请假期间的每一天（仅本月内的日期）
             current_date = start_date
             while current_date <= end_date:
                 # 只计算工作日（周一到周五）
@@ -1508,7 +1605,7 @@ def get_employees_attendance():
             }
         )
 
-    # 应用排序
+    # 应用排序到当前页数据
     if sort_by == "name":
         employees_data = sorted(
             employees_data,
@@ -1523,11 +1620,8 @@ def get_employees_attendance():
             reverse=(sort_order == "desc"),
         )
 
-    # 获取总记录数
-    total = len(employees_data)
-
-    # 应用分页
-    employees_paginated = employees_data[(page - 1) * page_size : page * page_size]
+    # 当前页数据就是已分页的数据
+    employees_paginated = employees_data
 
     employees_list = []
     for row in employees_paginated:
@@ -1696,14 +1790,20 @@ def get_employee_detail(employee_id):
         ).count()
         attendance_trend_data["earlyLeave"].append(early_leave_count)
 
-        # 计算加班次数（下班打卡时间晚于18:00）
+        # 计算加班次数（下班打卡时间晚于19:00）
         overtime_count = Attendance.query.filter(
             and_(
                 Attendance.user_id == employee_id,
                 func.date(Attendance.clock_in_time) >= week["start"],
                 func.date(Attendance.clock_in_time) <= week["end"],
                 Attendance.clock_out_time.isnot(None),
-                extract("hour", Attendance.clock_out_time) > 18,
+                or_(
+                    extract("hour", Attendance.clock_out_time) > 19,
+                    and_(
+                        extract("hour", Attendance.clock_out_time) == 19,
+                        extract("minute", Attendance.clock_out_time) > 0,
+                    ),
+                ),
             )
         ).count()
         attendance_trend_data["overtime"].append(overtime_count)
@@ -1816,6 +1916,25 @@ def create_absence():
             return jsonify(message="时间格式不正确"), 400
         if end_time <= start_time:
             return jsonify(message="结束时间必须大于开始时间"), 400
+
+        # 检查是否在相同时间段已提交过请假申请
+        existing_leave = Absence.query.filter(
+            and_(
+                Absence.user_id == current_user_id,
+                Absence.start_time < end_time,
+                Absence.end_time > start_time,
+                # 不检查已拒绝的申请，允许重新提交
+                Absence.status != 1,
+            )
+        ).first()
+
+        if existing_leave:
+            # 根据状态返回不同的提示信息
+            if existing_leave.status == 0:
+                return jsonify(message="您在此时间段已有待审批的请假申请"), 400
+            elif existing_leave.status == 2:
+                return jsonify(message="您在此时间段已有已批准的请假申请"), 400
+
         absence = Absence(
             user_id=current_user_id,
             start_time=start_time,
@@ -2091,7 +2210,11 @@ def admin_review_absence(absence_id):
         return jsonify(message="记录不存在"), 404
     absence.status = 2 if decision == "approve" else 1
     db.session.commit()
-    return jsonify(message="操作成功", id=absence.id, status=absence.status), 200
+
+    # 根据决策设置提示消息
+    message = "请假申请已批准" if decision == "approve" else "请假申请已拒绝"
+
+    return jsonify(message=message, id=absence.id, status=absence.status), 200
 
 
 # 管理员批量审核请假申请
@@ -2432,6 +2555,23 @@ def get_employee_attendance_stats(user_id):
         or 0
     )
 
+    # 加班次数（下班打卡时间晚于等于19:00）
+    overtime_count = (
+        db.session.query(func.count(Attendance.attendance_id))
+        .filter(
+            and_(
+                Attendance.user_id == user_id,
+                extract("month", Attendance.clock_in_time) == current_month,
+                extract("year", Attendance.clock_in_time) == current_year,
+                func.date(Attendance.clock_in_time) <= today,
+                Attendance.clock_out_time.isnot(None),
+                extract("hour", Attendance.clock_out_time) >= 19,
+            )
+        )
+        .scalar()
+        or 0
+    )
+
     # 应出勤天数计算（不计未来日期）
     should_attend_days = calculate_should_attend_days(
         user_id, current_year, current_month, today
@@ -2448,8 +2588,120 @@ def get_employee_attendance_stats(user_id):
             "late_count": late_count,  # 迟到次数
             "early_leave_count": early_leave_count,  # 早退次数
             "absent_count": absent_days,  # 缺勤天数
+            "overtime_count": overtime_count,  # 加班次数
         },
     ), 200
+
+
+# 获取员工考勤趋势数据
+@app.route("/attendance/trend/<int:user_id>", methods=["GET"])
+@jwt_required()
+def get_employee_attendance_trend(user_id):
+    current_user_id = int(get_jwt_identity())
+
+    # 检查权限：用户只能查看自己的记录，管理员可以查看所有记录
+    current_user = User.query.get(current_user_id)
+    target_user = User.query.get(user_id)
+
+    if not target_user:
+        return jsonify(ok=False, msg="用户不存在"), 404
+
+    if current_user.role != "管理员" and current_user_id != user_id:
+        return jsonify(ok=False, msg="无权限访问"), 403
+
+    # 获取最近30天的考勤趋势数据
+    now = datetime.now(SHANGHAI_TZ)
+    trend_data = []
+
+    # 生成最近30天的日期列表
+    for i in range(29, -1, -1):  # 从29天前到今天
+        check_date = (now - timedelta(days=i)).date()
+
+        # 计算当天的各种考勤状态次数
+        # 正常打卡次数
+        normal_count = Attendance.query.filter(
+            and_(
+                Attendance.user_id == user_id,
+                func.date(Attendance.work_date) == check_date,
+                Attendance.status == "正常",
+            )
+        ).count()
+
+        # 迟到次数
+        late_count = Attendance.query.filter(
+            and_(
+                Attendance.user_id == user_id,
+                func.date(Attendance.work_date) == check_date,
+                Attendance.status == "迟到",
+            )
+        ).count()
+
+        # 早退次数
+        early_leave_count = Attendance.query.filter(
+            and_(
+                Attendance.user_id == user_id,
+                func.date(Attendance.work_date) == check_date,
+                Attendance.status == "早退",
+            )
+        ).count()
+
+        # 缺勤次数（没有考勤记录且不是周末和节假日）
+        # 先检查是否有考勤记录
+        attendance_record = Attendance.query.filter(
+            and_(
+                Attendance.user_id == user_id,
+                func.date(Attendance.work_date) == check_date,
+            )
+        ).first()
+
+        absence_count = 0
+        if not attendance_record:
+            # 检查这一天是否应该是工作日（非周末）
+            if check_date.weekday() < 5:  # 0-4 表示周一到周五
+                # 还需要检查是否是请假日期
+                leave_record = Absence.query.filter(
+                    and_(
+                        Absence.user_id == user_id,
+                        Absence.start_time
+                        <= datetime.combine(check_date, time(23, 59, 59)),
+                        Absence.end_time >= datetime.combine(check_date, time(0, 0, 0)),
+                        Absence.status == 2,  # 已批准
+                    )
+                ).first()
+
+                # 如果不是请假日期，则算作缺勤
+                if not leave_record:
+                    absence_count = 1
+
+        # 加班次数（下班打卡时间晚于19:00）
+        overtime_count = Attendance.query.filter(
+            and_(
+                Attendance.user_id == user_id,
+                func.date(Attendance.work_date) == check_date,
+                Attendance.clock_out_time.isnot(None),
+                or_(
+                    extract("hour", Attendance.clock_out_time) > 19,
+                    and_(
+                        extract("hour", Attendance.clock_out_time) == 19,
+                        extract("minute", Attendance.clock_out_time) > 0,
+                    ),
+                ),
+            )
+        ).count()
+
+        # 添加到趋势数据中
+        trend_data.append(
+            {
+                "date": check_date.strftime("%Y-%m-%d"),
+                "normal": normal_count,
+                "late": late_count,
+                "early_leave": early_leave_count,
+                "absence": absence_count,
+                "overtime": overtime_count,
+            }
+        )
+
+    return jsonify(ok=True, data=trend_data), 200
 
 
 # 分页获取员工考勤记录（用于员工详情页面）

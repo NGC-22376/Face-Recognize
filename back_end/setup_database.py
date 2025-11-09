@@ -529,6 +529,16 @@ def generate_historical_monthly_stats():
             return False
 
 
+def has_overlap(existing_records, new_start, new_end):
+    """检查新请假记录是否与现有记录时间重叠"""
+    for record in existing_records:
+        # 检查时间是否重叠：两个时间段重叠的条件是：
+        # 新记录的开始时间 <= 现有记录的结束时间 且 新记录的结束时间 >= 现有记录的开始时间
+        if new_start <= record.end_time and new_end >= record.start_time:
+            return True
+    return False
+
+
 def insert_absence_data():
     """为部分员工生成模拟请假数据，涵盖各种类型和状态"""
     with app.app_context():
@@ -550,6 +560,9 @@ def insert_absence_data():
 
             # 定义请假状态
             absence_statuses = [(0, "未审批"), (1, "已拒绝"), (2, "已通过")]
+
+            # 为每个员工维护已生成的请假记录，防止时间重叠
+            employee_absences = {employee.user_id: [] for employee in employees}
 
             # 确保每种类型和状态都有足够的数据
             # 生成100条记录，其中：
@@ -588,6 +601,32 @@ def insert_absence_data():
 
                     start_date = today + timedelta(days=days_offset)
                     end_date = start_date + timedelta(days=random.randint(1, 10))
+
+                    # 确保同一员工的请假记录不会时间重叠
+                    max_attempts = 50  # 最大尝试次数，防止无限循环
+                    attempts = 0
+                    while attempts < max_attempts:
+                        # 生成请假时间
+                        start_time = datetime.combine(start_date, time(9, 0))
+                        end_time = datetime.combine(end_date, time(18, 0))
+                        
+                        # 检查是否与该员工已有的请假记录重叠
+                        if not has_overlap(employee_absences[employee.user_id], start_time, end_time):
+                            # 没有重叠，可以添加
+                            employee_absences[employee.user_id].append(
+                                Absence(start_time=start_time, end_time=end_time)
+                            )
+                            break
+                        
+                        # 如果有重叠，重新生成日期
+                        days_offset = random.randint(-30, 30)
+                        start_date = today + timedelta(days=days_offset)
+                        end_date = start_date + timedelta(days=random.randint(1, 10))
+                        attempts += 1
+                    
+                    # 如果超过最大尝试次数，跳过这条记录
+                    if attempts >= max_attempts:
+                        continue
 
                     # 生成针对不同类型请假的原因
                     reason_templates = {
@@ -634,8 +673,8 @@ def insert_absence_data():
                     # 创建请假记录
                     absence = Absence(
                         user_id=employee.user_id,
-                        start_time=datetime.combine(start_date, time(9, 0)),
-                        end_time=datetime.combine(end_date, time(18, 0)),
+                        start_time=start_time,
+                        end_time=end_time,
                         reason=reason,
                         status=status_id,
                         absence_type=type_id,
@@ -657,6 +696,32 @@ def insert_absence_data():
                 days_offset = random.randint(-30, 30)
                 start_date = today + timedelta(days=days_offset)
                 end_date = start_date + timedelta(days=random.randint(1, 10))
+
+                # 确保同一员工的请假记录不会时间重叠
+                max_attempts = 50  # 最大尝试次数，防止无限循环
+                attempts = 0
+                while attempts < max_attempts:
+                    # 生成请假时间
+                    start_time = datetime.combine(start_date, time(9, 0))
+                    end_time = datetime.combine(end_date, time(18, 0))
+                    
+                    # 检查是否与该员工已有的请假记录重叠
+                    if not has_overlap(employee_absences[employee.user_id], start_time, end_time):
+                        # 没有重叠，可以添加
+                        employee_absences[employee.user_id].append(
+                            Absence(start_time=start_time, end_time=end_time)
+                        )
+                        break
+                    
+                    # 如果有重叠，重新生成日期
+                    days_offset = random.randint(-30, 30)
+                    start_date = today + timedelta(days=days_offset)
+                    end_date = start_date + timedelta(days=random.randint(1, 10))
+                    attempts += 1
+                
+                # 如果超过最大尝试次数，跳过这条记录
+                if attempts >= max_attempts:
+                    continue
 
                 # 根据类型选择原因
                 reason_templates = {
@@ -685,8 +750,8 @@ def insert_absence_data():
                 # 创建请假记录
                 absence = Absence(
                     user_id=employee.user_id,
-                    start_time=datetime.combine(start_date, time(9, 0)),
-                    end_time=datetime.combine(end_date, time(18, 0)),
+                    start_time=start_time,
+                    end_time=end_time,
                     reason=reason,
                     status=status_id,
                     absence_type=type_id,

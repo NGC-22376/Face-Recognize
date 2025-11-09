@@ -72,6 +72,15 @@
               </div>
             </el-card>
           </el-col>
+          <el-col :span="6">
+            <el-card class="stat-card" shadow="hover">
+              <div class="stat-content">
+                <div class="stat-title">加班次数</div>
+                <div class="stat-value">{{ attendanceStats.overtime_count }}</div>
+                <div class="stat-desc">本月加班次数</div>
+              </div>
+            </el-card>
+          </el-col>
         </el-row>
       </div>
 
@@ -171,7 +180,8 @@ const attendanceStats = reactive({
   scheduled_days: 0,
   actual_days: 0,
   late_count: 0,
-  early_leave_count: 0
+  early_leave_count: 0,
+  overtime_count: 0
 })
 
 // 考勤记录
@@ -495,10 +505,30 @@ const getStatusText = (status) => {
       return '未签退'
     case '请假':  // 后端可能直接返回中文状态
       return '<span style="color: purple">请假</span>' // 请假字体紫色
+    case '正常':
+      return '正常'
+    case '迟到':
+      return '迟到'
+    case '早退':
+      return '早退'
+    case '缺勤':
+      return '缺勤'
+    case '加班':
+      return '<span style="color: blue">加班</span>' // 加班字体蓝色
+    case '未签退':
+      return '未签退'
+    case '迟到+早退':
+      return '迟到+早退'
+    case '迟到+加班':
+      return '<span style="color: blue">迟到+加班</span>' // 加班字体蓝色
     default:
       // 对于其他可能的状态值，如果包含"请假"关键字则也显示为请假状态
       if (status && status.includes('请假')) {
         return '<span style="color: purple">请假</span>'
+      }
+      // 对于包含"加班"关键字的状态也显示为加班
+      if (status && status.includes('加班')) {
+        return '<span style="color: blue">' + status + '</span>'
       }
       return status || '未知'
   }
