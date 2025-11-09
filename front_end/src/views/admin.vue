@@ -732,45 +732,73 @@
         <div v-if="activeTab === 'employee_management' && userProfile.role === '管理员'" class="tab-content">
           <div class="section-header">
             <h2>员工管理</h2>
-            <input type="text" v-model="employeeSearch" placeholder="搜索姓名或工号"
-              style="margin-bottom: 12px; padding: 5px; width: 220px;" />
+            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px;">
+              <input type="text" v-model="employeeSearch" placeholder="搜索姓名或工号" style="padding: 5px; width: 220px;" />
+              <button v-if="!isBatchMode" @click="toggleBatchMode" class="batch-toggle-btn">批量操作</button>
+              <div v-else style="display: flex; gap: 10px; align-items: center;">
+                <button @click="batchDeleteEmployees" class="batch-delete-btn"
+                  :disabled="selectedEmployees.length === 0">批量删除
+                  ({{ selectedEmployees.length }})</button>
+                <button @click="toggleBatchMode" class="batch-cancel-btn">取消</button>
+              </div>
+            </div>
           </div>
           <div class="employees-table" style="position: relative; width: 100%;">
             <table>
               <thead>
                 <tr>
-                  <th style="width: 33.33%;">姓名</th>
-                  <th style="width: 33.33%;">工号</th>
-                  <th style="width: 33.33%;">人脸照片</th>
+                  <th style="width: 5%;" v-if="isBatchMode"></th>
+                  <th style="width: 5%;" v-else></th>
+                  <th style="width: 20%;">姓名</th>
+                  <th style="width: 20%;">工号</th>
+                  <th style="width: 30%;">人脸照片</th>
+                  <th style="width: 25%;">操作</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="employee in filteredEmployees" :key="employee.user_id">
+                <!-- 批量模式下显示所有员工 -->
+                <tr v-for="employee in (isBatchMode ? allEmployees : filteredEmployees)" :key="employee.user_id">
+                  <template v-if="isBatchMode">
+                    <td><input type="checkbox" :value="employee.user_id" v-model="selectedEmployees"></td>
+                  </template>
+                  <template v-else>
+                    <td></td>
+                  </template>
                   <td>{{ employee.name }}</td>
                   <td>{{ employee.account }}</td>
                   <td>
                     <img :src="getEmployeePhotoUrl(employee.photo_url)" alt="人脸照片"
                       style="width: 100px; height: 100px; object-fit: cover;" />
                   </td>
+                  <td>
+                    <button class="delete-btn" @click="deleteEmployee(employee.user_id, employee.name)">删除</button>
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <div class="pagination-wrapper" v-if="filteredEmployeesTotal > 0">
-            <div class="pagination-controls">
-              <button :disabled="currentPage === 1" @click="() => handlePageChange(currentPage - 1)">上一页</button>
-              <span>第 {{ currentPage }} 页 / 共 {{ Math.ceil(filteredEmployeesTotal / pageSize) }} 页</span>
-              <button :disabled="currentPage === Math.ceil(filteredEmployeesTotal / pageSize)"
-                @click="() => handlePageChange(currentPage + 1)">下一页</button>
-            </div>
-            <div class="pagination-controls">
-              <span>跳转到第</span>
-              <input type="number" v-model.number="jumpToPage" placeholder="跳转页码" min="1"
-                :max="Math.ceil(filteredEmployeesTotal / pageSize)"
-                style="width: 60px; text-align: center; margin: 0 8px;" />
-              <span>页</span>
-              <button @click="handlePageJump">跳转</button>
-            </div>
+
+          <!-- 常态下的分页控件 -->
+          <div class="pagination" v-if="!isBatchMode && filteredEmployeesTotal > 0">
+            <button @click="handlePageChange(currentPage - 1)" :disabled="currentPage === 1" class="pagination-btn">
+              上一页
+            </button>
+
+            <span v-for="page in generatePageNumbers(Math.ceil(filteredEmployeesTotal / pageSize), currentPage)"
+              :key="page" @click="handlePageChange(page)"
+              :class="['pagination-item', { active: page === currentPage }]">
+              {{ page }}
+            </span>
+
+            <button @click="handlePageChange(currentPage + 1)"
+              :disabled="currentPage === Math.ceil(filteredEmployeesTotal / pageSize)" class="pagination-btn">
+              下一页
+            </button>
+
+            <span class="pagination-info">
+              共 {{ filteredEmployeesTotal }} 条记录，第 {{ currentPage }} / {{ Math.ceil(filteredEmployeesTotal / pageSize)
+              }} 页
+            </span>
           </div>
         </div>
 
@@ -919,13 +947,18 @@
           <div class="filter-controls"
             style="margin: 12px 0; display: flex; justify-content: space-between; align-items: center;">
             <!-- 15px * 0.8 -->
-            <div>
-              <input type="text" v-model="nameFilter" placeholder="搜索姓名" style="margin-right: 8px; padding: 5px;" />
-              <!-- 10px * 0.8 -->
-              <select v-model="typeFilter" style="padding: 5px;">
-                <option value="-1">全部类型</option>
-                <option v-for="type in leaveTypes" :key="type.value" :value="type.value">{{ type.label }}</option>
-              </select>
+            <div style="display: flex; gap: 15px; align-items: center;">
+              <div style="display: flex; flex-direction: column;">
+                <input type="text" v-model="nameFilter" placeholder="请输入姓名"
+                  style="padding: 8px; width: 180px; border: 1px solid #ddd; border-radius: 4px;" />
+              </div>
+              <div style="display: flex; flex-direction: column;">
+                <select v-model="typeFilter"
+                  style="padding: 8px; width: 150px; border: 1px solid #ddd; border-radius: 4px;">
+                  <option value="-1">全部类型</option>
+                  <option v-for="type in leaveTypes" :key="type.value" :value="type.value">{{ type.label }}</option>
+                </select>
+              </div>
             </div>
             <div v-if="leaveAdminTab === 'unprocessed'">
               <button class="batch-process-btn" @click="toggleBatchMode" v-if="!isBatchMode">
@@ -1180,7 +1213,11 @@
           </div>
 
           <div v-if="selectedLeave" class="leave-detail leave-detail-center">
-            <h3>申请详情</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <h3>申请详情</h3>
+              <button @click="selectedLeave = null"
+                style="background: none; border: none; font-size: 24px; cursor: pointer; color: #999;">×</button>
+            </div>
             <p>姓名：{{ selectedLeave.name }}（工号：{{ selectedLeave.account }}）</p>
             <p>起止：{{ formatDateTime(selectedLeave.start_time) }} - {{ formatDateTime(selectedLeave.end_time) }}</p>
             <p>事由：{{ selectedLeave.reason }}</p>
@@ -1197,7 +1234,7 @@
 
 <script>
 import * as echarts from 'echarts';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 
 export default {
   name: 'AdminPage',
@@ -1212,7 +1249,8 @@ export default {
         actual_attendance: 0,
         late_count: 0,
         early_leave_count: 0,
-        normal_count: 0
+        normal_count: 0,
+        leave_count: 0
       },
       employees: [],
       allEmployees: [], // 员工管理界面使用的所有员工数据
@@ -1301,6 +1339,7 @@ export default {
       isBatchProcessing: false,
       isBatchMode: false,
       selectedLeaves: [], // 选中的请假申请ID数组
+      selectedEmployees: [], // 选中的员工ID数组
       // 人脸审核相关
       faceReviewTab: 'pending',
       faceNameFilter: '',
@@ -1407,8 +1446,11 @@ export default {
   watch: {
     activeTab(newTab) {
       if (newTab === 'dashboard' && this.userProfile.role === '管理员') {
-        this.$nextTick(() => {
-          this.renderAttendanceCharts();
+        // 重新加载今日考勤统计数据并渲染饼图
+        this.loadDashboardData().then(() => {
+          this.$nextTick(() => {
+            this.renderAttendanceCharts();
+          });
         });
       }
     },
@@ -1422,6 +1464,12 @@ export default {
     typeFilter(newVal, oldVal) {
       if (newVal !== oldVal) {
         this.resetAndRecalculatePagination();
+      }
+    },
+    // 监听employeeSearch变化，搜索时重置分页状态
+    employeeSearch(newVal, oldVal) {
+      if (newVal !== oldVal) {
+        this.currentPage = 1; // 重置到第一页
       }
     },
   },
@@ -1772,7 +1820,16 @@ export default {
 
       this.activeTab = tab
       if (tab === 'dashboard') {
-        this.loadDashboardData()
+        // 重新加载今日考勤统计数据并渲染饼图
+        this.loadDashboardData().then(() => {
+          this.$nextTick(() => {
+            this.renderAttendanceCharts();
+          });
+        });
+        // 重新加载阶段考勤统计数据，确保在页签切换后数据能正确显示
+        this.$nextTick(() => {
+          this.loadPeriodStats();
+        });
       } else if (tab === 'employees') {
         this.loadEmployeesData()
       } else if (tab === 'personal_info') {
@@ -2454,11 +2511,78 @@ export default {
     toggleBatchMode() {
       this.isBatchMode = !this.isBatchMode;
       this.selectedLeaves = []; // 清空选中列表
+      this.selectedEmployees = []; // 清空选中的员工列表
 
       if (this.isBatchMode) {
-        this.loadAllUnprocessedLeaves();
+        // 进入批量模式时加载所有员工数据
+        this.loadEmployeesData_c();
+        // 如果当前是请假审批标签页，加载所有未处理的请假申请
+        if (this.activeTab === 'leave') {
+          this.loadAllUnprocessedLeaves();
+        }
       } else {
-        this.loadAdminLeaves(false, 1); // 恢复正常分页
+        // 退出批量模式时恢复分页加载
+        this.loadEmployeesData();
+        // 如果当前是请假审批标签页，恢复正常的分页加载
+        if (this.activeTab === 'leave') {
+          this.loadAdminLeaves(false, 1);
+        }
+      }
+    },
+
+    // 批量删除员工
+    async batchDeleteEmployees() {
+      if (this.selectedEmployees.length === 0) {
+        ElMessage.warning('请至少选择一个员工进行删除');
+        return;
+      }
+
+      try {
+        await ElMessageBox.confirm(
+          `确定要删除选中的 ${this.selectedEmployees.length} 名员工吗？此操作将永久删除这些员工及其所有相关信息，且无法恢复。`,
+          '批量删除确认',
+          {
+            confirmButtonText: '确定',
+            cancelButtonText: '取消',
+            type: 'warning',
+            center: true
+          }
+        );
+
+        // 用户点击了确定，执行批量删除操作
+        const token = localStorage.getItem('access_token');
+
+        // 使用批量删除API
+        const response = await fetch(`${this.apiBaseUrl}/employees/batch`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            employee_ids: this.selectedEmployees
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.message) {
+          ElMessage.success(data.message);
+          // 清空选中列表
+          this.selectedEmployees = [];
+          // 重新加载员工数据
+          await this.loadEmployeesData_c();
+        } else {
+          ElMessage.error(data.message || '批量删除失败');
+        }
+      } catch (error) {
+        // 用户点击了取消按钮或出现其他错误
+        if (error === 'cancel' || error === 'close') {
+          // 用户取消操作，不显示错误消息
+          return;
+        }
+        console.error('批量删除员工时发生错误:', error);
+        ElMessage.error('批量删除失败: ' + (error.message || '未知错误'));
       }
     },
 
@@ -2694,8 +2818,11 @@ export default {
       return leaveType ? leaveType.label : '未知类型';
     },
     handlePageChange(newPage) {
-      this.currentPage = newPage; // 更新当前页码
-      this.loadEmployeesData(); // 重新加载数据
+      // 确保页码在有效范围内
+      const totalPages = Math.ceil(this.filteredEmployeesTotal / this.pageSize);
+      if (newPage >= 1 && newPage <= totalPages) {
+        this.currentPage = newPage; // 更新当前页码
+      }
     },
 
     handlePageJump() {
@@ -3433,6 +3560,50 @@ export default {
     // 隐藏提示框
     hideTooltip() {
       this.tooltip.visible = false;
+    },
+
+    // 删除员工方法
+    async deleteEmployee(employeeId, employeeName) {
+      // 显示确认对话框
+      try {
+        await ElMessageBox.confirm(
+          `确定要删除员工 "${employeeName}" 吗？此操作将永久删除该员工及其所有相关信息，且无法恢复。`,
+          '删除确认',
+          {
+            confirmButtonText: '确定',
+            cancelButtonText: '取消',
+            type: 'warning',
+            center: true
+          }
+        );
+
+        // 用户点击了确定，执行删除操作
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.apiBaseUrl}/employees/${employeeId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.message) {
+          ElMessage.success(data.message);
+          // 重新加载员工数据
+          await this.loadEmployeesData_c(1);
+        } else {
+          ElMessage.error(data.message || '删除失败');
+        }
+      } catch (error) {
+        // 用户点击了取消按钮或出现其他错误
+        if (error === 'cancel' || error === 'close') {
+          // 用户取消操作，不显示错误消息
+          return;
+        }
+        console.error('删除员工时发生错误:', error);
+        ElMessage.error('删除失败: ' + (error.message || '未知错误'));
+      }
     }
   },
   computed: {
@@ -3501,6 +3672,70 @@ export default {
 .admin-container {
   min-height: 100vh;
   background-color: #f5f6fa;
+}
+
+/* 批量操作按钮样式 */
+.batch-toggle-btn {
+  padding: 6px 12px;
+  background-color: #409eff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.batch-toggle-btn:hover {
+  background-color: #337ecc;
+}
+
+.batch-select-all-btn,
+.batch-clear-selection-btn {
+  padding: 6px 12px;
+  background-color: #67c23a;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.batch-select-all-btn:hover,
+.batch-clear-selection-btn:hover {
+  background-color: #55a030;
+}
+
+.batch-delete-btn {
+  padding: 6px 12px;
+  background-color: #f56c6c;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.batch-delete-btn:hover:not(:disabled) {
+  background-color: #d9534f;
+}
+
+.batch-delete-btn:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.batch-cancel-btn {
+  padding: 6px 12px;
+  background-color: #909399;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.batch-cancel-btn:hover {
+  background-color: #73767a;
 }
 
 .header {
@@ -4119,6 +4354,22 @@ export default {
 }
 
 .records-table td .clock-out:hover:not(:disabled) {
+  background: #c0392b;
+}
+
+/* 员工管理删除按钮样式 */
+.delete-btn {
+  padding: 8px 16px;
+  font-size: 14px;
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.delete-btn:hover:not(:disabled) {
   background: #c0392b;
 }
 

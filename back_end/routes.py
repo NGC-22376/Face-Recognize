@@ -1,6 +1,13 @@
 from flask import request, jsonify
 from app import app, db, SHANGHAI_TZ
-from models import User, Attendance, Face, Absence, MonthlyAttendanceStats
+from models import (
+    User,
+    Attendance,
+    Face,
+    Absence,
+    MonthlyAttendanceStats,
+    FaceEnrollment,
+)
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import (
     JWTManager,
@@ -212,9 +219,22 @@ def reset_password_with_token():
 @app.route("/login", methods=["POST"])
 def login():
     data = request.get_json()
-    user = User.query.filter_by(account=data["account"]).first()
+    account = data.get("account")
+    password = data.get("password")
 
-    if user and bcrypt.check_password_hash(user.password, data["password"]):
+    # 检查账号和密码是否为空
+    if not account or not password:
+        return jsonify({"message": "账号和密码不能为空"}), 400
+
+    # 查找用户
+    user = User.query.filter_by(account=account).first()
+
+    # 账号不存在
+    if not user:
+        return jsonify({"message": "账号不存在"}), 401
+
+    # 账号存在，检查密码
+    if bcrypt.check_password_hash(user.password, password):
         # 创建token时使用字符串作为identity
         access_token = create_access_token(identity=str(user.user_id))
         return (
@@ -231,8 +251,9 @@ def login():
             ),
             200,
         )
-
-    return jsonify({"message": "Invalid credentials"}), 401
+    else:
+        # 密码错误
+        return jsonify({"message": "密码错误"}), 401
 
 
 # 用户打卡
@@ -1072,6 +1093,19 @@ def get_daily_attendance_overview():
         or 0
     )
 
+    # 请假人数统计
+    leave_count = (
+        db.session.query(func.count(func.distinct(Attendance.user_id)))
+        .filter(
+            and_(
+                func.date(Attendance.clock_in_time) == today,
+                Attendance.status == "请假",
+            )
+        )
+        .scalar()
+        or 0
+    )
+
     # 总员工数
     total_employees = User.query.filter_by(role="员工").count()
 
@@ -1084,6 +1118,7 @@ def get_daily_attendance_overview():
                 "late_count": late_count,
                 "early_leave_count": early_leave_count,
                 "normal_count": normal_count,
+                "leave_count": leave_count,
             }
         ),
         200,
@@ -2125,6 +2160,153 @@ def get_all_employees():
             }
         )
     return jsonify({"employees": employee_list}), 200
+
+
+# 删除员工及其所有相关信息
+@app.route("/employees/<int:employee_id>", methods=["DELETE"])
+@jwt_required()
+def delete_employee(employee_id):
+    current_user_id = int(get_jwt_identity())
+
+    # 检查当前用户是否为管理员
+    current_user = User.query.get(current_user_id)
+    if not current_user or current_user.role != "管理员":
+        return jsonify({"message": "权限不足，只有管理员可以删除员工"}), 403
+
+    # 检查要删除的员工是否存在且确实是员工角色
+    employee = User.query.filter_by(user_id=employee_id, role="员工").first()
+    if not employee:
+        return jsonify({"message": "员工不存在或不是普通员工"}), 404
+
+    try:
+        # 删除员工会自动级联删除与其相关的所有数据（通过模型中定义的cascade）
+        # 包括：人脸数据、考勤记录、请假记录、人脸录入审核记录、月度考勤统计等
+
+        # 删除员工的人脸图像文件（如果存在）
+        faces = Face.query.filter_by(user_id=employee_id).all()
+        for face in faces:
+            if face.image_path and os.path.exists(face.image_path):
+                try:
+                    os.remove(face.image_path)
+                except Exception as e:
+                    print(f"删除人脸图像文件失败: {e}")
+
+        # 删除员工的人脸录入审核图像文件（如果存在）
+        enrollments = FaceEnrollment.query.filter_by(user_id=employee_id).all()
+        for enrollment in enrollments:
+            if enrollment.image_path and os.path.exists(enrollment.image_path):
+                try:
+                    os.remove(enrollment.image_path)
+                except Exception as e:
+                    print(f"删除人脸录入审核图像文件失败: {e}")
+
+        # 删除员工头像文件（如果存储在Profile目录中）
+        profile_image_path = f"Profile/{employee_id}.jpg"
+        if os.path.exists(profile_image_path):
+            try:
+                os.remove(profile_image_path)
+            except Exception as e:
+                print(f"删除员工头像文件失败: {e}")
+
+        # 删除数据库中的员工记录（会自动级联删除所有相关记录）
+        db.session.delete(employee)
+        db.session.commit()
+
+        return jsonify({"message": "员工及其所有相关信息删除成功"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": f"删除员工时发生错误: {str(e)}"}), 500
+
+
+# 批量删除员工及其所有相关信息
+@app.route("/employees/batch", methods=["DELETE"])
+@jwt_required()
+def batch_delete_employees():
+    current_user_id = int(get_jwt_identity())
+
+    # 检查当前用户是否为管理员
+    current_user = User.query.get(current_user_id)
+    if not current_user or current_user.role != "管理员":
+        return jsonify({"message": "权限不足，只有管理员可以删除员工"}), 403
+
+    try:
+        # 获取请求中的员工ID列表
+        data = request.get_json()
+        employee_ids = data.get("employee_ids", [])
+
+        if not employee_ids or not isinstance(employee_ids, list):
+            return jsonify({"message": "无效的请求参数"}), 400
+
+        deleted_count = 0
+        failed_count = 0
+        failed_details = []
+
+        # 遍历每个员工ID进行删除
+        for employee_id in employee_ids:
+            try:
+                # 检查要删除的员工是否存在且确实是员工角色
+                employee = User.query.filter_by(
+                    user_id=employee_id, role="员工"
+                ).first()
+                if not employee:
+                    failed_details.append(f"员工ID {employee_id} 不存在或不是普通员工")
+                    failed_count += 1
+                    continue
+
+                # 删除员工会自动级联删除与其相关的所有数据（通过模型中定义的cascade）
+                # 包括：人脸数据、考勤记录、请假记录、人脸录入审核记录、月度考勤统计等
+
+                # 删除员工的人脸图像文件（如果存在）
+                faces = Face.query.filter_by(user_id=employee_id).all()
+                for face in faces:
+                    if face.image_path and os.path.exists(face.image_path):
+                        try:
+                            os.remove(face.image_path)
+                        except Exception as e:
+                            print(f"删除员工 {employee_id} 的人脸图像文件失败: {e}")
+
+                # 删除员工的人脸录入审核图像文件（如果存在）
+                enrollments = FaceEnrollment.query.filter_by(user_id=employee_id).all()
+                for enrollment in enrollments:
+                    if enrollment.image_path and os.path.exists(enrollment.image_path):
+                        try:
+                            os.remove(enrollment.image_path)
+                        except Exception as e:
+                            print(
+                                f"删除员工 {employee_id} 的人脸录入审核图像文件失败: {e}"
+                            )
+
+                # 删除员工头像文件（如果存储在Profile目录中）
+                profile_image_path = f"Profile/{employee_id}.jpg"
+                if os.path.exists(profile_image_path):
+                    try:
+                        os.remove(profile_image_path)
+                    except Exception as e:
+                        print(f"删除员工 {employee_id} 的头像文件失败: {e}")
+
+                # 删除数据库中的员工记录（会自动级联删除所有相关记录）
+                db.session.delete(employee)
+                deleted_count += 1
+            except Exception as e:
+                failed_details.append(f"删除员工ID {employee_id} 时发生错误: {str(e)}")
+                failed_count += 1
+
+        # 提交数据库更改
+        db.session.commit()
+
+        # 构造响应消息
+        if failed_count == 0:
+            return jsonify(
+                {"message": f"成功删除 {deleted_count} 名员工及其所有相关信息"}
+            ), 200
+        else:
+            message = f"成功删除 {deleted_count} 名员工，{failed_count} 名员工删除失败"
+            if failed_details:
+                message += f"。失败详情: {'; '.join(failed_details)}"
+            return jsonify({"message": message}), 207  # 207 Multi-Status 表示部分成功
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": f"批量删除员工时发生错误: {str(e)}"}), 500
 
 
 # 管理员查看指定员工考勤记录
