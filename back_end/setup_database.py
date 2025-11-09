@@ -1,3 +1,4 @@
+import glob
 import pymysql
 import os
 import random
@@ -124,6 +125,8 @@ def insert_test_data():
                 "洋",
             ]
 
+            
+                
             users_to_add = []
             for i in range(1, 101):
                 account = f"empid{i:03d}"
@@ -144,8 +147,32 @@ def insert_test_data():
                 )
                 users_to_add.append(employee)
 
+
             db.session.add_all(users_to_add)
             print("100名员工及专业密保创建成功！")
+
+            # 提交以生成user_id
+            db.session.commit()
+            image_folder = os.path.join(os.path.dirname(__file__), "static")
+            image_files = glob.glob(os.path.join(image_folder, "*.jpg")) + glob.glob(os.path.join(image_folder, "*.png"))
+            image_files = [os.path.relpath(f, start=os.path.dirname(__file__)) for f in image_files]
+            if not image_files:
+                print("static 文件夹下没有找到图片，无法分配人脸图像。")
+                return False
+
+            # 为每个员工添加人脸图像（face.jpg）
+            print("为每个员工添加人脸图像...")
+            employees = User.query.filter(User.role == "员工").all()
+            faces_to_add = []
+            for emp in employees:
+                face_image_path = random.choice(image_files)
+                face = Face(
+                    user_id=emp.user_id,
+                    image_path=face_image_path,
+                )
+                faces_to_add.append(face)
+            db.session.add_all(faces_to_add)
+            print(f"已为{len(faces_to_add)}名员工随机分配人脸图像。")
 
             db.session.commit()
             print("用户数据事务已提交。")
