@@ -264,7 +264,7 @@
                 <input type="file" ref="fileInput" @change="handleAvatarUpload" accept="image/jpeg,image/png,image/gif"
                   style="display: none" />
                 <div class="upload-tips">
-                  <p>支持 JPG、PNG、GIF 格式，文件大小不超过 2MB</p>
+                  <p>支持 JPG、PNG格式，文件大小不超过 2MB</p>
                 </div>
               </div>
             </div>
@@ -1343,6 +1343,8 @@ export default {
         phaseRanges: null
       },
 
+
+
       // 员工详细考勤信息弹窗相关
       showEmployeeDetailModal: false,
       selectedEmployee: null,
@@ -2144,7 +2146,7 @@ export default {
       this.isLoading = true
       try {
         const token = localStorage.getItem('access_token')
-        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}`, {
+        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}&page=${this.currentPage}&page_size=${this.pageSize}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -2153,6 +2155,7 @@ export default {
         if (response.ok) {
           const data = await response.json()
           this.employees = data.employees
+          this.totalEmployees = data.total  // 设置总员工数用于分页控件显示
         } else {
           console.error('Failed to load data, status:', response.status)
           alert('加载员工数据失败！')
@@ -3055,7 +3058,7 @@ export default {
       this.selectedEmployee = employee;
 
       try {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('access_token');
         const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employee/${employee.user_id}`, {
           method: 'GET',
           headers: {
@@ -3077,47 +3080,15 @@ export default {
           };
         } else {
           console.error('获取员工详细信息失败:', response.status);
-          // 如果获取失败，使用模拟数据
-          this.employeeDetail = {
-            earliestClockIn: '08:30',
-            latestClockIn: '09:15',
-            earliestClockOut: '17:45',
-            latestClockOut: '20:30',
-            attendanceTrendData: {
-              weeks: ['第1周', '第2周', '第3周'],
-              late: [2, 1, 3],
-              earlyLeave: [1, 0, 2],
-              overtime: [0, 1, 2]
-            },
-            leaveTrendData: {
-              weeks: ['第1周', '第2周', '第3周'],
-              sickLeave: [1, 0, 1],
-              personalLeave: [0, 1, 0],
-              officialLeave: [0, 0, 1]
-            }
-          };
+          // 如果获取失败，显示错误信息，不使用模拟数据
+          alert('获取员工详细信息失败，请稍后重试');
+          return;
         }
       } catch (error) {
         console.error('获取员工详细信息时发生错误:', error);
-        // 如果发生错误，使用模拟数据
-        this.employeeDetail = {
-          earliestClockIn: '08:30',
-          latestClockIn: '09:15',
-          earliestClockOut: '17:45',
-          latestClockOut: '20:30',
-          attendanceTrendData: {
-            weeks: ['第1周', '第2周', '第3周'],
-            late: [2, 1, 3],
-            earlyLeave: [1, 0, 2],
-            overtime: [0, 1, 2]
-          },
-          leaveTrendData: {
-            weeks: ['第1周', '第2周', '第3周'],
-            sickLeave: [1, 0, 1],
-            personalLeave: [0, 1, 0],
-            officialLeave: [0, 0, 1]
-          }
-        };
+        // 如果发生错误，显示错误信息，不使用模拟数据
+        alert('获取员工详细信息时发生网络错误，请检查网络连接后重试');
+        return;
       }
 
       this.showEmployeeDetailModal = true;

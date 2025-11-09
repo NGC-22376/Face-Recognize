@@ -993,7 +993,7 @@ def get_employees_attendance():
     if page_size < 1:
         return jsonify({"message": "每页大小必须大于等于1"}), 400
 
-    # 动态计算统计数据并排序
+    # 动态计算统计数据
     subquery = (
         db.session.query(
             User.user_id,
@@ -1018,29 +1018,30 @@ def get_employees_attendance():
         .subquery()
     )
 
-    query = db.session.query(subquery)
-
     # 获取查询结果
-    employees = query.all()
+    query = db.session.query(subquery)
+    all_employees = query.all()
 
     # 如果按姓名排序，使用拼音排序
     if sort_by == "name":
-        employees = sorted(
-            employees,
+        all_employees = sorted(
+            all_employees,
             key=lambda x: "".join(lazy_pinyin(x.name)),
             reverse=(sort_order == "desc"),
         )
     else:
         # 其他字段排序
-        employees = sorted(
-            employees,
+        all_employees = sorted(
+            all_employees,
             key=lambda x: getattr(x, sort_by),
             reverse=(sort_order == "desc"),
         )
 
-    # 分页
-    total = len(employees)
-    employees = employees[(page - 1) * page_size : page * page_size]
+    # 获取总记录数
+    total = len(all_employees)
+
+    # 应用分页
+    employees = all_employees[(page - 1) * page_size : page * page_size]
 
     employees_list = []
     for row in employees:
