@@ -2617,7 +2617,9 @@ export default {
           // 清空选中列表
           this.selectedEmployees = [];
           // 重新加载员工数据
+          // 同时更新employees和allEmployees数组，确保在不同模式下都能正确显示
           await this.loadEmployeesData_c();
+          await this.loadEmployeesData();
         } else {
           ElMessage.error(data.message || '批量删除失败');
         }
@@ -3639,7 +3641,9 @@ export default {
         if (response.ok && data.message) {
           ElMessage.success(data.message);
           // 重新加载员工数据
-          await this.loadEmployeesData_c(1);
+          // 同时更新employees和allEmployees数组，确保在不同模式下都能正确显示
+          await this.loadEmployeesData_c();
+          await this.loadEmployeesData();
         } else {
           ElMessage.error(data.message || '删除失败');
         }
