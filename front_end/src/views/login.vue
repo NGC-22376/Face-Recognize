@@ -12,7 +12,8 @@
         <!-- 注册表单 -->
         <div v-else>
           <input v-model="registerForm.name" placeholder="姓名" required />
-          <input v-model="registerForm.account" placeholder="工号（五位小写英文+三位数字）" required />
+          <input v-model="registerForm.account" placeholder="工号（五位小写英文+三位数字）" required @blur="validateAccount" />
+          <div v-if="accountError" class="error-message">{{ accountError }}</div>
           <input v-model="registerForm.password" type="password" placeholder="密码（字母和数字组合，5-15个字符）" required
             @blur="validatePassword" />
           <div v-if="passwordError" class="error-message">{{ passwordError }}</div>
@@ -34,8 +35,9 @@
         </div>
 
         <button type="submit" class="submit-button"
-          :class="{ 'register-active': !isLogin && !passwordError && !securityQuestionError }"
-          :disabled="!isLogin && (!!passwordError || !!securityQuestionError)">{{ isLogin ? '登录' : '注册' }}</button>
+          :class="{ 'register-active': !isLogin && !accountError && !passwordError && !securityQuestionError }"
+          :disabled="!isLogin && (!!accountError || !!passwordError || !!securityQuestionError)">{{ isLogin ? '登录' :
+          '注册' }}</button>
       </form>
 
       <div class="toggle-container">
@@ -75,6 +77,7 @@ export default {
         security_answer_3: ''
       },
       message: '',
+      accountError: '',  // 工号错误信息
       passwordError: '',
       securityQuestionError: '' // 密保问题错误信息
     }
@@ -85,6 +88,7 @@ export default {
       this.isLogin = !this.isLogin;
       // 清空可能存在的错误信息和表单数据
       this.message = '';
+      this.accountError = '';  // 清空工号错误信息
       this.passwordError = '';
       Object.keys(this.form).forEach(key => this.form[key] = '');
       Object.keys(this.registerForm).forEach(key => this.registerForm[key] = '');
@@ -99,6 +103,22 @@ export default {
     },
     to_PwRec() {
       this.$router.push('/password-recovery');
+    },
+    validateAccount() {
+      const account = this.registerForm.account;
+      if (!account) {
+        this.accountError = '';
+        return;
+      }
+
+      // 检查工号格式：五位小写英文+三位数字
+      const accountPattern = /^[a-z]{5}\d{3}$/;
+      if (!accountPattern.test(account)) {
+        this.accountError = '工号格式错误，请使用五位小写英文+三位数字的格式';
+        return;
+      }
+
+      this.accountError = '';
     },
     validatePassword() {
       const password = this.registerForm.password;
@@ -175,11 +195,12 @@ export default {
       }
     },
     async handleRegister() {
-      // 在提交前再次验证密码和密保问题
+      // 在提交前再次验证工号、密码和密保问题
+      this.validateAccount();  // 验证工号
       this.validatePassword();
       this.validateSecurityQuestions();
 
-      if (this.passwordError || this.securityQuestionError) {
+      if (this.accountError || this.passwordError || this.securityQuestionError) {
         this.message = '请修正错误后再提交';
         return;
       }
@@ -216,6 +237,12 @@ export default {
     '$route'(to) {
       this.isLogin = to.name !== 'RegisterPage';
       this.message = '';
+    },
+    'registerForm.account'() {
+      // 当工号变化时清除错误信息
+      if (this.accountError) {
+        this.accountError = '';
+      }
     },
     'registerForm.password'() {
       // 当密码变化时清除错误信息

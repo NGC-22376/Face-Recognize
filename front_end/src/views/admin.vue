@@ -377,7 +377,7 @@
           </div>
         </div>
         <!-- 修改密码模态框 -->
-        <div v-if="showPasswordModal" class="modal-overlay" @click="showPasswordModal = false">
+        <div v-if="showPasswordModal" class="modal-overlay">
           <div class="modal-content" @click.stop>
             <div class="modal-header">
               <h3>修改密码</h3>
@@ -1435,6 +1435,8 @@ export default {
         newPassword: '',
         confirmPassword: ''
       },
+      // 密码验证错误信息
+      passwordError: '',
       answerForm: {
         newAnswer: '',
         confirmAnswer: ''
@@ -1564,6 +1566,11 @@ export default {
       };
       return questions[index];
     },
+    // 验证密码格式（字母+数字，5-15位之间）
+    validatePassword(password) {
+      const passwordPattern = /^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z\d]{5,15}$/;
+      return passwordPattern.test(password);
+    },
     // 修改密码
     async updatePassword() {
       if (!this.passwordForm.oldPassword) {
@@ -1572,6 +1579,11 @@ export default {
       }
       if (!this.passwordForm.newPassword) {
         ElMessage.error('请输入新密码');
+        return;
+      }
+      // 验证新密码格式
+      if (!this.validatePassword(this.passwordForm.newPassword)) {
+        ElMessage.error('新密码必须是5-15位的字母和数字组合');
         return;
       }
       if (this.passwordForm.newPassword !== this.passwordForm.confirmPassword) {
@@ -1595,8 +1607,12 @@ export default {
         const data = await response.json();
         if (response.ok && data.ok) {
           ElMessage.success('密码修改成功');
-          this.showPasswordModal = false;
+          // 重置表单
           this.passwordForm = { oldPassword: '', newPassword: '', confirmPassword: '' };
+          // 延迟关闭模态框，让用户看到成功消息
+          setTimeout(() => {
+            this.showPasswordModal = false;
+          }, 1000);
         } else {
           ElMessage.error(data.msg || '密码修改失败');
         }

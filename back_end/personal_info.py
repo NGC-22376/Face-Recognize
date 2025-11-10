@@ -115,6 +115,12 @@ def update_password():
         new_password = data.get('new_password')
         if not old_password or not new_password:
             return jsonify(ok=False, msg="请输入原密码和新密码"), 400
+        
+        # 验证新密码格式：字母+数字组合，5-15位
+        import re
+        if not re.match(r'^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z\d]{5,15}$', new_password):
+            return jsonify(ok=False, msg="密码必须为5-15位字母和数字的组合"), 400
+        
         # 验证原密码
         if not bcrypt.check_password_hash(user.password, old_password):
             return jsonify(ok=False, msg="原密码错误"), 400
