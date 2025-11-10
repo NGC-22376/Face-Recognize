@@ -8,26 +8,34 @@
           <input v-model="form.account" placeholder="账号" required />
           <input v-model="form.password" type="password" placeholder="密码" required />
         </div>
-        
+
         <!-- 注册表单 -->
         <div v-else>
           <input v-model="registerForm.name" placeholder="姓名" required />
           <input v-model="registerForm.account" placeholder="工号（五位小写英文+三位数字）" required />
-          <input v-model="registerForm.password" type="password" placeholder="密码" required />
-          
+          <input v-model="registerForm.password" type="password" placeholder="密码（字母和数字组合，5-15个字符）" required
+            @blur="validatePassword" />
+          <div v-if="passwordError" class="error-message">{{ passwordError }}</div>
+
           <hr class="divider">
-          
+
           <!-- 密保问题输入框 -->
           <p class="security-tip">请设置三个密保问题用于找回密码</p>
-          <input v-model="registerForm.security_question_1" placeholder="密保问题1" required />
+          <input v-model="registerForm.security_question_1" placeholder="密保问题1（3-20个字符）" required
+            @blur="validateSecurityQuestions" />
           <input v-model="registerForm.security_answer_1" placeholder="密保答案1" required />
-          <input v-model="registerForm.security_question_2" placeholder="密保问题2" required />
+          <input v-model="registerForm.security_question_2" placeholder="密保问题2（3-20个字符）" required
+            @blur="validateSecurityQuestions" />
           <input v-model="registerForm.security_answer_2" placeholder="密保答案2" required />
-          <input v-model="registerForm.security_question_3" placeholder="密保问题3" required />
+          <input v-model="registerForm.security_question_3" placeholder="密保问题3（3-20个字符）" required
+            @blur="validateSecurityQuestions" />
           <input v-model="registerForm.security_answer_3" placeholder="密保答案3" required />
+          <div v-if="securityQuestionError" class="error-message">{{ securityQuestionError }}</div>
         </div>
 
-        <button type="submit" class="submit-button">{{ isLogin ? '登录' : '注册' }}</button>
+        <button type="submit" class="submit-button"
+          :class="{ 'register-active': !isLogin && !passwordError && !securityQuestionError }"
+          :disabled="!isLogin && (!!passwordError || !!securityQuestionError)">{{ isLogin ? '登录' : '注册' }}</button>
       </form>
 
       <div class="toggle-container">
@@ -66,7 +74,9 @@ export default {
         security_question_3: '',
         security_answer_3: ''
       },
-      message: ''
+      message: '',
+      passwordError: '',
+      securityQuestionError: '' // 密保问题错误信息
     }
   },
   methods: {
@@ -75,19 +85,70 @@ export default {
       this.isLogin = !this.isLogin;
       // 清空可能存在的错误信息和表单数据
       this.message = '';
+      this.passwordError = '';
       Object.keys(this.form).forEach(key => this.form[key] = '');
       Object.keys(this.registerForm).forEach(key => this.registerForm[key] = '');
       this.registerForm.role = '员工'; // 重置role
 
       // 根据状态更新路由
       if (this.isLogin) {
-          this.$router.push({ name: 'LoginPage' }).catch(()=>{});
+        this.$router.push({ name: 'LoginPage' }).catch(() => { });
       } else {
-          this.$router.push({ name: 'RegisterPage' }).catch(()=>{});
+        this.$router.push({ name: 'RegisterPage' }).catch(() => { });
       }
     },
     to_PwRec() {
       this.$router.push('/password-recovery');
+    },
+    validatePassword() {
+      const password = this.registerForm.password;
+      if (!password) {
+        this.passwordError = '';
+        return;
+      }
+
+      // 检查长度是否在5-15个字符之间
+      if (password.length < 5 || password.length > 15) {
+        this.passwordError = '密码长度必须在5-15个字符之间';
+        return;
+      }
+
+      // 检查是否同时包含字母和数字
+      const hasLetter = /[a-zA-Z]/.test(password);
+      const hasNumber = /\d/.test(password);
+
+      if (!hasLetter || !hasNumber) {
+        this.passwordError = '密码必须同时包含字母和数字';
+        return;
+      }
+
+      this.passwordError = '';
+    },
+    // 密保问题验证方法
+    validateSecurityQuestions() {
+      const questions = [
+        this.registerForm.security_question_1,
+        this.registerForm.security_question_2,
+        this.registerForm.security_question_3
+      ];
+
+      // 检查每个问题的长度是否在3-20个字符之间
+      for (let i = 0; i < questions.length; i++) {
+        const question = questions[i];
+        if (question && (question.length < 3 || question.length > 20)) {
+          this.securityQuestionError = `密保问题${i + 1}的长度必须在3-20个字符之间`;
+          return;
+        }
+      }
+
+      // 检查问题是否重复
+      const uniqueQuestions = new Set(questions.filter(q => q.trim() !== ''));
+      if (uniqueQuestions.size !== questions.filter(q => q.trim() !== '').length) {
+        this.securityQuestionError = '密保问题不允许重复';
+        return;
+      }
+
+      this.securityQuestionError = '';
     },
     async handleLogin() {
       try {
@@ -114,6 +175,15 @@ export default {
       }
     },
     async handleRegister() {
+      // 在提交前再次验证密码和密保问题
+      this.validatePassword();
+      this.validateSecurityQuestions();
+
+      if (this.passwordError || this.securityQuestionError) {
+        this.message = '请修正错误后再提交';
+        return;
+      }
+
       try {
         const res = await fetch('http://localhost:5000/register', {
           method: 'POST',
@@ -146,6 +216,12 @@ export default {
     '$route'(to) {
       this.isLogin = to.name !== 'RegisterPage';
       this.message = '';
+    },
+    'registerForm.password'() {
+      // 当密码变化时清除错误信息
+      if (this.passwordError) {
+        this.passwordError = '';
+      }
     }
   }
 }
@@ -159,27 +235,31 @@ export default {
   height: 100vh;
   background: #f5f6fa;
 }
+
 .form-box {
   background: #fff;
   padding: 32px 40px;
   border-radius: 8px;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
   min-width: 320px;
-  max-height: 90vh; 
-  overflow-y: auto; 
+  max-height: 90vh;
+  overflow-y: auto;
 }
+
 .form-box h2 {
   text-align: center;
   margin-bottom: 24px;
 }
+
 .form-box input {
   width: 100%;
   padding: 10px;
   margin-bottom: 16px;
   border: 1px solid #ddd;
   border-radius: 4px;
-  box-sizing: border-box; 
+  box-sizing: border-box;
 }
+
 .form-box button {
   padding: 10px;
   border: none;
@@ -187,54 +267,68 @@ export default {
   font-size: 16px;
   cursor: pointer;
   transition: background-color 0.3s ease;
-}
-.toggle-container {
-  display: flex; 
-  width: 100%;   
-  margin-top: 10px;
-  gap: 10px;     
-}
-.toggle-link {
-  flex: 1; 
-  padding: 10px 15px; 
-  box-sizing: border-box;
-  background-color: #f0f2f5;
-  color: #555;
-  border: 1px solid #dcdfe6; 
-  border-radius: 5px; 
-  text-align: center; 
-  cursor: pointer; 
-  transition: all 0.3s ease;
-}
-.toggle-link:hover {
-  background-color: #e4e7ed;
-  border-color: #c0c4cc;
-}
-.form-box .submit-button {
   width: 100%;
-  padding: 10px 15px; 
-  box-sizing: border-box; 
-  background: #3498db;
-  color: #fff;
+  background-color: #1890ff;
+  color: white;
 }
-.form-box .submit-button:hover {
-  background: #2980b9;
+
+.form-box button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
 }
-.message {
-  text-align: center;
-  color: #e74c3c;
+
+.toggle-container {
+  display: flex;
+  width: 100%;
   margin-top: 10px;
+  gap: 10px;
 }
-/* 新增样式 */
-.divider {
-  border: none;
-  border-top: 1px solid #eee;
-  margin: 20px 0;
+
+.toggle-link {
+  flex: 1;
+  padding: 10px 15px;
+  box-sizing: border-box;
+  text-align: center;
+  background: #f0f0f0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s;
 }
+
+.toggle-link:hover {
+  background: #e0e0e0;
+}
+
+.message {
+  margin-top: 16px;
+  text-align: center;
+  color: #f56565;
+  font-size: 14px;
+}
+
+.error-message {
+  color: #ff4d4f;
+  font-size: 14px;
+  margin-top: 5px;
+  margin-bottom: 10px;
+}
+
 .security-tip {
   font-size: 14px;
-  color: #888;
-  margin-bottom: 12px;
+  color: #666;
+  margin-bottom: 10px;
+}
+
+.divider {
+  margin: 20px 0;
+  border: 0;
+  border-top: 1px solid #eee;
+}
+
+.security-tip {
   text-align: center;
+  color: #666;
+  margin: 16px 0;
+  font-size: 14px;
 }
 </style>

@@ -262,3 +262,134 @@ def review_face_enrollment(enrollment_id):
         db.session.rollback()
         app.logger.error(f"审核操作失败: {str(e)}")
         return jsonify(ok=False, msg="审核操作失败"), 500
+
+
+# 批量审核人脸录入申请
+@app.route("/admin/face-enrollments/batch-review", methods=["POST"])
+@jwt_required()
+def batch_review_face_enrollments():
+    """批量审核人脸录入申请"""
+    try:
+        # 验证管理员权限
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        if not current_user or current_user.role != "管理员":
+            return jsonify(ok=False, msg="权限不足"), 403
+            
+        # 获取请求数据
+        data = request.get_json()
+        if not data:
+            return jsonify(ok=False, msg="请求数据无效"), 400
+            
+        enrollment_ids = data.get("enrollment_ids", [])
+        approved = data.get("approved", False)
+        
+        if not enrollment_ids or not isinstance(enrollment_ids, list):
+            return jsonify(ok=False, msg="请选择要处理的申请"), 400
+            
+        success_count = 0
+        failed_count = 0
+        failed_details = []
+        
+        # 处理每个申请
+        for enrollment_id in enrollment_ids:
+            try:
+                # 获取审核申请
+                enrollment = FaceEnrollment.query.get(enrollment_id)
+                if not enrollment:
+                    failed_details.append({"id": enrollment_id, "reason": "申请不存在"})
+                    failed_count += 1
+                    continue
+                    
+                # 检查申请状态是否为待审核
+                if enrollment.status != ENROLLMENT_PENDING:
+                    failed_details.append({"id": enrollment_id, "reason": "申请状态不正确"})
+                    failed_count += 1
+                    continue
+                    
+                if approved:
+                    # 审核通过
+                    # 提取人脸特征
+                    feature = extract_feature(enrollment.image_path)
+                    if feature is None:
+                        failed_details.append({"id": enrollment_id, "reason": "无法提取人脸特征"})
+                        failed_count += 1
+                        continue
+                        
+                    # 保存特征文件
+                    feature_path = os.path.join("FaceFeature", f"{enrollment.user_id}.npy")
+                    np.save(feature_path, feature)
+                    
+                    # 保存图片文件
+                    image_path = os.path.join("FaceImage", f"{enrollment.user_id}.jpg")
+                    with (
+                        open(enrollment.image_path, "rb") as src,
+                        open(image_path, "wb") as dst,
+                    ):
+                        dst.write(src.read())
+                        
+                    # 删除temp_images里面的文件
+                    os.remove(enrollment.image_path)
+                    
+                    # 检查是否已存在人脸记录，如果存在则更新，否则创建
+                    existing_face = Face.query.filter_by(user_id=enrollment.user_id).first()
+                    if existing_face:
+                        existing_face.image_path = feature_path
+                        existing_face.rec_time = datetime.now(SHANGHAI_TZ)
+                        existing_face.result = "已录入"
+                    else:
+                        # 创建人脸记录
+                        new_face = Face(
+                            user_id=enrollment.user_id,
+                            image_path=feature_path,
+                            rec_time=datetime.now(SHANGHAI_TZ),
+                            result="已录入",
+                        )
+                        db.session.add(new_face)
+                        
+                    # 更新审核记录
+                    enrollment.status = ENROLLMENT_APPROVED
+                    enrollment.reviewed_time = datetime.now(SHANGHAI_TZ)
+                    enrollment.review_comment = "批量审核通过"
+                else:
+                    # 审核拒绝
+                    enrollment.status = ENROLLMENT_REJECTED
+                    enrollment.reviewed_time = datetime.now(SHANGHAI_TZ)
+                    enrollment.review_comment = "批量审核拒绝"
+                    # 删除上传的图片文件
+                    try:
+                        if os.path.exists(enrollment.image_path):
+                            os.remove(enrollment.image_path)
+                    except Exception as e:
+                        app.logger.error(f"删除图片文件失败: {str(e)}")
+                        
+                success_count += 1
+                
+            except Exception as e:
+                failed_details.append({"id": enrollment_id, "reason": str(e)})
+                failed_count += 1
+                app.logger.error(f"处理人脸录入申请 {enrollment_id} 失败: {str(e)}")
+                
+        # 提交数据库更改
+        db.session.commit()
+        
+        # 返回结果
+        if failed_count > 0:
+            return jsonify(
+                ok=True,
+                msg=f"批量处理完成，成功 {success_count} 条，失败 {failed_count} 条",
+                success_count=success_count,
+                failed_count=failed_count,
+                failed_details=failed_details
+            ), 207  # Multi-Status
+        else:
+            return jsonify(
+                ok=True,
+                msg=f"成功{ '通过' if approved else '拒绝' } {success_count} 条记录",
+                success_count=success_count
+            ), 200
+            
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"批量审核操作失败: {str(e)}")
+        return jsonify(ok=False, msg="批量审核操作失败"), 500

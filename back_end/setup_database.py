@@ -193,7 +193,7 @@ def insert_attendance_data():
 
             # 1. 定义考勤规则
             WORK_START_TIME = time(9, 0, 0)
-            WORK_END_TIME = time(18, 0, 0)
+            WORK_END_TIME = time(19, 0, 0)
 
             # 2. 获取日期范围
             today = datetime.now(SHANGHAI_TZ).date()
@@ -279,21 +279,21 @@ def insert_attendance_data():
                     base_out_time = datetime.combine(
                         current_date, WORK_END_TIME, tzinfo=SHANGHAI_TZ
                     )
-                    # 模拟20%的早退率
+                    # 模拟20%的早退率（下班时间早于19:00）
                     if random.random() < 0.2:
-                        # 早退 1 到 59 分钟
+                        # 早退 1 到 59 分钟（下班时间在18:01-18:59之间）
                         early_departure = timedelta(minutes=random.randint(1, 59))
                         clock_out = base_out_time - early_departure
                         clock_out_status = "早退"
                         final_status = "早退"
-                    elif random.random() < 0.2:  # 模拟20%的加班率
+                    elif random.random() < 0.2:  # 模拟20%的加班率（下班时间晚于19:00）
                         # 加班 1 到 120 分钟
                         overtime = timedelta(minutes=random.randint(1, 120))
                         clock_out = base_out_time + overtime
                         clock_out_status = "加班"
                         final_status = "加班"
                     else:
-                        # 正常下班
+                        # 正常下班（19:00准时下班）
                         clock_out = base_out_time
                         clock_out_status = "正常"
                         final_status = "正常"

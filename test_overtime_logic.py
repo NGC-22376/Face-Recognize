@@ -46,10 +46,10 @@ def test_overtime_logic():
     with app.app_context():
         # 测试不同下班时间的情况
         test_times = [
-            ("17:30", "17:30下班，应该算早退"),
-            ("18:00", "18:00下班，应该算正常"),
-            ("18:30", "18:30下班，应该算正常"),
+            ("18:30", "18:30下班，应该算早退"),
+            ("18:59", "18:59下班，应该算早退"),
             ("19:00", "19:00下班，应该算正常"),
+            ("19:01", "19:01下班，应该算加班"),
             ("19:30", "19:30下班，应该算加班"),
             ("20:00", "20:00下班，应该算加班"),
             ("21:00", "21:00下班，应该算加班")
@@ -63,11 +63,11 @@ def test_overtime_logic():
             
             # 根据我们修改的逻辑判断状态
             clock_out_time = attendance.clock_out_time
-            if clock_out_time.hour < 18 or (clock_out_time.hour == 18 and clock_out_time.minute == 0):
+            if clock_out_time.hour < 19:
                 calculated_status = "早退"
                 calculated_clock_out_status = "早退"
-            elif clock_out_time.hour < 19:
-                # 18:00-19:00之间打卡算正常下班
+            elif clock_out_time.hour == 19 and clock_out_time.minute == 0:
+                # 19:00准时下班算正常下班
                 calculated_status = "正常"
                 calculated_clock_out_status = "正常"
             else:

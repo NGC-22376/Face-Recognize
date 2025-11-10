@@ -79,9 +79,9 @@
               <div class="stat-number">{{ dailyStats.early_leave_count }}</div>
               <div class="stat-label">早退人数</div>
             </div>
-            <div class="stat-card normal">
-              <div class="stat-number">{{ dailyStats.normal_count }}</div>
-              <div class="stat-label">正常人数</div>
+            <div class="stat-card overtime">
+              <div class="stat-number">{{ dailyStats.overtime_count }}</div>
+              <div class="stat-label">加班人数</div>
             </div>
           </div>
           <div class="charts-container">
@@ -2889,7 +2889,7 @@ export default {
               { value: this.dailyStats.actual_attendance, name: '实到人数' },
               { value: this.dailyStats.late_count, name: '迟到人数' },
               { value: this.dailyStats.early_leave_count, name: '早退人数' },
-              { value: this.dailyStats.normal_count, name: '正常人数' },
+              { value: this.dailyStats.overtime_count, name: '加班人数' },
               { value: this.dailyStats.should_attend - this.dailyStats.actual_attendance, name: '未到人数' }
             ],
             emphasis: {
@@ -2977,10 +2977,11 @@ export default {
             type: 'pie',
             radius: '50%',
             data: [
-              { value: this.dailyStats.normal_count, name: '正常人数' },
-              { value: this.dailyStats.late_count, name: '迟到人数' },
-              { value: this.dailyStats.early_leave_count, name: '早退人数' },
-              { value: this.dailyStats.leave_count, name: '请假人数' }
+              { value: this.dailyStats.normal_count, name: '正常人数', itemStyle: { color: '#587BF3' } },
+              { value: this.dailyStats.overtime_count, name: '加班人数', itemStyle: { color: '#8b5cf6' } },
+              { value: this.dailyStats.late_count, name: '迟到人数', itemStyle: { color: '#E74C3C' } },
+              { value: this.dailyStats.early_leave_count, name: '早退人数', itemStyle: { color: '#F39C12' } },
+              { value: this.dailyStats.leave_count, name: '请假人数', itemStyle: { color: '#27ae60' } }
             ],
             emphasis: {
               itemStyle: {
@@ -3115,21 +3116,21 @@ export default {
             type: 'line',
             data: sickData,
             smooth: true,
-            itemStyle: { color: '#5eb95e' } // 绿色
+            itemStyle: { color: '#27ae60' } // 深绿色，与饼图请假人数颜色一致
           },
           {
             name: '私事请假',
             type: 'line',
             data: personalData,
             smooth: true,
-            itemStyle: { color: '#3b82f6' } // 深蓝色
+            itemStyle: { color: '#3498db' } // 蓝色
           },
           {
             name: '公事请假',
             type: 'line',
             data: officialData,
             smooth: true,
-            itemStyle: { color: '#f59e0b' } // 橙色
+            itemStyle: { color: '#f39c12' } // 橙色，与饼图早退人数颜色一致
           }
         ]
       };
@@ -3211,28 +3212,28 @@ export default {
             type: 'line',
             data: normalData,
             smooth: true,
-            itemStyle: { color: '#3b82f6' } // 蓝色
+            itemStyle: { color: '#587BF3' } // 与饼图正常人数颜色一致
           },
           {
             name: '迟到',
             type: 'line',
             data: lateData,
             smooth: true,
-            itemStyle: { color: '#5eb95e' } // 绿色
+            itemStyle: { color: '#E74C3C' } // 与饼图迟到人数颜色一致
           },
           {
             name: '早退',
             type: 'line',
             data: earlyData,
             smooth: true,
-            itemStyle: { color: '#3b82f6' } // 深蓝色
+            itemStyle: { color: '#F39C12' } // 与饼图早退人数颜色一致
           },
           {
             name: '加班',
             type: 'line',
             data: overtimeData,
             smooth: true,
-            itemStyle: { color: '#f59e0b' } // 橙色
+            itemStyle: { color: '#8b5cf6' } // 与饼图加班人数颜色一致
           }
         ]
       };
@@ -3994,6 +3995,10 @@ export default {
 
 .stat-card.normal {
   border-left: 4px solid #27ae60;
+}
+
+.stat-card.overtime {
+  border-left: 4px solid #8e44ad;
 }
 
 .stat-number {

@@ -102,11 +102,11 @@ def create_test_attendance():
                 if clock_in_hour > 9 or (clock_in_hour == 9 and clock_in_minute > 0):
                     status = "迟到"
 
-                # 随机生成下班时间 (17:30 - 19:00)
-                clock_out_hour = random.randint(17, 18)
+                # 随机生成下班时间 (18:30 - 20:00)
+                clock_out_hour = random.randint(18, 19)
                 clock_out_minute = (
                     random.randint(30, 59)
-                    if clock_out_hour == 17
+                    if clock_out_hour == 18
                     else random.randint(0, 59)
                 )
 
@@ -117,8 +117,8 @@ def create_test_attendance():
                     microsecond=0,
                 )
 
-                # 如果下班时间早于18:00，设为早退
-                if clock_out_hour < 18:
+                # 如果下班时间早于19:00，设为早退
+                if clock_out_hour < 19:
                     status = "早退"
 
                 attendance = Attendance(

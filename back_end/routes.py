@@ -17,7 +17,7 @@ from flask_jwt_extended import (
     get_jwt,
 )
 from datetime import datetime, date, timedelta, time
-from sqlalchemy import func, and_, extract
+from sqlalchemy import func, and_, or_, extract
 import face_recognition as fr
 import numpy as np
 import os
@@ -72,11 +72,45 @@ def register():
     if not all(data.get(field) for field in required_fields):
         return jsonify({"message": "所有字段（包括密保问题和答案）都不能为空"}), 400
 
+    # 获取密保问题
+    security_questions = [
+        data["security_question_1"],
+        data["security_question_2"],
+        data["security_question_3"],
+    ]
+
+    # 验证密保问题长度和重复性
+    for i, question in enumerate(security_questions):
+        if len(question) < 3 or len(question) > 20:
+            return jsonify(
+                {"message": f"密保问题{i + 1}的长度必须在3-20个字符之间"}
+            ), 400
+
+    # 检查密保问题是否重复
+    unique_questions = set(q for q in security_questions if q.strip())
+    if len(unique_questions) != len([q for q in security_questions if q.strip()]):
+        return jsonify({"message": "密保问题不允许重复"}), 400
+
     # 检查工号格式是否为五位小写英文+三位数字
     account_pattern = r"^[a-z]{5}\d{3}$"
     if not re.match(account_pattern, data["account"]):
         return (
             jsonify({"message": "工号格式错误，请使用五位小写英文+三位数字的格式"}),
+            400,
+        )
+
+    # 检查密码格式：必须包含字母和数字，长度在5-15个字符之间
+    password = data["password"]
+    if not (5 <= len(password) <= 15):
+        return (
+            jsonify({"message": "密码长度必须在5-15个字符之间"}),
+            400,
+        )
+
+    # 检查是否同时包含字母和数字
+    if not re.search(r"[a-zA-Z]", password) or not re.search(r"\d", password):
+        return (
+            jsonify({"message": "密码必须同时包含字母和数字"}),
             400,
         )
 
@@ -361,17 +395,16 @@ def attendance():
         today_attendance.clock_out_time = current_time
 
         # 判断是否早退或加班
-        if current_time.hour < 18 or (
-            current_time.hour == 18 and current_time.minute < 30
-        ):
-            today_attendance.clock_out_status = "早退"
-            # 如果之前是迟到，现在是早退，状态为迟到+早退
+        if current_time.hour < 19:
+            # 19:00之前打卡（包括18:00-19:00之间）算正常下班
+            today_attendance.clock_out_status = "正常"
+            # 如果之前是迟到，现在是正常下班，状态为迟到
             if today_attendance.status == "迟到":
-                today_attendance.status = "迟到+早退"
+                today_attendance.status = "迟到"
             else:
-                today_attendance.status = "早退"
-        elif current_time.hour < 19:
-            # 18:30-19:00之间打卡算正常下班
+                today_attendance.status = "正常"
+        elif current_time.hour == 19 and current_time.minute == 0:
+            # 19:00准时下班算正常下班
             today_attendance.clock_out_status = "正常"
             # 如果之前是迟到，现在是正常下班，状态为迟到
             if today_attendance.status == "迟到":
@@ -1162,6 +1195,26 @@ def get_daily_attendance_overview():
         or 0
     )
 
+    # 加班人数统计（下班打卡时间晚于19:00的人数）
+    overtime_count = (
+        db.session.query(func.count(Attendance.attendance_id))
+        .filter(
+            and_(
+                func.date(Attendance.clock_in_time) == today,
+                Attendance.clock_out_time.isnot(None),
+                or_(
+                    extract("hour", Attendance.clock_out_time) > 19,
+                    and_(
+                        extract("hour", Attendance.clock_out_time) == 19,
+                        extract("minute", Attendance.clock_out_time) > 0,
+                    ),
+                ),
+            )
+        )
+        .scalar()
+        or 0
+    )
+
     # 请假人数统计
     leave_count = (
         db.session.query(func.count(func.distinct(Attendance.user_id)))
@@ -1187,6 +1240,7 @@ def get_daily_attendance_overview():
                 "late_count": late_count,
                 "early_leave_count": early_leave_count,
                 "normal_count": normal_count,
+                "overtime_count": overtime_count,
                 "leave_count": leave_count,
             }
         ),
@@ -1359,7 +1413,7 @@ def get_period_attendance_stats():
                 or 0
             )
 
-            # 加班（下班打卡时间晚于等于19:00的人数）
+            # 加班（下班打卡时间晚于19:00的人数）
             overtime = (
                 db.session.query(func.count(Attendance.attendance_id))
                 .filter(
@@ -1367,7 +1421,13 @@ def get_period_attendance_stats():
                         func.date(Attendance.clock_in_time) >= phase_start,
                         func.date(Attendance.clock_in_time) <= phase_end,
                         Attendance.clock_out_time.isnot(None),
-                        extract("hour", Attendance.clock_out_time) >= 19,
+                        or_(
+                            extract("hour", Attendance.clock_out_time) > 19,
+                            and_(
+                                extract("hour", Attendance.clock_out_time) == 19,
+                                extract("minute", Attendance.clock_out_time) > 0,
+                            ),
+                        ),
                     )
                 )
                 .scalar()
@@ -2555,7 +2615,7 @@ def get_employee_attendance_stats(user_id):
         or 0
     )
 
-    # 加班次数（下班打卡时间晚于等于19:00）
+    # 加班次数（下班打卡时间晚于19:00）
     overtime_count = (
         db.session.query(func.count(Attendance.attendance_id))
         .filter(
@@ -2565,7 +2625,13 @@ def get_employee_attendance_stats(user_id):
                 extract("year", Attendance.clock_in_time) == current_year,
                 func.date(Attendance.clock_in_time) <= today,
                 Attendance.clock_out_time.isnot(None),
-                extract("hour", Attendance.clock_out_time) >= 19,
+                or_(
+                    extract("hour", Attendance.clock_out_time) > 19,
+                    and_(
+                        extract("hour", Attendance.clock_out_time) == 19,
+                        extract("minute", Attendance.clock_out_time) > 0,
+                    ),
+                ),
             )
         )
         .scalar()

@@ -500,11 +500,11 @@ const getStatusText = (status) => {
     case 'overtime':
       return '<span style="color: blue">加班</span>' // 加班字体蓝色
     case 'leave':
-      return '<span style="color: purple">请假</span>' // 请假字体紫色
+      return '<span style="color: #27ae60">请假</span>' // 请假字体深绿色
     case 'not_signed_out':
       return '未签退'
     case '请假':  // 后端可能直接返回中文状态
-      return '<span style="color: purple">请假</span>' // 请假字体紫色
+      return '<span style="color: #27ae60">请假</span>' // 请假字体深绿色
     case '正常':
       return '正常'
     case '迟到':
@@ -524,7 +524,7 @@ const getStatusText = (status) => {
     default:
       // 对于其他可能的状态值，如果包含"请假"关键字则也显示为请假状态
       if (status && status.includes('请假')) {
-        return '<span style="color: purple">请假</span>'
+        return '<span style="color: #27ae60">请假</span>'
       }
       // 对于包含"加班"关键字的状态也显示为加班
       if (status && status.includes('加班')) {
