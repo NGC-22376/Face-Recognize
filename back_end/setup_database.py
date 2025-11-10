@@ -125,8 +125,6 @@ def insert_test_data():
                 "洋",
             ]
 
-            
-                
             users_to_add = []
             for i in range(1, 101):
                 account = f"empid{i:03d}"
@@ -147,15 +145,18 @@ def insert_test_data():
                 )
                 users_to_add.append(employee)
 
-
             db.session.add_all(users_to_add)
             print("100名员工及专业密保创建成功！")
 
             # 提交以生成user_id
             db.session.commit()
             image_folder = os.path.join(os.path.dirname(__file__), "static")
-            image_files = glob.glob(os.path.join(image_folder, "*.jpg")) + glob.glob(os.path.join(image_folder, "*.png"))
-            image_files = [os.path.relpath(f, start=os.path.dirname(__file__)) for f in image_files]
+            image_files = glob.glob(os.path.join(image_folder, "*.jpg")) + glob.glob(
+                os.path.join(image_folder, "*.png")
+            )
+            image_files = [
+                os.path.relpath(f, start=os.path.dirname(__file__)) for f in image_files
+            ]
             if not image_files:
                 print("static 文件夹下没有找到图片，无法分配人脸图像。")
                 return False
@@ -609,21 +610,23 @@ def insert_absence_data():
                         # 生成请假时间
                         start_time = datetime.combine(start_date, time(9, 0))
                         end_time = datetime.combine(end_date, time(18, 0))
-                        
+
                         # 检查是否与该员工已有的请假记录重叠
-                        if not has_overlap(employee_absences[employee.user_id], start_time, end_time):
+                        if not has_overlap(
+                            employee_absences[employee.user_id], start_time, end_time
+                        ):
                             # 没有重叠，可以添加
                             employee_absences[employee.user_id].append(
                                 Absence(start_time=start_time, end_time=end_time)
                             )
                             break
-                        
+
                         # 如果有重叠，重新生成日期
                         days_offset = random.randint(-30, 30)
                         start_date = today + timedelta(days=days_offset)
                         end_date = start_date + timedelta(days=random.randint(1, 10))
                         attempts += 1
-                    
+
                     # 如果超过最大尝试次数，跳过这条记录
                     if attempts >= max_attempts:
                         continue
@@ -704,21 +707,23 @@ def insert_absence_data():
                     # 生成请假时间
                     start_time = datetime.combine(start_date, time(9, 0))
                     end_time = datetime.combine(end_date, time(18, 0))
-                    
+
                     # 检查是否与该员工已有的请假记录重叠
-                    if not has_overlap(employee_absences[employee.user_id], start_time, end_time):
+                    if not has_overlap(
+                        employee_absences[employee.user_id], start_time, end_time
+                    ):
                         # 没有重叠，可以添加
                         employee_absences[employee.user_id].append(
                             Absence(start_time=start_time, end_time=end_time)
                         )
                         break
-                    
+
                     # 如果有重叠，重新生成日期
                     days_offset = random.randint(-30, 30)
                     start_date = today + timedelta(days=days_offset)
                     end_date = start_date + timedelta(days=random.randint(1, 10))
                     attempts += 1
-                
+
                 # 如果超过最大尝试次数，跳过这条记录
                 if attempts >= max_attempts:
                     continue
