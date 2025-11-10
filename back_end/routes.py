@@ -17,7 +17,7 @@ from flask_jwt_extended import (
     get_jwt,
 )
 from datetime import datetime, date, timedelta, time
-from sqlalchemy import func, and_, or_, extract
+from sqlalchemy import func, and_, or_, extract, not_
 import face_recognition as fr
 import numpy as np
 import os
@@ -714,63 +714,85 @@ def get_personal_attendance():
     current_month = now.month
     current_year = now.year
 
-    # 总出勤天数（不计未来日期）
+        # 查询该员工所有已批准的请假记录
+    approved_leaves = Absence.query.filter(
+        and_(
+            Absence.user_id == current_user_id,
+            Absence.status == 2,  # 已批准
+        )
+    ).all()
+
+    # 创建请假记录的时间区间列表
+    leave_periods = []
+    for leave in approved_leaves:
+        leave_periods.append(
+            {"start": leave.start_time.date(), "end": leave.end_time.date()}
+        )
+
+    # 构建排除请假日期的条件
+    exclude_conditions = []
+    for period in leave_periods:
+        exclude_conditions.append(
+            and_(
+                func.date(Attendance.clock_in_time) >= period["start"],
+                func.date(Attendance.clock_in_time) <= period["end"]
+            )
+        )
+    
+    # 基础查询条件
+    base_conditions = [
+        Attendance.user_id == current_user_id,
+        extract("month", Attendance.clock_in_time) == current_month,
+        extract("year", Attendance.clock_in_time) == current_year,
+        func.date(Attendance.clock_in_time) <= today
+    ]
+    
+    # 如果有请假记录，添加排除条件
+    if exclude_conditions:
+        base_conditions.append(not_(or_(*exclude_conditions)))
+
+    # 总出勤天数（不计未来日期，不包含请假期间）
     total_days = (
         db.session.query(func.count(Attendance.attendance_id))
         .filter(
             and_(
-                Attendance.user_id == current_user_id,
-                extract("month", Attendance.clock_in_time) == current_month,
-                extract("year", Attendance.clock_in_time) == current_year,
-                func.date(Attendance.clock_in_time) <= today,
+                *(base_conditions + [Attendance.status.in_(["正常", "迟到", "早退", "加班"])])
             )
         )
         .scalar()
         or 0
     )
 
-    # 迟到次数（不计未来日期）
+    # 迟到次数（不计未来日期，不包含请假期间）
     late_count = (
         db.session.query(func.count(Attendance.attendance_id))
         .filter(
             and_(
-                Attendance.user_id == current_user_id,
-                extract("month", Attendance.clock_in_time) == current_month,
-                extract("year", Attendance.clock_in_time) == current_year,
-                Attendance.status == "迟到",
-                func.date(Attendance.clock_in_time) <= today,
+                *(base_conditions + [Attendance.status == "迟到"])
             )
         )
         .scalar()
         or 0
     )
 
-    # 早退次数（不计未来日期）
+    # 早退次数（不计未来日期，不包含请假期间）
     early_leave_count = (
         db.session.query(func.count(Attendance.attendance_id))
         .filter(
             and_(
-                Attendance.user_id == current_user_id,
-                extract("month", Attendance.clock_in_time) == current_month,
-                extract("year", Attendance.clock_in_time) == current_year,
-                Attendance.status == "早退",
-                func.date(Attendance.clock_in_time) <= today,
+                *(base_conditions + [Attendance.status == "早退"])
             )
         )
         .scalar()
         or 0
     )
 
-    # 正常次数（不计未来日期）
+    # 正常次数（不计未来日期，不包含请假期间）
     normal_count = (
         db.session.query(func.count(Attendance.attendance_id))
         .filter(
             and_(
-                Attendance.user_id == current_user_id,
-                extract("month", Attendance.clock_in_time) == current_month,
-                extract("year", Attendance.clock_in_time) == current_year,
-                Attendance.status == "正常",
-                func.date(Attendance.clock_in_time) <= today,
+                *(base_conditions + [Attendance.status == "正常"])
             )
         )
         .scalar()
@@ -782,18 +804,13 @@ def get_personal_attendance():
         current_user_id, current_year, current_month, today
     )
 
-    # 最近记录（不含未来日期）
-    recent_records = (
-        Attendance.query.filter(
-            and_(
-                Attendance.user_id == current_user_id,
-                func.date(Attendance.clock_in_time) <= today,
-            )
-        )
-        .order_by(Attendance.clock_in_time.desc())
-        .limit(10)
-        .all()
-    )
+        # 获取最近记录（不含未来日期，只包含attendance表中的记录，并排除请假期间的记录）
+    recent_records_query = Attendance.query.filter(
+        and_(*base_conditions)
+    ).order_by(Attendance.clock_in_time.desc())
+
+    # 只保留最近10条记录
+    recent_records = recent_records_query.limit(10).all()
 
     # 查询该员工所有已批准的请假记录
     approved_leaves = Absence.query.filter(
@@ -893,18 +910,13 @@ def get_personal_attendance():
     # 只保留最近10条记录
     all_records = all_records[:10]
 
-    # 动态补充今日未出勤的虚拟记录（18:00后、当天无打卡、且非请假；不写入数据库）
-    on_leave_today = (
-        Absence.query.filter(
-            and_(
-                Absence.user_id == current_user_id,
-                Absence.status == 2,
-                func.date(Absence.start_time) <= today,
-                func.date(Absence.end_time) >= today,
-            )
-        ).first()
-        is not None
-    )
+        # 动态补充今日未出勤的虚拟记录（18:00后、当天无打卡、且非请假；不写入数据库）
+    # 检查今天是否在任何已批准的请假期间内
+    on_leave_today = False
+    for period in leave_periods:
+        if period["start"] <= today <= period["end"]:
+            on_leave_today = True
+            break
     has_any_att_today = (
         db.session.query(func.count(Attendance.attendance_id))
         .filter(
@@ -961,91 +973,6 @@ def get_personal_attendance_pure():
     current_month = now.month
     current_year = now.year
 
-    # 总出勤天数（不计未来日期，不包含请假期间）
-    total_days = (
-        db.session.query(func.count(Attendance.attendance_id))
-        .filter(
-            and_(
-                Attendance.user_id == current_user_id,
-                extract("month", Attendance.clock_in_time) == current_month,
-                extract("year", Attendance.clock_in_time) == current_year,
-                func.date(Attendance.clock_in_time) <= today,
-                Attendance.status.in_(["正常", "迟到", "早退", "加班"]),
-            )
-        )
-        .scalar()
-        or 0
-    )
-
-    # 迟到次数（不计未来日期，不包含请假期间）
-    late_count = (
-        db.session.query(func.count(Attendance.attendance_id))
-        .filter(
-            and_(
-                Attendance.user_id == current_user_id,
-                extract("month", Attendance.clock_in_time) == current_month,
-                extract("year", Attendance.clock_in_time) == current_year,
-                Attendance.status == "迟到",
-                func.date(Attendance.clock_in_time) <= today,
-            )
-        )
-        .scalar()
-        or 0
-    )
-
-    # 早退次数（不计未来日期，不包含请假期间）
-    early_leave_count = (
-        db.session.query(func.count(Attendance.attendance_id))
-        .filter(
-            and_(
-                Attendance.user_id == current_user_id,
-                extract("month", Attendance.clock_in_time) == current_month,
-                extract("year", Attendance.clock_in_time) == current_year,
-                Attendance.status == "早退",
-                func.date(Attendance.clock_in_time) <= today,
-            )
-        )
-        .scalar()
-        or 0
-    )
-
-    # 正常次数（不计未来日期，不包含请假期间）
-    normal_count = (
-        db.session.query(func.count(Attendance.attendance_id))
-        .filter(
-            and_(
-                Attendance.user_id == current_user_id,
-                extract("month", Attendance.clock_in_time) == current_month,
-                extract("year", Attendance.clock_in_time) == current_year,
-                Attendance.status == "正常",
-                func.date(Attendance.clock_in_time) <= today,
-            )
-        )
-        .scalar()
-        or 0
-    )
-
-    # 加班次数（不计未来日期，不包含请假期间）
-    overtime_count = (
-        db.session.query(func.count(Attendance.attendance_id))
-        .filter(
-            and_(
-                Attendance.user_id == current_user_id,
-                extract("month", Attendance.clock_in_time) == current_month,
-                extract("year", Attendance.clock_in_time) == current_year,
-                Attendance.status == "加班",
-                func.date(Attendance.clock_in_time) <= today,
-            )
-        )
-        .scalar()
-        or 0
-    )
-
-    # 应出勤天数计算（不计未来日期，减去请假天数）
-    should_attend_days = calculate_should_attend_days(
-        current_user_id, current_year, current_month, today
-    )
-
     # 查询该员工所有已批准的请假记录
     approved_leaves = Absence.query.filter(
         and_(
@@ -1061,35 +988,100 @@ def get_personal_attendance_pure():
             {"start": leave.start_time.date(), "end": leave.end_time.date()}
         )
 
-    # 获取最近记录（不含未来日期，只包含attendance表中的记录）
-    recent_records_query = Attendance.query.filter(
-        and_(
-            Attendance.user_id == current_user_id,
-            func.date(Attendance.clock_in_time) <= today,
+    # 构建排除请假日期的条件
+    exclude_conditions = []
+    for period in leave_periods:
+        exclude_conditions.append(
+            and_(
+                func.date(Attendance.clock_in_time) >= period["start"],
+                func.date(Attendance.clock_in_time) <= period["end"]
+            )
         )
+    
+    # 基础查询条件
+    base_conditions = [
+        Attendance.user_id == current_user_id,
+        extract("month", Attendance.clock_in_time) == current_month,
+        extract("year", Attendance.clock_in_time) == current_year,
+        func.date(Attendance.clock_in_time) <= today
+    ]
+    
+    # 如果有请假记录，添加排除条件
+    if exclude_conditions:
+        base_conditions.append(not_(or_(*exclude_conditions)))
+
+    # 总出勤天数（不计未来日期，不包含请假期间）
+    total_days = (
+        db.session.query(func.count(Attendance.attendance_id))
+        .filter(
+            and_(
+                *(base_conditions + [Attendance.status.in_(["正常", "迟到", "早退", "加班"])])
+            )
+        )
+        .scalar()
+        or 0
+    )
+
+    # 迟到次数（不计未来日期，不包含请假期间）
+    late_count = (
+        db.session.query(func.count(Attendance.attendance_id))
+        .filter(
+            and_(
+                *(base_conditions + [Attendance.status == "迟到"])
+            )
+        )
+        .scalar()
+        or 0
+    )
+
+    # 早退次数（不计未来日期，不包含请假期间）
+    early_leave_count = (
+        db.session.query(func.count(Attendance.attendance_id))
+        .filter(
+            and_(
+                *(base_conditions + [Attendance.status == "早退"])
+            )
+        )
+        .scalar()
+        or 0
+    )
+
+    # 正常次数（不计未来日期，不包含请假期间）
+    normal_count = (
+        db.session.query(func.count(Attendance.attendance_id))
+        .filter(
+            and_(
+                *(base_conditions + [Attendance.status == "正常"])
+            )
+        )
+        .scalar()
+        or 0
+    )
+
+    # 加班次数（不计未来日期，不包含请假期间）
+    overtime_count = (
+        db.session.query(func.count(Attendance.attendance_id))
+        .filter(
+            and_(
+                *(base_conditions + [Attendance.status == "加班"])
+            )
+        )
+        .scalar()
+        or 0
+    )
+
+    # 应出勤天数计算（不计未来日期，减去请假天数）
+    should_attend_days = calculate_should_attend_days(
+        current_user_id, current_year, current_month, today
+    )
+
+    # 获取最近记录（不含未来日期，只包含attendance表中的记录，并排除请假期间的记录）
+    recent_records_query = Attendance.query.filter(
+        and_(*base_conditions)
     ).order_by(Attendance.clock_in_time.desc())
 
-    # 获取所有记录以便进行筛选
-    all_records = recent_records_query.all()
-
-    # 筛选掉在请假期间的记录
-    filtered_records = []
-    for record in all_records:
-        record_date = record.work_date or record.clock_in_time.date()
-        is_in_leave_period = False
-
-        # 检查该记录日期是否在任何请假时间段内
-        for period in leave_periods:
-            if period["start"] <= record_date <= period["end"]:
-                is_in_leave_period = True
-                break
-
-        # 如果不在请假期间，则保留该记录
-        if not is_in_leave_period:
-            filtered_records.append(record)
-
     # 只保留最近10条记录
-    recent_records = filtered_records[:10]
+    recent_records = recent_records_query.limit(10).all()
 
     records_list = []
     for record in recent_records:
@@ -2281,8 +2273,50 @@ def admin_review_absence(absence_id):
     absence = Absence.query.get(absence_id)
     if not absence:
         return jsonify(message="记录不存在"), 404
-    absence.status = 2 if decision == "approve" else 1
+    
+    # 保存原始状态用于后续处理
+    original_status = absence.status
+    new_status = 2 if decision == "approve" else 1
+    absence.status = new_status
     db.session.commit()
+
+    # 如果是批准请假，删除该员工在请假日期范围内的所有考勤记录
+    if decision == "approve":
+        try:
+            # 获取请假日期范围内的所有考勤记录并删除
+            attendances_to_delete = Attendance.query.filter(
+                and_(
+                    Attendance.user_id == absence.user_id,
+                    func.date(Attendance.work_date) >= func.date(absence.start_time),
+                    func.date(Attendance.work_date) <= func.date(absence.end_time)
+                )
+            ).all()
+            
+            deleted_count = 0
+            for attendance in attendances_to_delete:
+                db.session.delete(attendance)
+                deleted_count += 1
+            
+            # 同时也删除在该时间段内打卡的所有记录
+            clock_in_attendances = Attendance.query.filter(
+                and_(
+                    Attendance.user_id == absence.user_id,
+                    Attendance.clock_in_time >= absence.start_time,
+                    Attendance.clock_in_time <= absence.end_time
+                )
+            ).all()
+            
+            for attendance in clock_in_attendances:
+                # 确保不重复删除
+                if attendance not in attendances_to_delete:
+                    db.session.delete(attendance)
+                    deleted_count += 1
+            
+            db.session.commit()
+            print(f"已删除员工 {absence.user_id} 在请假期间的 {deleted_count} 条考勤记录")
+        except Exception as e:
+            db.session.rollback()
+            print(f"删除请假期间考勤记录时出错: {e}")
 
     # 根据决策设置提示消息
     message = "请假申请已批准" if decision == "approve" else "请假申请已拒绝"
@@ -2316,7 +2350,45 @@ def admin_batch_review_absence():
         try:
             absence = Absence.query.get(absence_id)
             if absence and absence.status == 0:  # 只处理未处理的申请
+                original_status = absence.status
                 absence.status = 2 if decision == "approve" else 1
+                
+                # 如果是批准请假，删除该员工在请假日期范围内的所有考勤记录
+                if decision == "approve":
+                    try:
+                        # 获取请假日期范围内的所有考勤记录并删除
+                        attendances_to_delete = Attendance.query.filter(
+                            and_(
+                                Attendance.user_id == absence.user_id,
+                                func.date(Attendance.work_date) >= func.date(absence.start_time),
+                                func.date(Attendance.work_date) <= func.date(absence.end_time)
+                            )
+                        ).all()
+                        
+                        deleted_count = 0
+                        for attendance in attendances_to_delete:
+                            db.session.delete(attendance)
+                            deleted_count += 1
+                        
+                        # 同时也删除在该时间段内打卡的所有记录
+                        clock_in_attendances = Attendance.query.filter(
+                            and_(
+                                Attendance.user_id == absence.user_id,
+                                Attendance.clock_in_time >= absence.start_time,
+                                Attendance.clock_in_time <= absence.end_time
+                            )
+                        ).all()
+                        
+                        for attendance in clock_in_attendances:
+                            # 确保不重复删除
+                            if attendance not in attendances_to_delete:
+                                db.session.delete(attendance)
+                                deleted_count += 1
+                        
+                        print(f"已删除员工 {absence.user_id} 在请假期间的 {deleted_count} 条考勤记录")
+                    except Exception as e:
+                        print(f"删除请假期间考勤记录时出错: {e}")
+                
                 success_count += 1
             else:
                 failed_ids.append(absence_id)

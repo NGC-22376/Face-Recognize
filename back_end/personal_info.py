@@ -199,16 +199,49 @@ def get_face_status():
 @app.route('/user/face_re_enroll', methods=['POST'])
 @jwt_required()
 def re_enroll_face():
-    """申请重新录入人脸 - 将face里面的状态改为未录入"""
+    """申请重新录入人脸 - 删除用户所有已录入的人脸相关信息"""
     try:
         current_user_id = get_jwt_identity()
+        
+        # 删除用户的人脸特征文件（如果存在）
+        face_feature_path = f"FaceFeature/{current_user_id}.npy"
+        if os.path.exists(face_feature_path):
+            try:
+                os.remove(face_feature_path)
+            except Exception as e:
+                print(f"删除用户 {current_user_id} 的人脸特征文件失败: {e}")
+        
+        # 删除用户的人脸图像文件（如果存在）
+        face_image_path = f"FaceImage/{current_user_id}.jpg"
+        if os.path.exists(face_image_path):
+            try:
+                os.remove(face_image_path)
+            except Exception as e:
+                print(f"删除用户 {current_user_id} 的人脸图像文件失败: {e}")
+        
+        # 删除用户待审核的人脸录入申请文件（如果存在）
+        pending_enrollments = FaceEnrollment.query.filter_by(
+            user_id=current_user_id, 
+            status=0  # ENROLLMENT_PENDING
+        ).all()
+        
+        for enrollment in pending_enrollments:
+            if enrollment.image_path and os.path.exists(enrollment.image_path):
+                try:
+                    os.remove(enrollment.image_path)
+                except Exception as e:
+                    print(f"删除用户 {current_user_id} 的待审核人脸文件失败: {e}")
+            # 删除数据库中的待审核记录
+            db.session.delete(enrollment)
+        
+        # 删除用户已录入的人脸记录
         existing_face = Face.query.filter_by(user_id=current_user_id).first()
         if existing_face:
-            existing_face.result = "未录入"
-            db.session.commit()
-            return jsonify(ok=True, msg="申请成功"), 200
-        else:
-            return jsonify(ok=False, msg="申请失败"), 500
+            db.session.delete(existing_face)
+        
+        db.session.commit()
+        return jsonify(ok=True, msg="申请成功"), 200
     except Exception as e:
+        db.session.rollback()
         print(f"申请重新录入人脸错误: {e}")
         return jsonify(ok=False, msg="申请失败"), 500

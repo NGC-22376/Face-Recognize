@@ -4,7 +4,7 @@
     <div class="header">
       <div class="user-info">
         <div class="avatar">{{ userProfile.name ? userProfile.name.charAt(0) : 'A' }}</div>
-        <div class="user-details">
+        <div class="user-details">。
           <h3>{{ userProfile.name }}</h3>
           <p>工号：{{ userProfile.account }} | 权限：{{ userProfile.role }}</p>
         </div>
@@ -1540,6 +1540,8 @@ export default {
         });
         const data = await response.json();
         if (response.ok && data.ok) {
+          // 更新人脸状态为未录入
+          this.faceStatus = '未录入';
           ElMessage.success('申请成功，请前往人脸录入页面');
           this.$router.push({ name: 'FaceRegister' });
         } else {
@@ -1998,8 +2000,8 @@ export default {
     // 获取员工照片URL
     getEmployeePhotoUrl(imagePath) {
       if (!imagePath) {
-        // 如果没有照片，返回默认图片或空字符串
-        return '';
+        // 如果没有照片，返回默认图片
+        return '/default-face.png';
       }
 
       if (imagePath.startsWith('http')) {
