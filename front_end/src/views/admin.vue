@@ -895,7 +895,7 @@
                 <tr v-for="item in myLeaves" :key="item.id">
                   <td>{{ formatDateTime(item.start_time) }}</td>
                   <td>{{ formatDateTime(item.end_time) }}</td>
-                  <td>{{ item.reason }}</td>
+                  <td @click="selectedLeave = item" class="reason-cell">{{ item.reason }}</td>
                   <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
                   <td>{{ statusMap[item.status] || item.status }}</td>
                   <td v-if="myLeavesTab === 'pending'">
@@ -1121,7 +1121,7 @@
                   <td>{{ item.account }}</td>
                   <td>{{ formatDateTime(item.start_time) }}</td>
                   <td>{{ formatDateTime(item.end_time) }}</td>
-                  <td>{{ item.reason }}</td>
+                  <td @click="selectedLeave = item" class="reason-cell">{{ item.reason }}</td>
                   <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
                   <td>{{ statusMap[item.status] || item.status }}</td>
                 </tr>
@@ -1217,7 +1217,7 @@
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <h3>申请详情</h3>
               <button @click="selectedLeave = null"
-                style="background: none; border: none; font-size: 24px; cursor: pointer; color: #999;">×</button>
+                style="background: none; border: none; font-size: 24px; cursor: pointer; color: #999; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">×</button>
             </div>
             <p>姓名：{{ selectedLeave.name }}（工号：{{ selectedLeave.account }}）</p>
             <p>起止：{{ formatDateTime(selectedLeave.start_time) }} - {{ formatDateTime(selectedLeave.end_time) }}</p>
@@ -2219,7 +2219,9 @@ export default {
       this.isLoading = true
       try {
         const token = localStorage.getItem('access_token')
-        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}&page=${this.currentPage}&page_size=${this.pageSize}`, {
+        // 添加搜索参数到URL
+        const searchParam = this.employeeSearch ? `&search=${encodeURIComponent(this.employeeSearch)}` : ''
+        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}&page=${this.currentPage}&page_size=${this.pageSize}${searchParam}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -2243,7 +2245,9 @@ export default {
       this.isLoading = true;
       try {
         const token = localStorage.getItem('access_token');
-        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}&page=1&page_size=10000`, {
+        // 添加搜索参数到URL
+        const searchParam = this.employeeSearch ? `&search=${encodeURIComponent(this.employeeSearch)}` : ''
+        const response = await fetch(`${this.apiBaseUrl}/admin/attendance/employees?sort_by=${this.sortBy}&sort_order=${this.sortOrder}&page=1&page_size=10000${searchParam}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (response.ok) {
