@@ -757,7 +757,7 @@
               </thead>
               <tbody>
                 <!-- 批量模式下显示所有员工 -->
-                <tr v-for="employee in (isBatchMode ? allEmployees : filteredEmployees)" :key="employee.user_id">
+                <tr v-for="employee in (isBatchMode ? allEmployees : employees)" :key="employee.user_id">
                   <template v-if="isBatchMode">
                     <td><input type="checkbox" :value="employee.user_id" v-model="selectedEmployees"></td>
                   </template>
@@ -1836,7 +1836,8 @@ export default {
       } else if (tab === 'personal_info') {
         this.loadPersonalInfo()
       } else if (tab === 'employee_management') {
-        this.loadEmployeesData_c(1)
+        this.currentPage = 1;
+        this.loadEmployeesData()
       } else if (tab === 'personal') {
         this.loadPersonalDataPure()
       } else if (tab === 'face_review') {
@@ -3639,7 +3640,8 @@ export default {
   },
   computed: {
     filteredEmployees() {
-      let list = this.allEmployees || [];
+      // 在批量模式下使用allEmployees，否则使用employees（分页数据）
+      let list = this.isBatchMode ? (this.allEmployees || []) : (this.employees || []);
       if (this.employeeSearch && this.employeeSearch.trim()) {
         const keyword = this.employeeSearch.trim().toLowerCase();
         list = list.filter(emp =>
@@ -3647,21 +3649,32 @@ export default {
           (emp.account && emp.account.toLowerCase().includes(keyword))
         );
       }
-      // 分页
-      const start = (this.currentPage - 1) * this.pageSize;
-      const end = start + this.pageSize;
-      return list.slice(start, end);
+
+      // 只在非批量模式下应用分页
+      if (!this.isBatchMode) {
+        const start = (this.currentPage - 1) * this.pageSize;
+        const end = start + this.pageSize;
+        return list.slice(start, end);
+      }
+
+      return list;
     },
     filteredEmployeesTotal() {
-      let list = this.allEmployees || [];
-      if (this.employeeSearch && this.employeeSearch.trim()) {
-        const keyword = this.employeeSearch.trim().toLowerCase();
-        list = list.filter(emp =>
-          (emp.name && emp.name.toLowerCase().includes(keyword)) ||
-          (emp.account && emp.account.toLowerCase().includes(keyword))
-        );
+      // 在批量模式下使用allEmployees的长度，否则使用totalEmployees（分页数据）
+      if (this.isBatchMode) {
+        let list = this.allEmployees || [];
+        if (this.employeeSearch && this.employeeSearch.trim()) {
+          const keyword = this.employeeSearch.trim().toLowerCase();
+          list = list.filter(emp =>
+            (emp.name && emp.name.toLowerCase().includes(keyword)) ||
+            (emp.account && emp.account.toLowerCase().includes(keyword))
+          );
+        }
+        return list.length;
+      } else {
+        // 在非批量模式下，直接返回从后端获取的总数量
+        return this.totalEmployees || 0;
       }
-      return list.length;
     },
     // 过滤后的待审核申请
     filteredPendingEnrollments() {

@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import os
@@ -17,6 +17,11 @@ CORS(
         }
     },
 )
+
+# 配置静态文件服务，提供FaceImage目录中的图片
+@app.route('/FaceImage/<path:filename>')
+def face_images(filename):
+    return send_from_directory('../FaceImage', filename)
 
 db_user = os.getenv("DB_USER", "root")
 db_pass = os.getenv("DB_PASS", "456729")
