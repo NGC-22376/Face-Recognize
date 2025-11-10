@@ -1498,6 +1498,9 @@ def get_employees_attendance():
     current_month = now.month
     current_year = now.year
 
+    # 获取搜索参数
+    search_keyword = request.args.get("search", "").strip()
+    
     # 获取排序参数
     sort_by = request.args.get(
         "sort_by", "account"
@@ -1525,16 +1528,26 @@ def get_employees_attendance():
         return jsonify({"message": "每页大小必须大于等于1"}), 400
 
     # 获取所有员工列表（用于计算总数）
-    all_employees = User.query.filter(User.role == "员工")
-    total = all_employees.count()
+    all_employees_query = User.query.filter(User.role == "员工")
+    
+    # 如果有搜索关键字，则添加搜索条件
+    if search_keyword:
+        all_employees_query = all_employees_query.filter(
+            or_(
+                User.name.contains(search_keyword),
+                User.account.contains(search_keyword)
+            )
+        )
+    
+    total = all_employees_query.count()
 
     # 应用排序到查询
     if sort_by == "name":
         # 按姓名排序需要特殊处理
-        employees_query = all_employees
+        employees_query = all_employees_query
     else:
         # 其他字段排序
-        employees_query = all_employees
+        employees_query = all_employees_query
 
     # 获取当前页的员工列表（分页查询）
     employees_offset = (page - 1) * page_size

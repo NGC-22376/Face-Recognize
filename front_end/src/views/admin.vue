@@ -1065,7 +1065,7 @@
                   <td>{{ item.account }}</td>
                   <td>{{ formatDateTime(item.start_time) }}</td>
                   <td>{{ formatDateTime(item.end_time) }}</td>
-                  <td>{{ item.reason }}</td>
+                  <td @click="selectedLeave = item" class="reason-cell">{{ item.reason }}</td>
                   <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
                   <td>{{ statusMap[item.status] || item.status }}</td>
                 </tr>
@@ -1177,7 +1177,7 @@
                   <td>{{ item.account }}</td>
                   <td>{{ formatDateTime(item.start_time) }}</td>
                   <td>{{ formatDateTime(item.end_time) }}</td>
-                  <td>{{ item.reason }}</td>
+                  <td @click="selectedLeave = item" class="reason-cell">{{ item.reason }}</td>
                   <td>{{ getLeaveTypeLabel(item.absence_type) }}</td>
                   <td>{{ statusMap[item.status] || item.status }}</td>
                 </tr>
@@ -1222,7 +1222,8 @@
             <p>姓名：{{ selectedLeave.name }}（工号：{{ selectedLeave.account }}）</p>
             <p>起止：{{ formatDateTime(selectedLeave.start_time) }} - {{ formatDateTime(selectedLeave.end_time) }}</p>
             <p>事由：{{ selectedLeave.reason }}</p>
-            <div class="detail-actions">
+            <p>状态：{{ statusMap[selectedLeave.status] || selectedLeave.status }}</p>
+            <div class="detail-actions" v-if="leaveAdminTab === 'unprocessed'">
               <button class="clock-btn clock-in" @click="reviewLeave(selectedLeave.id, 'approve')">通过</button>
               <button class="clock-btn clock-out" @click="reviewLeave(selectedLeave.id, 'reject')">拒绝</button>
             </div>
@@ -1469,10 +1470,11 @@ export default {
         this.resetAndRecalculatePagination();
       }
     },
-    // 监听employeeSearch变化，搜索时重置分页状态
+    // 监听employeeSearch变化，搜索时重置分页状态并重新加载数据
     employeeSearch(newVal, oldVal) {
       if (newVal !== oldVal) {
         this.currentPage = 1; // 重置到第一页
+        this.loadEmployeesData(); // 重新加载员工数据
       }
     },
   },
@@ -4583,6 +4585,16 @@ export default {
 }
 
 /* 请假事由列样式 */
+.reason-cell {
+  cursor: pointer;
+  color: #3498db;
+  text-decoration: underline;
+}
+
+.reason-cell:hover {
+  color: #2980b9;
+}
+
 .reason-cell {
   cursor: pointer;
   color: #007bff;

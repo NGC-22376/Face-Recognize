@@ -30,6 +30,7 @@
         <div class="step">
           <form @submit.prevent="handleStep3">
             <input v-model="newPassword" type="password" placeholder="请输入新密码" required />
+            <p class="password-rule">密码必须为英文和中文字符，长度为5-15位</p>
             <input v-model="confirmPassword" type="password" placeholder="请再次输入新密码" required />
             <div class="button-group">
                 <button type="button" class="back-button" @click="goBack">返回</button>
@@ -152,9 +153,13 @@ export default {
       if (!this.newPassword || !this.confirmPassword) {
         this.errorMessage = '密码不能为空！'; return;
       }
-      if (this.newPassword.length < 6) {
-        this.errorMessage = '新密码长度不能少于6位'; return;
+      
+      // 密码正则验证：英文+中文，5-15位
+      const passwordRegex = /^[a-zA-Z\u4e00-\u9fa5]{5,15}$/;
+      if (!passwordRegex.test(this.newPassword)) {
+        this.errorMessage = '密码必须为英文和中文字符，长度为5-15位！'; return;
       }
+      
       if (this.newPassword !== this.confirmPassword) {
         this.errorMessage = '两次输入的密码不一致！'; return;
       }
@@ -326,5 +331,14 @@ export default {
   font-size: 14px;
   min-height: 20px;
   line-height: 20px;
+}
+
+/* 密码规则提示样式 */
+.password-rule {
+  color: #7f8c8d;
+  font-size: 12px;
+  margin-top: -10px;
+  margin-bottom: 16px;
+  text-align: left;
 }
 </style>
