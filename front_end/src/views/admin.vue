@@ -121,6 +121,11 @@
           <div class="section-header">
             <h2>员工考勤管理</h2>
             <div class="section-actions">
+              <div class="filter-controls" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <input type="text" v-model="employeeSearch" placeholder="搜索姓名" 
+                  @input="currentPage = 1; loadEmployeesData()" 
+                  style="padding: 5px; width: 200px;" />
+              </div>
               <div class="sort-controls">
                 <label>排序方式：</label>
                 <select v-model="sortBy" @change="loadEmployeesData">
