@@ -123,7 +123,6 @@
             <div class="section-actions">
               <div class="filter-controls" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
                 <input type="text" v-model="employeeSearch" placeholder="搜索姓名" 
-                  @input="currentPage = 1; loadEmployeesData()" 
                   style="padding: 5px; width: 200px;" />
               </div>
               <div class="sort-controls">
@@ -674,7 +673,6 @@
                     <th>提交时间</th>
                     <th>审核时间</th>
                     <th>状态</th>
-                    <th>审核意见</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -688,7 +686,6 @@
                         {{ getFaceEnrollmentStatusText(enrollment.status) }}
                       </span>
                     </td>
-                    <td>{{ enrollment.review_comment || '-' }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -3231,7 +3228,7 @@ export default {
         },
         yAxis: {
           type: 'value',
-          name: '人数',
+          name: '人次',
           axisLabel: {
             formatter: '{value}'
           },

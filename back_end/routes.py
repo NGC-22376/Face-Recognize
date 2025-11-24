@@ -1796,34 +1796,27 @@ def get_employee_detail(employee_id):
         latest_clock_out = None
 
     # 计算最近三周的异常考勤趋势数据
-    # 获取本月第一天和今天
-    first_day_of_month = now.replace(day=1)
+    # 获取今天日期
     today = now.date()
 
-    # 计算三周的数据
+    # 计算最近三周的数据（以今天为基准，往前推三周）
     weeks_data = []
-    week_start = first_day_of_month
-
-    # 计算本月第一周的开始日期（周一）
-    while week_start.weekday() != 0:  # 0表示周一
-        week_start -= timedelta(days=1)
-
-    # 生成最近三周的数据
+    
+    # 从本周开始，往前推三周
+    # 首先确定本周的周一
+    days_since_monday = today.weekday()  # 0表示周一
+    current_week_start = today - timedelta(days=days_since_monday)
+    
+    # 生成最近三周的数据（包括本周）
     for i in range(3):
+        # 计算每一周的开始和结束日期
+        week_start = current_week_start - timedelta(weeks=(2-i))  # 三周前、两周前、上周
         week_end = week_start + timedelta(days=6)
-        # 确保周结束日期不超过今天
-        if week_end.date() > today:
-            week_end = datetime.combine(today, time(23, 59, 59))
-
-        weeks_data.append({"start": week_start.date(), "end": week_end.date()})
-
-        # 移动到下一周
-        week_start = datetime.combine(
-            week_end.date() + timedelta(days=1), time(0, 0, 0)
-        )
-        # 调整到下周一
-        while week_start.weekday() != 0:
-            week_start += timedelta(days=1)
+        
+        # 确保结束日期不超过今天
+        actual_end_date = min(week_end, today)
+        
+        weeks_data.append({"start": week_start, "end": actual_end_date})
 
     # 计算每周的迟到、早退和加班次数
     attendance_trend_data = {"weeks": [], "late": [], "earlyLeave": [], "overtime": []}
@@ -1833,12 +1826,15 @@ def get_employee_detail(employee_id):
         week_name = f"{week['start'].strftime('%m.%d')}-{week['end'].strftime('%m.%d')}"
         attendance_trend_data["weeks"].append(week_name)
 
+        # 确保查询的日期不超过今天，避免查询未来的数据
+        actual_end_date = min(week["end"], today)
+
         # 计算迟到次数
         late_count = Attendance.query.filter(
             and_(
                 Attendance.user_id == employee_id,
                 func.date(Attendance.clock_in_time) >= week["start"],
-                func.date(Attendance.clock_in_time) <= week["end"],
+                func.date(Attendance.clock_in_time) <= actual_end_date,
                 Attendance.status == "迟到",
             )
         ).count()
@@ -1849,7 +1845,7 @@ def get_employee_detail(employee_id):
             and_(
                 Attendance.user_id == employee_id,
                 func.date(Attendance.clock_in_time) >= week["start"],
-                func.date(Attendance.clock_in_time) <= week["end"],
+                func.date(Attendance.clock_in_time) <= actual_end_date,
                 Attendance.status == "早退",
             )
         ).count()
@@ -1860,7 +1856,7 @@ def get_employee_detail(employee_id):
             and_(
                 Attendance.user_id == employee_id,
                 func.date(Attendance.clock_in_time) >= week["start"],
-                func.date(Attendance.clock_in_time) <= week["end"],
+                func.date(Attendance.clock_in_time) <= actual_end_date,
                 Attendance.clock_out_time.isnot(None),
                 or_(
                     extract("hour", Attendance.clock_out_time) > 19,
